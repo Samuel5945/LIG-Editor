@@ -20,5 +20,6 @@ export interface PushDraftResult {
 export const WECHAT_CHANNELS = {
   getSettings: 'wechat:get-settings',
   setSettings: 'wechat:set-settings',
-  pushDraft: 'wechat:push-draft'
+  pushDraft: 'wechat:push-draft',
+  pushCards: 'wechat:push-cards'
 } as const

@@ -12,7 +12,7 @@ import * as store from './projectStore'
 import { generateImage } from './imageGen'
 import { renderFigure, saveFigureHtml } from './figureRender'
 import { exportArticleHtml } from './exporter'
-import { pushDraft } from './wechatPublish'
+import { pushCards, pushDraft } from './wechatPublish'
 import { readSkill } from './skillStore'
 import { broadcast } from './ipc'
 
@@ -447,6 +447,13 @@ export const TOOLS: ToolDef[] = [
       '把工程推送到公众号草稿箱：正文本地图片自动上传微信 CDN，封面传永久素材，draft/add 入草稿。需先配置 AppID/AppSecret（settings/wechat.json）且本机公网 IP 已加入公众平台白名单',
     inputSchema: { type: 'object', properties: { project: P.project }, required: ['project'] },
     handler: (a) => pushDraft(str(a, 'project'))
+  },
+  {
+    name: 'push_cards',
+    description:
+      '把贴图组推送到公众号草稿箱（图片消息形态，读者可左右滑动看图）：每张卡片 PNG 传永久素材，配文用发布配文，标题取封面卡标题。需全部卡片已渲染、最多 20 张；AppID/AppSecret 与 IP 白名单要求同 push_draft',
+    inputSchema: { type: 'object', properties: { project: P.project }, required: ['project'] },
+    handler: (a) => pushCards(str(a, 'project'))
   }
 ]
 

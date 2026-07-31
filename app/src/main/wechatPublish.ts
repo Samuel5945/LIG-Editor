@@ -5,6 +5,7 @@ import { docToExportHtml, extractTitle } from '@shared/exportHtml'
 import type { PushDraftResult } from '@shared/wechat'
 import { projectDir, readMeta, readTextFile } from './projectStore'
 import { getWechatSettings } from './wechatStore'
+import { readCards } from './cardsStore'
 
 /**
  * 公众号草稿推送：article.md → 图片上传微信 CDN → draft/add 入草稿箱
@@ -170,6 +171,52 @@ export async function pushDraft(project: string): Promise<PushDraftResult> {
             content,
             thumb_media_id: thumbMediaId,
             digest: extractDigest(md),
+            need_open_comment: 0,
+            only_fans_can_comment: 0
+          }
+        ]
+      }),
+      headers: { 'Content-Type': 'application/json' }
+    })
+
+    return { ok: true, mediaId: data.media_id }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) }
+  }
+}
+
+/**
+ * 推送贴图组到公众号草稿箱（article_type=newspic 图片消息，即「图片分享」形态）。
+ * - 每张卡片 PNG 走 material/add_material 拿 image_media_id（图片消息上限 20 张）
+ * - 配文用 deck.caption（发布配文）；标题取封面卡标题
+ */
+export async function pushCards(project: string): Promise<PushDraftResult> {
+  try {
+    const deck = readCards(project)
+    if (!deck || !deck.cards.length) throw new Error('工程没有贴图，先生成贴图再推送')
+    if (deck.cards.length > 20) throw new Error(`图片消息最多 20 张，当前 ${deck.cards.length} 张，请精简后再推送`)
+    const missing = deck.cards.map((c, i) => (c.png ? '' : `#${i + 1}`)).filter(Boolean)
+    if (missing.length) throw new Error(`以下卡片未渲染：${missing.join(' ')}，先全部渲染再推送`)
+
+    const dir = projectDir(project)
+    const token = await getAccessToken()
+    const mediaIds: string[] = []
+    for (const card of deck.cards) {
+      const abs = join(dir, card.png.replace(/\//g, '\\'))
+      if (!existsSync(abs)) throw new Error(`卡片图不存在：${card.png}，请重新渲染`)
+      mediaIds.push(await uploadCoverMaterial(token, abs))
+    }
+
+    const title = (deck.cards[0]?.title || project).slice(0, 64)
+    const data = await wxFetch<WxError & { media_id: string }>(`${API}/draft/add?access_token=${token}`, {
+      method: 'POST',
+      body: JSON.stringify({
+        articles: [
+          {
+            article_type: 'newspic',
+            title,
+            content: deck.caption ?? '',
+            image_info: { image_list: mediaIds.map((id) => ({ image_media_id: id })) },
             need_open_comment: 0,
             only_fans_can_comment: 0
           }
