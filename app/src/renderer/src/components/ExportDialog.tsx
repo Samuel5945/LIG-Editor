@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState, type ReactElement } from 'react'
 import { mdToDoc } from '@shared/markdown'
 import { docToExportHtml, extractTitle, wrapExportPage } from '@shared/exportHtml'
+import type { PushDraftResult } from '@shared/wechatIpc'
 
 /**
  * M7 导出弹窗：手机宽度实时预览 + 复制富文本 / 导出 article.html
@@ -30,6 +31,9 @@ export default function ExportDialog({
 }: ExportDialogProps): ReactElement {
   const [busy, setBusy] = useState(false)
   const [exportedPath, setExportedPath] = useState<string | null>(null)
+  // 推送草稿状态：null=未推 / pushing / 结果
+  const [pushing, setPushing] = useState(false)
+  const [pushResult, setPushResult] = useState<PushDraftResult | null>(null)
 
   // 预览页：图片解析为 asset:// 绝对地址，其余与导出产物完全一致
   const previewHtml = useMemo(() => {
@@ -78,6 +82,21 @@ export default function ExportDialog({
     }
   }, [exportedPath, onToast])
 
+  /** 导出并推送草稿：结果展示在弹窗内（mediaId / 错误原因） */
+  const pushDraft = useCallback(async () => {
+    if (pushing || busy) return
+    setPushing(true)
+    setPushResult(null)
+    try {
+      const result = await window.api.invoke('wechat:push-draft', { project })
+      setPushResult(result)
+    } catch (err) {
+      setPushResult({ ok: false, error: err instanceof Error ? err.message : String(err) })
+    } finally {
+      setPushing(false)
+    }
+  }, [pushing, busy, project])
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
       <div className="flex h-[88vh] w-[560px] flex-col rounded-lg border border-slate-700 bg-slate-900 shadow-2xl">
@@ -111,7 +130,17 @@ export default function ExportDialog({
                 🌐 浏览器打开
               </button>
             )}
+            <button onClick={pushDraft} disabled={pushing || busy} className={btnPrimary}>
+              {pushing ? '推送中…' : '🚀 导出并推送草稿'}
+            </button>
           </div>
+          {pushResult && (
+            <p className={`mt-2 break-all text-[11px] ${pushResult.ok ? 'text-green-500' : 'text-red-400'}`}>
+              {pushResult.ok
+                ? `✓ 草稿已推送到公众号后台，mediaId：${pushResult.mediaId ?? ''}`
+                : `✗ 推送失败：${pushResult.error ?? '未知错误'}（常见原因：本机 IP 不在公众号后台 IP 白名单 / AppSecret 填错）`}
+            </p>
+          )}
           <p className="mt-2 text-[11px] text-slate-500">
             复制富文本会把图片内嵌进剪贴板，直接粘贴到公众号正文区即可；横滑图集在手机端可左右滑动。
           </p>

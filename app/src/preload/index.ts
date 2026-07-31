@@ -1,5 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { IpcApi, IpcEvents, IpcEventChannel } from '../shared/types'
+// 公众号通道（wechat:*）经模块增强并入 IpcApi，类型引入不影响运行时
+import type {} from '../shared/wechatIpc'
 
 /** 渲染进程侧的类型安全调用面 */
 const api = {

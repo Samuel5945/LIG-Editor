@@ -14,6 +14,8 @@ import { generateImage } from './imageGen'
 import { saveFigureHtml, readFigureHtml, renderFigure } from './figureRender'
 import { readCards, writeCards, renderCard, readArchivedCards, writeArchivedCards } from './cardsStore'
 import { exportArticleHtml, copyArticleRich } from './exporter'
+import { getWechatSettings, setWechatSettings } from './wechatStore'
+import { pushDraft, invalidateToken } from './wechatPublish'
 
 /** 类型安全的 handle 注册：通道名与出入参由 IpcApi 单一来源约束 */
 function handle<C extends keyof IpcApi>(
@@ -116,6 +118,15 @@ export function registerIpc(): void {
   handle('cards:render', (project, index) => renderCard(project, index))
   handle('cards:archiveRead', (project, format) => readArchivedCards(project, format))
   handle('cards:archiveWrite', (project, deck) => writeArchivedCards(project, deck))
+
+  // ---- 公众号推送（UI 接入层绑定，实现在 wechatStore / wechatPublish）----
+  handle('wechat:get-settings', () => getWechatSettings())
+  handle('wechat:set-settings', (settings) => {
+    setWechatSettings(settings)
+    // 换号后清 access_token 缓存，新凭据立即生效
+    invalidateToken()
+  })
+  handle('wechat:push-draft', ({ project }) => pushDraft(project))
 }
 
 /** 生成一键接入卡片：MCP stdio 由纯 Node 代理脚本承接（Windows 下 Electron 主进程无管道 stdio） */
