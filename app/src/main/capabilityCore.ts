@@ -12,6 +12,7 @@ import * as store from './projectStore'
 import { generateImage } from './imageGen'
 import { renderFigure, saveFigureHtml } from './figureRender'
 import { exportArticleHtml } from './exporter'
+import { pushDraft } from './wechatPublish'
 import { readSkill } from './skillStore'
 import { broadcast } from './ipc'
 
@@ -439,6 +440,13 @@ export const TOOLS: ToolDef[] = [
     description: '把 article.md 导出为全内联样式的 article.html（公众号兼容排版），返回绝对路径',
     inputSchema: { type: 'object', properties: { project: P.project }, required: ['project'] },
     handler: (a) => ({ path: exportArticleHtml(str(a, 'project')) })
+  },
+  {
+    name: 'push_draft',
+    description:
+      '把工程推送到公众号草稿箱：正文本地图片自动上传微信 CDN，封面传永久素材，draft/add 入草稿。需先配置 AppID/AppSecret（settings/wechat.json）且本机公网 IP 已加入公众平台白名单',
+    inputSchema: { type: 'object', properties: { project: P.project }, required: ['project'] },
+    handler: (a) => pushDraft(str(a, 'project'))
   }
 ]
 
