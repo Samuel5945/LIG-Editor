@@ -1,0 +1,62 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-panel text-ink;
+  font-family: 'Microsoft YaHei', 'PingFang SC', system-ui, sans-serif;
+  user-select: none;
+}
+
+/* 编辑区允许选择 */
+.selectable {
+  user-select: text;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: #3a3f4b;
+  border-radius: 4px;
+}
+
+/* ---- TipTap 正文排版（公众号阅读感）---- */
+.article-editor .ProseMirror {
+  @apply min-h-full px-8 py-6 text-[15px] leading-7 text-slate-200 outline-none;
+  max-width: 720px;
+  margin: 0 auto;
+}
+.article-editor .ProseMirror h1 {
+  @apply mb-4 mt-6 text-2xl font-bold text-white;
+}
+.article-editor .ProseMirror h2 {
+  @apply mb-3 mt-6 text-xl font-bold text-white;
+}
+.article-editor .ProseMirror h3 {
+  @apply mb-2 mt-5 text-lg font-semibold text-white;
+}
+.article-editor .ProseMirror p {
+  @apply my-3;
+}
+.article-editor .ProseMirror blockquote {
+  @apply my-4 border-l-4 border-slate-600 pl-4 text-slate-400;
+}
+.article-editor .ProseMirror hr {
+  @apply my-6 border-slate-700;
+}
+.article-editor .ProseMirror strong {
+  @apply font-bold text-white;
+}
+/* 空文档占位 */
+.article-editor .ProseMirror p.is-editor-empty:first-child::before {
+  content: '开始写作，或让右栏副驾驶帮你起草…';
+  @apply pointer-events-none float-left h-0 text-slate-600;
+}
