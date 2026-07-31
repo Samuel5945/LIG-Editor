@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState, type ReactElement } from 'react'
 import type { LlmSettings, LlmTestResult, ProviderConfig } from '@shared/types'
-import type { WechatSettings } from '@shared/wechatIpc'
 
 interface SettingsDialogProps {
   onClose: () => void
@@ -14,15 +13,12 @@ export default function SettingsDialog({ onClose }: SettingsDialogProps): ReactE
   const [testResult, setTestResult] = useState<LlmTestResult | null>(null)
   const [savedFlash, setSavedFlash] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
-  // 公众号凭据（独立存储，随「保存」一起写回）
-  const [wechat, setWechat] = useState<WechatSettings>({ appId: '', appSecret: '' })
 
   useEffect(() => {
     window.api.invoke('settings:getLlm').then((s) => {
       setSettings(s)
       setSelectedId(s.providers[0]?.id ?? null)
     })
-    window.api.invoke('wechat:get-settings').then(setWechat)
   }, [])
 
   const provider = settings?.providers.find((p) => p.id === selectedId) ?? null
@@ -81,14 +77,13 @@ export default function SettingsDialog({ onClose }: SettingsDialogProps): ReactE
     setSaveError(null)
     try {
       await window.api.invoke('settings:setLlm', settings)
-      await window.api.invoke('wechat:set-settings', wechat)
       setSavedFlash(true)
       // 给用户一个明确反馈后自动关闭弹窗
       setTimeout(onClose, 800)
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : String(err))
     }
-  }, [settings, wechat, onClose])
+  }, [settings, onClose])
 
   if (!settings) return <></>
 
@@ -264,32 +259,6 @@ export default function SettingsDialog({ onClose }: SettingsDialogProps): ReactE
                 </div>
               </div>
 
-              <div className="mt-4 border-t border-panel-3 pt-3">
-                <p className="text-[11px] text-ink-dim">
-                  公众号推送：填入开发者 AppID / AppSecret 后，可在导出弹窗一键推送草稿到公众号后台
-                </p>
-                <div className="mt-2 flex gap-3">
-                  <div className="flex-1">
-                    <label className="mb-1 block text-[11px] text-ink-dim">AppID</label>
-                    <input
-                      className={field}
-                      value={wechat.appId}
-                      onChange={(e) => setWechat({ ...wechat, appId: e.target.value })}
-                      placeholder="wx 开头的开发者 ID"
-                    />
-                  </div>
-                  <div className="flex-1">
-                    <label className="mb-1 block text-[11px] text-ink-dim">AppSecret</label>
-                    <input
-                      className={field}
-                      type="password"
-                      value={wechat.appSecret}
-                      onChange={(e) => setWechat({ ...wechat, appSecret: e.target.value })}
-                      placeholder="开发者密钥（存储在本机）"
-                    />
-                  </div>
-                </div>
-              </div>
             </div>
           )}
 

@@ -428,7 +428,7 @@ export default function App(): JSX.Element {
             模型接入
           </button>
           <button onClick={() => setShowIntegration(true)} className="rounded px-2 py-1 hover:bg-panel-3">
-            接入/Skill
+            设置
           </button>
         </div>
       </header>
@@ -834,7 +834,7 @@ export default function App(): JSX.Element {
       {/* 模型接入设置 */}
       {showSettings && <SettingsDialog onClose={() => setShowSettings(false)} />}
 
-      {/* 接入 / Skill 管理（M8） */}
+      {/* 设置（接入 / Skill / 推送） */}
       {showIntegration && (
         <IntegrationDialog
           onToast={setToast}

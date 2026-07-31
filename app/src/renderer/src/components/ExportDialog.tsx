@@ -145,7 +145,7 @@ export default function ExportDialog({
             复制富文本会把图片内嵌进剪贴板，直接粘贴到公众号正文区即可；横滑图集在手机端可左右滑动。
           </p>
           <p className="mt-1 text-[11px] text-slate-500">
-            推送草稿前需在设置页填好 AppID/AppSecret，并把本机公网 IP 加入公众平台 IP 白名单；封面在「标题/封面」页设置。
+            推送草稿前需在「设置-推送设置」填好 AppID/AppSecret，并把本机公网 IP 加入公众平台 IP 白名单；封面在「标题/封面」页设置。
           </p>
         </div>
       </div>

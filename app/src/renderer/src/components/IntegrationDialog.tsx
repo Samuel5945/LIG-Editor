@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState, type ReactElement } from 'react'
 import type { McpAccessCard, SkillInfo } from '@shared/types'
+import type { WechatSettings } from '@shared/wechatIpc'
 
 /**
- * M8 接入 / Skill 管理弹窗
+ * 设置弹窗（原 M8 接入 / Skill 管理）
  * - 一键接入卡片：Codex config.toml / Qoder mcp.json 配置片段复制
  * - Skill 管理：列表启停（.disabled 标记）+ 按路径导入 SKILL.md
+ * - 推送设置：公众号 AppID / AppSecret（草稿推送凭据）
  */
 
 interface IntegrationDialogProps {
@@ -22,10 +24,12 @@ export default function IntegrationDialog({
   onSkillsChanged,
   onClose
 }: IntegrationDialogProps): ReactElement {
-  const [tab, setTab] = useState<'mcp' | 'skill'>('mcp')
+  const [tab, setTab] = useState<'mcp' | 'skill' | 'push'>('mcp')
   const [card, setCard] = useState<McpAccessCard | null>(null)
   const [skills, setSkills] = useState<SkillInfo[]>([])
   const [importPath, setImportPath] = useState('')
+  // 公众号推送凭据（独立存储，本页签单独保存）
+  const [wechat, setWechat] = useState<WechatSettings>({ appId: '', appSecret: '' })
 
   const refreshSkills = useCallback(async () => {
     setSkills(await window.api.invoke('skill:list'))
@@ -33,8 +37,18 @@ export default function IntegrationDialog({
 
   useEffect(() => {
     window.api.invoke('mcp:accessCard').then(setCard)
+    window.api.invoke('wechat:get-settings').then(setWechat)
     void refreshSkills()
   }, [refreshSkills])
+
+  const saveWechat = useCallback(async () => {
+    try {
+      await window.api.invoke('wechat:set-settings', wechat)
+      onToast('公众号推送设置已保存')
+    } catch (err) {
+      onToast(`保存失败：${err instanceof Error ? err.message : err}`)
+    }
+  }, [wechat, onToast])
 
   const copy = useCallback(
     async (label: string, text: string) => {
@@ -103,13 +117,52 @@ export default function IntegrationDialog({
           >
             🧩 Skill 管理
           </button>
+          <button
+            onClick={() => setTab('push')}
+            className={`rounded px-2.5 py-1 text-xs ${tab === 'push' ? 'bg-slate-700 text-slate-100' : 'text-slate-400 hover:bg-slate-800'}`}
+          >
+            📮 推送设置
+          </button>
           <button onClick={onClose} className="ml-auto text-slate-500 hover:text-slate-300">
             ✕
           </button>
         </div>
 
         <div className="min-h-0 flex-1 overflow-auto p-4 text-xs text-slate-300">
-          {tab === 'mcp' ? (
+          {tab === 'push' ? (
+            <div className="space-y-3">
+              <p className="text-slate-400">
+                填入公众号开发者 AppID / AppSecret 后，可在导出弹窗一键推送草稿到公众号后台。
+              </p>
+              <div>
+                <label className="mb-1 block text-[11px] text-slate-500">AppID</label>
+                <input
+                  value={wechat.appId}
+                  onChange={(e) => setWechat({ ...wechat, appId: e.target.value })}
+                  placeholder="wx 开头的开发者 ID"
+                  className="w-full rounded bg-slate-800 px-2.5 py-1.5 text-slate-200 outline-none placeholder:text-slate-500"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-[11px] text-slate-500">AppSecret</label>
+                <input
+                  type="password"
+                  value={wechat.appSecret}
+                  onChange={(e) => setWechat({ ...wechat, appSecret: e.target.value })}
+                  placeholder="开发者密钥（加密存储在本机）"
+                  className="w-full rounded bg-slate-800 px-2.5 py-1.5 text-slate-200 outline-none placeholder:text-slate-500"
+                />
+              </div>
+              <div className="flex items-center gap-3 pt-1">
+                <button onClick={saveWechat} className={btnGhost}>
+                  💾 保存
+                </button>
+                <span className="text-[11px] text-slate-500">
+                  两处都在公众平台「设置与开发-基本配置」获取；还需把本机公网 IP 加入「IP 白名单」
+                </span>
+              </div>
+            </div>
+          ) : tab === 'mcp' ? (
             card ? (
               <div className="space-y-4">
                 <p className="text-slate-400">
