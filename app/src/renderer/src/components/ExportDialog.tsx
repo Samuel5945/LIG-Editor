@@ -138,11 +138,14 @@ export default function ExportDialog({
             <p className={`mt-2 break-all text-[11px] ${pushResult.ok ? 'text-green-500' : 'text-red-400'}`}>
               {pushResult.ok
                 ? `✓ 草稿已推送到公众号后台，mediaId：${pushResult.mediaId ?? ''}`
-                : `✗ 推送失败：${pushResult.error ?? '未知错误'}（常见原因：本机 IP 不在公众号后台 IP 白名单 / AppSecret 填错）`}
+                : `✗ 推送失败：${pushResult.error ?? '未知错误'}`}
             </p>
           )}
           <p className="mt-2 text-[11px] text-slate-500">
             复制富文本会把图片内嵌进剪贴板，直接粘贴到公众号正文区即可；横滑图集在手机端可左右滑动。
+          </p>
+          <p className="mt-1 text-[11px] text-slate-500">
+            推送草稿前需在设置页填好 AppID/AppSecret，并把本机公网 IP 加入公众平台 IP 白名单；封面在「标题/封面」页设置。
           </p>
         </div>
       </div>

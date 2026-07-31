@@ -656,6 +656,18 @@ export default function App(): JSX.Element {
                   article={article}
                   skill={skillContent}
                   onMetaUpdated={refreshMeta}
+                  onApplyTitle={(title) => {
+                    // 草稿标题取自正文 H1：替换首个非空行的 H1，没有则前插
+                    setArticle((md) => {
+                      const lines = md.split('\n')
+                      const i = lines.findIndex((l) => l.trim())
+                      if (i >= 0 && lines[i].trim().startsWith('# ')) {
+                        lines[i] = `# ${title}`
+                        return lines.join('\n')
+                      }
+                      return `# ${title}\n\n${md}`
+                    })
+                  }}
                   onToast={setToast}
                 />
               )

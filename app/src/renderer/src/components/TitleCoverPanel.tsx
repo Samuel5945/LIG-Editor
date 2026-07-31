@@ -12,6 +12,8 @@ interface TitleCoverPanelProps {
   skill: string | null
   /** 封面写盘 / meta 变化后通知 App 重新拉 meta */
   onMetaUpdated: () => void
+  /** 把选中的标题候选写回正文首行 H1（草稿标题取自正文 H1） */
+  onApplyTitle: (title: string) => void
   onToast: (msg: string) => void
 }
 
@@ -19,13 +21,14 @@ interface TitleCoverPanelProps {
 const WIDE = { w: 1175, h: 500, rel: 'assets/cover-235.png' }
 const SQUARE = { w: 800, h: 800, rel: 'assets/cover-11.png' }
 
-/** 标题/封面 tab：AI 起标题（独立调用）+ 标题候选（打分排序+复制）+ 封面裁切器 */
+/** 标题/封面 tab：AI 起标题（独立调用）+ 标题候选（打分排序+应用/复制）+ 封面裁切器（选图或 AI 生成） */
 export default function TitleCoverPanel({
   project,
   meta,
   article,
   skill,
   onMetaUpdated,
+  onApplyTitle,
   onToast
 }: TitleCoverPanelProps): ReactElement {
   const [img, setImg] = useState<HTMLImageElement | null>(null)
@@ -33,6 +36,7 @@ export default function TitleCoverPanel({
   const [squareOffset, setSquareOffset] = useState(0.5)
   const [saving, setSaving] = useState(false)
   const [titling, setTitling] = useState(false)
+  const [genning, setGenning] = useState(false)
   const [titleError, setTitleError] = useState<string | null>(null)
   const wideRef = useRef<HTMLCanvasElement>(null)
   const squareRef = useRef<HTMLCanvasElement>(null)
@@ -83,6 +87,32 @@ export default function TitleCoverPanel({
     image.onload = () => setImg(image)
     image.src = url
   }, [])
+
+  // ---- AI 生成封面：21:9 横图贴合 2.35:1 头图，生成后进同一套裁切保存流程 ----
+
+  const genCover = useCallback(async () => {
+    if (genning) return
+    // 封面主题：正文 H1 → 最高分标题候选 → 工程名兜底
+    const h1 = article.match(/^#\s+(.+)$/m)?.[1]?.trim()
+    const top = [...(meta.titles ?? [])].sort((a, b) => b.score - a.score)[0]?.text
+    const theme = h1 || top || project
+    setGenning(true)
+    try {
+      const b64 = await window.api.invoke(
+        'image:generate',
+        `为文章《${theme}》设计一张公众号封面横版插画：主体居中、四周留出裁切余量，色彩现代明快，画面中不出现任何文字、字母或水印`,
+        { size: '2K', ratio: '21:9' }
+      )
+      const image = new Image()
+      image.onload = () => setImg(image)
+      image.src = `data:image/png;base64,${b64}`
+      onToast('封面已生成，下方裁切后保存')
+    } catch (err) {
+      onToast(`封面生成失败：${err instanceof Error ? err.message : err}`)
+    } finally {
+      setGenning(false)
+    }
+  }, [genning, article, meta.titles, project, onToast])
 
   // 预览重绘
   useEffect(() => {
@@ -144,6 +174,15 @@ export default function TitleCoverPanel({
               </div>
               <button
                 onClick={() => {
+                  onApplyTitle(t.text)
+                  onToast('已把标题写入正文首行')
+                }}
+                className="shrink-0 rounded px-1.5 py-0.5 text-accent hover:bg-panel-3"
+              >
+                ✓ 用这个
+              </button>
+              <button
+                onClick={() => {
                   navigator.clipboard.writeText(t.text)
                   onToast('标题已复制')
                 }}
@@ -172,12 +211,22 @@ export default function TitleCoverPanel({
           e.target.value = ''
         }}
       />
-      <button
-        onClick={() => fileRef.current?.click()}
-        className="mb-3 rounded border border-dashed border-panel-3 px-3 py-1.5 text-ink-dim hover:border-accent hover:text-accent"
-      >
-        {img ? '换一张图片' : '选择封面原图'}
-      </button>
+      <div className="mb-3 flex items-center gap-2">
+        <button
+          onClick={() => fileRef.current?.click()}
+          className="rounded border border-dashed border-panel-3 px-3 py-1.5 text-ink-dim hover:border-accent hover:text-accent"
+        >
+          {img ? '换一张图片' : '选择封面原图'}
+        </button>
+        <button
+          onClick={genCover}
+          disabled={genning}
+          className="rounded bg-accent px-3 py-1.5 text-white hover:opacity-90 disabled:opacity-40"
+        >
+          {genning ? '生成中…' : '✦ AI 生成封面'}
+        </button>
+        {genning && <span className="text-ink-dim">按标题生成横版插画，约半分钟</span>}
+      </div>
 
       {img && (
         <div className="max-w-[560px]">
