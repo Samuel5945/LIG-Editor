@@ -74,7 +74,8 @@ async function extractImagesResult(data: ImagesResponse): Promise<string> {
 }
 
 async function downloadToBase64(url: string): Promise<string> {
-  const resp = await net.fetch(url, { signal: AbortSignal.timeout(60_000) })
+  // 国内版 Agnes 常无视 return_base64 返国际图床 URL（agnes-ai.space），直连很慢，超时要留足
+  const resp = await net.fetch(url, { signal: AbortSignal.timeout(180_000) })
   if (!resp.ok) throw new Error(`下载生成图失败 HTTP ${resp.status}`)
   return Buffer.from(await resp.arrayBuffer()).toString('base64')
 }

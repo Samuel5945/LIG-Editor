@@ -98,15 +98,19 @@ export default function TitleCoverPanel({
     const theme = h1 || top || project
     setGenning(true)
     try {
+      // 1K + 21:9 实际出 1568×672，已够 1175×500 头图；2K 图床下载慢易超时
       const b64 = await window.api.invoke(
         'image:generate',
         `为文章《${theme}》设计一张公众号封面横版插画：主体居中、四周留出裁切余量，色彩现代明快，画面中不出现任何文字、字母或水印`,
-        { size: '2K', ratio: '21:9' }
+        { size: '1K', ratio: '21:9' }
       )
       const image = new Image()
-      image.onload = () => setImg(image)
+      image.onload = () => {
+        setImg(image)
+        onToast('封面已生成，下方裁切后保存')
+      }
+      image.onerror = () => onToast('封面图片解码失败，请重试')
       image.src = `data:image/png;base64,${b64}`
-      onToast('封面已生成，下方裁切后保存')
     } catch (err) {
       onToast(`封面生成失败：${err instanceof Error ? err.message : err}`)
     } finally {
@@ -225,7 +229,7 @@ export default function TitleCoverPanel({
         >
           {genning ? '生成中…' : '✦ AI 生成封面'}
         </button>
-        {genning && <span className="text-ink-dim">按标题生成横版插画，约半分钟</span>}
+        {genning && <span className="text-ink-dim">按标题生成横版插画，约一分钟</span>}
       </div>
 
       {img && (
