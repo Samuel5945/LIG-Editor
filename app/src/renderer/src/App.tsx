@@ -736,6 +736,11 @@ export default function App(): JSX.Element {
                 if (!cardsRef.current) throw new Error('贴图面板未就绪，请切到贴图页再试')
                 await cardsRef.current.setAccent(color)
               }}
+              onApplyArticle={(md) => {
+                // 对话修改稿写回唯一事实源，切到正文页给作者看结果（自动保存/撤销照常接管）
+                setCenterTab('article')
+                setArticle(md)
+              }}
               onGoBrainstorm={() => setRightTab('create')}
               onGoReview={() => setRightTab('review')}
             />

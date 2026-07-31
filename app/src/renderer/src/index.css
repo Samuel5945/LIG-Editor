@@ -30,30 +30,48 @@ body {
 
 /* ---- TipTap 正文排版（公众号阅读感）---- */
 .article-editor .ProseMirror {
-  @apply min-h-full px-8 py-6 text-[15px] leading-7 text-slate-200 outline-none;
-  max-width: 720px;
+  @apply min-h-full px-16 py-10 text-[15px] leading-8 text-slate-200 outline-none;
+  max-width: 760px;
   margin: 0 auto;
+  letter-spacing: 0.02em;
 }
+/* H1 大标题：居中 + 强调色短线收尾，和正文拉开仪式感 */
 .article-editor .ProseMirror h1 {
-  @apply mb-4 mt-6 text-2xl font-bold text-white;
+  @apply mb-7 mt-8 text-center text-[26px] font-bold leading-snug tracking-wide text-white;
 }
+.article-editor .ProseMirror h1::after {
+  content: '';
+  @apply mx-auto mt-3 block h-[3px] w-12 rounded-full bg-accent;
+}
+/* H2 小节标题：左侧强调色竖条，一眼区分层级 */
 .article-editor .ProseMirror h2 {
-  @apply mb-3 mt-6 text-xl font-bold text-white;
+  @apply mb-4 mt-10 border-l-4 border-accent pl-3 text-xl font-bold leading-snug text-white;
 }
+/* H3 子标题：强调色菱形前缀 */
 .article-editor .ProseMirror h3 {
-  @apply mb-2 mt-5 text-lg font-semibold text-white;
+  @apply mb-3 mt-8 text-[17px] font-semibold text-slate-100;
+}
+.article-editor .ProseMirror h3::before {
+  content: '';
+  @apply mb-[3px] mr-2 inline-block h-2 w-2 rotate-45 rounded-[2px] bg-accent align-middle;
 }
 .article-editor .ProseMirror p {
-  @apply my-3;
+  @apply my-4;
 }
+/* 引用：底色块 + 强调色边线，从正文里浮出来 */
 .article-editor .ProseMirror blockquote {
-  @apply my-4 border-l-4 border-slate-600 pl-4 text-slate-400;
+  @apply my-5 rounded-r-lg border-l-4 border-accent/60 bg-slate-800/60 py-2 pl-4 pr-3 text-slate-400;
 }
+.article-editor .ProseMirror blockquote p {
+  @apply my-1;
+}
+/* 分隔线：居中短线代替通栏长线，留白更透气 */
 .article-editor .ProseMirror hr {
-  @apply my-6 border-slate-700;
+  @apply mx-auto my-10 w-16 border-t-2 border-slate-600;
 }
+/* 加粗词上浅蓝，重点从正文里跳出来 */
 .article-editor .ProseMirror strong {
-  @apply font-bold text-white;
+  @apply font-bold text-sky-300;
 }
 /* 空文档占位 */
 .article-editor .ProseMirror p.is-editor-empty:first-child::before {

@@ -8,6 +8,7 @@ import type {
 } from '@shared/types'
 import { extractInlineContent, parseSkillDirective } from '@shared/skillInstall'
 import { cardsPlainText, parseAccentDirective } from '@shared/cards'
+import { parseArticleUpdate } from '@shared/articleUpdate'
 import { chatOnce } from '../copilot/llm'
 import { chatContext, freeChatSystemPrompt, webContext } from '../copilot/prompts'
 
@@ -24,6 +25,8 @@ interface ChatPanelProps {
   onSkillsChanged: () => void
   /** 对话换强调色确认后经 App 转发 CardsPanel.setAccent（仅贴图形态可用） */
   onApplyAccent?: (color: string | null) => Promise<void>
+  /** 对话修改正文确认后经 App 写回编辑器（仅文章形态可用） */
+  onApplyArticle?: (md: string) => void
   /** 空白态功能卡片：切到「脑暴创作」/「审阅」页签 */
   onGoBrainstorm: () => void
   onGoReview: () => void
@@ -55,6 +58,7 @@ export default function ChatPanel({
   onToast,
   onSkillsChanged,
   onApplyAccent,
+  onApplyArticle,
   onGoBrainstorm,
   onGoReview
 }: ChatPanelProps): ReactElement {
@@ -70,6 +74,8 @@ export default function ChatPanel({
   const [cards, setCards] = useState<Record<number, InstallCard>>({})
   // 换强调色确认卡状态（按 assistant 消息索引挂卡）
   const [accentCards, setAccentCards] = useState<Record<number, 'applying' | 'done' | 'error'>>({})
+  // 修改正文确认卡状态（按 assistant 消息索引挂卡）
+  const [articleCards, setArticleCards] = useState<Record<number, 'done'>>({})
   const abortRef = useRef<(() => void) | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const sessionCreatedRef = useRef<string | null>(null)
@@ -90,6 +96,7 @@ export default function ChatPanel({
     setMessages([])
     setCards({})
     setAccentCards({})
+    setArticleCards({})
     sessionCreatedRef.current = null
     refreshSessions()
   }, [project, refreshSessions])
@@ -99,6 +106,7 @@ export default function ChatPanel({
     setMessages([])
     setCards({})
     setAccentCards({})
+    setArticleCards({})
     sessionCreatedRef.current = null
   }, [])
 
@@ -125,6 +133,7 @@ export default function ChatPanel({
       setMessages(s.messages)
       setCards({})
       setAccentCards({})
+      setArticleCards({})
       sessionCreatedRef.current = s.created_at
     },
     [project]
@@ -211,6 +220,17 @@ export default function ChatPanel({
       }
     },
     [onApplyAccent, onToast]
+  )
+
+  /** 修改正文确认卡点「应用」：经 App 写回编辑器（md 唯一事实源，自动保存接管） */
+  const applyArticle = useCallback(
+    (idx: number, md: string) => {
+      if (!onApplyArticle) return
+      onApplyArticle(md)
+      setArticleCards((prev) => ({ ...prev, [idx]: 'done' }))
+      onToast('修改稿已应用到正文')
+    },
+    [onApplyArticle, onToast]
   )
 
   /** 索引 idx 之前最近一条用户消息原文（inline 内容提取用） */
@@ -368,11 +388,13 @@ export default function ChatPanel({
           </div>
         )}
         {messages.map((m, i) => {
-          // assistant 消息剥离 skill-install / cards-accent 指令块，指令转为下方确认卡片
+          // assistant 消息剥离 skill-install / cards-accent / article-update 指令块，指令转为下方确认卡片
           const parsed = m.role === 'assistant' ? parseSkillDirective(m.content) : null
           const accentParsed = parsed ? parseAccentDirective(parsed.cleaned) : null
+          const articleParsed = accentParsed ? parseArticleUpdate(accentParsed.cleaned) : null
           const card = cards[i]
           const accentState = accentCards[i]
+          const articleState = articleCards[i]
           return (
             <div key={i} className={`mb-2 flex flex-col ${m.role === 'user' ? 'items-end' : 'items-start'}`}>
               <div
@@ -380,9 +402,39 @@ export default function ChatPanel({
                   m.role === 'user' ? 'bg-accent/20 text-ink' : 'bg-panel-3 text-ink'
                 }`}
               >
-                {(accentParsed ? accentParsed.cleaned : m.content) ||
+                {(articleParsed ? articleParsed.cleaned : m.content) ||
                   (streaming && i === messages.length - 1 ? '…' : '')}
+                {articleParsed?.pending && (
+                  <span className="block text-ink-dim">✍ 正在生成修改稿…</span>
+                )}
               </div>
+              {articleParsed?.update !== undefined && (
+                <div className="mt-1 max-w-[90%] rounded-lg border border-panel-3 bg-panel-2 px-2.5 py-2">
+                  <p className="font-medium text-ink">📝 修改正文（{articleParsed.update.length} 字）</p>
+                  <p className="mt-0.5 line-clamp-3 whitespace-pre-wrap text-ink-dim">
+                    {articleParsed.update.slice(0, 120)}…
+                  </p>
+                  {format !== 'article' || !onApplyArticle ? (
+                    <p className="mt-1 text-ink-dim">当前工程不是文章形态，无法应用</p>
+                  ) : articleState === 'done' ? (
+                    <p className="mt-1 text-ink">✅ 已应用到正文</p>
+                  ) : (
+                    <>
+                      {article.length > 8000 && (
+                        <p className="mt-1 text-amber-400">
+                          ⚠ 当前正文较长，AI 可能只看到开头部分，应用前请确认结尾完整
+                        </p>
+                      )}
+                      <button
+                        onClick={() => applyArticle(i, articleParsed.update!)}
+                        className="mt-1.5 rounded bg-accent px-3 py-1 text-white hover:opacity-90"
+                      >
+                        ✓ 应用到正文
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
               {accentParsed?.accent !== undefined && (
                 <div className="mt-1 max-w-[90%] rounded-lg border border-panel-3 bg-panel-2 px-2.5 py-2">
                   <p className="flex items-center gap-2 font-medium text-ink">
