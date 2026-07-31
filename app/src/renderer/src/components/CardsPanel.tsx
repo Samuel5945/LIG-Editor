@@ -73,6 +73,8 @@ const CardsPanel = forwardRef<CardsPanelHandle, CardsPanelProps>(function CardsP
   // 全局长任务提示（转风格/扩写中，禁用编辑）
   const [busy, setBusy] = useState<string | null>(null)
   const [renderingIdx, setRenderingIdx] = useState<number | null>(null)
+  // 推送草稿箱进行中（传图较慢，防重复点击）
+  const [pushing, setPushing] = useState(false)
   const [bgBusy, setBgBusy] = useState<number | null>(null)
   // AI 整卡成图进行中的卡序
   const [aiBusy, setAiBusy] = useState<number | null>(null)
@@ -422,6 +424,24 @@ const CardsPanel = forwardRef<CardsPanelHandle, CardsPanelProps>(function CardsP
     if (missing.length) await renderSeq(missing)
   }, [project, archived, flush, onToast, renderSeq])
 
+  /** 推送贴图组到公众号草稿箱（图片消息形态）；后端校验失败原因直接展示 result.error */
+  const pushToDraft = useCallback(async () => {
+    await flush()
+    setPushing(true)
+    try {
+      const result = await window.api.invoke('wechat:push-cards', { project })
+      onToast(
+        result.ok
+          ? `✓ 贴图已推送到公众号草稿箱，mediaId：${result.mediaId ?? ''}`
+          : `推送失败：${result.error ?? '未知错误'}`
+      )
+    } catch (err) {
+      onToast(`推送失败：${err instanceof Error ? err.message : err}`)
+    } finally {
+      setPushing(false)
+    }
+  }, [project, flush, onToast])
+
   /** AI 优化：平台风格不变，逐张润色文案 + 生成贴题角标；传入审阅报告则逐条落实；背图/透出/深色/字号按张保留 */
   const refine = useCallback(
     async (review?: string) => {
@@ -631,6 +651,14 @@ const CardsPanel = forwardRef<CardsPanelHandle, CardsPanelProps>(function CardsP
             ↩ 回到文章
           </button>
         )}
+        <button
+          onClick={pushToDraft}
+          disabled={globalBusy || pushing || !deck.cards.length}
+          title="以图片消息形态推送到公众号草稿箱（读者可左右滑动看图）；需先在「设置-推送设置」填好 AppID/AppSecret"
+          className="whitespace-nowrap rounded px-2 py-0.5 hover:bg-panel-3 disabled:opacity-40"
+        >
+          {pushing ? '⏳ 推送中…' : '📮 推送草稿箱'}
+        </button>
         <button onClick={openFolder} className="ml-auto whitespace-nowrap rounded px-2 py-0.5 hover:bg-panel-3" title="渲染好的 PNG 按平台分目录存在工程 cards/ 下，直接取用发布">
           📂 打开图片文件夹
         </button>
