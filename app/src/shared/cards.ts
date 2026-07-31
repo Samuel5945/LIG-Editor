@@ -248,8 +248,11 @@ function wechatInner(
   const c = dark
     ? { frame: '#6f6552', eyebrow: '#c9b98f', title: '#f4efe4', sub: '#c9c0b0', accent: '#d9ab5f', divider: '#5a5342', body: '#e0d9c9' }
     : { frame: '#c8bda6', eyebrow: '#a4936f', title: '#26221c', sub: '#6f6555', accent: '#b0803c', divider: '#d9cfba', body: '#464035' }
-  // 强调色覆盖着色点：封面色条/页码/要点序号；纸面框线与正文色不动，保住书面气质
-  if (accent) c.accent = accent
+  // 强调色覆盖着色点：封面色条/页码/要点序号/纸面框线（框线走半透明衍生压饱和度，保住书面气质）；正文色不动
+  if (accent) {
+    c.accent = accent
+    c.frame = hexToRgba(accent, dark ? 0.6 : 0.5) ?? accent
+  }
   const frame = `margin: 56px; border: 3px solid ${c.frame}; flex: 1; display: flex; flex-direction: column; padding: 88px 96px;`
   if (cover) {
     return `<div style="${frame} justify-content: center; text-align: center;">
