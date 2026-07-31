@@ -613,9 +613,6 @@ const CardsPanel = forwardRef<CardsPanelHandle, CardsPanelProps>(function CardsP
     <div className="flex min-h-0 flex-1 flex-col text-xs">
       {/* 工具条：按钮不换行，放不下就整体折行成两排（格式/张数已移到中栏页签行） */}
       <div className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-panel-3 px-4 py-1.5 text-ink-dim">
-        <button onClick={addCard} disabled={globalBusy} className="whitespace-nowrap rounded px-2 py-0.5 hover:bg-panel-3 disabled:opacity-40">
-          ➕ 加卡片
-        </button>
         <button onClick={renderAll} disabled={globalBusy || !deck.cards.length} className="whitespace-nowrap rounded px-2 py-0.5 hover:bg-panel-3 disabled:opacity-40">
           🔁 全部重渲染
         </button>
@@ -896,7 +893,12 @@ const CardsPanel = forwardRef<CardsPanelHandle, CardsPanelProps>(function CardsP
             </div>
           </div>
         ))}
-        {!deck.cards.length && <p className="text-center text-ink-dim">没有卡片了，点上方「➕ 加卡片」新建</p>}
+        {/* 卡片全删光后的兜底入口：平时加卡用每张卡操作行的「＋」 */}
+        {!deck.cards.length && (
+          <button onClick={addCard} disabled={globalBusy} className="mx-auto block rounded border border-dashed border-panel-3 px-4 py-2 text-ink-dim hover:border-accent hover:text-accent disabled:opacity-40">
+            ➕ 新建第一张卡片
+          </button>
+        )}
 
         {/* 发布配文：带话题标签，发图时直接复制 */}
         {deck.cards.length > 0 && (
