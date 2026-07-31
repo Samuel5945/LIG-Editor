@@ -157,8 +157,8 @@ export async function pushDraft(project: string): Promise<PushDraftResult> {
     if (!existsSync(coverAbs)) throw new Error(`封面图不存在：${meta.cover.main}`)
     const thumbMediaId = await uploadCoverMaterial(token, coverAbs)
 
-    // 第二遍：本地图替换为 CDN URL，产出最终正文 HTML
-    const content = docToExportHtml(doc, (src) => urlMap.get(src) ?? src)
+    // 第二遍：本地图替换为 CDN URL，产出最终正文 HTML（跟随工程强调色）
+    const content = docToExportHtml(doc, (src) => urlMap.get(src) ?? src, meta.accent)
 
     const title = extractTitle(doc, project).slice(0, 64)
     const data = await wxFetch<WxError & { media_id: string }>(`${API}/draft/add?access_token=${token}`, {

@@ -13,6 +13,8 @@ interface ExportDialogProps {
   /** 工程目录绝对路径（预览图片走 asset:// 协议） */
   projectDir: string
   markdown: string
+  /** 文章强调色（meta.accent）：预览与导出产物同源跟色 */
+  accent?: string
   onToast: (msg: string) => void
   onClose: () => void
 }
@@ -26,6 +28,7 @@ export default function ExportDialog({
   project,
   projectDir,
   markdown,
+  accent,
   onToast,
   onClose
 }: ExportDialogProps): ReactElement {
@@ -38,13 +41,16 @@ export default function ExportDialog({
   // 预览页：图片解析为 asset:// 绝对地址，其余与导出产物完全一致
   const previewHtml = useMemo(() => {
     const doc = mdToDoc(markdown)
-    const fragment = docToExportHtml(doc, (src) =>
-      /^(data:|https?:)/.test(src)
-        ? src
-        : 'asset://file/' + encodeURIComponent(`${projectDir}\\${src.replace(/\//g, '\\')}`)
+    const fragment = docToExportHtml(
+      doc,
+      (src) =>
+        /^(data:|https?:)/.test(src)
+          ? src
+          : 'asset://file/' + encodeURIComponent(`${projectDir}\\${src.replace(/\//g, '\\')}`),
+      accent
     )
     return wrapExportPage(fragment, extractTitle(doc, project))
-  }, [markdown, projectDir, project])
+  }, [markdown, projectDir, project, accent])
 
   const copyRich = useCallback(async () => {
     if (busy) return

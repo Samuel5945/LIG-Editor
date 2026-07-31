@@ -79,6 +79,27 @@ describe('docToExportHtml（M7 导出模板）', () => {
   })
 })
 
+describe('docToExportHtml 强调色', () => {
+  const MD = '## 小标题\n\n### 小小标题\n\n**重点**正文。\n\n> 引用一句。\n'
+
+  it('合法色着到 H2/H3/引用/加粗', () => {
+    const out = docToExportHtml(mdToDoc(MD), (src) => src, '#e53935')
+    expect(out).toContain('border-left:4px solid #e53935;padding-left:10px;')
+    expect(out).toContain('border-left:3px solid #e53935;padding-left:8px;')
+    expect(out).toContain('border-left:3px solid #e53935;') // 引用边线替换掉默认灰
+    expect(out).not.toContain('#d9d9d9')
+    expect(out).toContain('color:#e53935')
+  })
+
+  it('非法色/缺省回默认样式', () => {
+    for (const bad of [undefined, 'red', '#12345g']) {
+      const out = docToExportHtml(mdToDoc(MD), (src) => src, bad)
+      expect(out).toContain('#d9d9d9')
+      expect(out).not.toContain('border-left:4px solid')
+    }
+  })
+})
+
 describe('wrapExportPage / extractTitle', () => {
   it('抽首个 H1 作页面标题；缺失回退工程名', () => {
     expect(extractTitle(mdToDoc(SAMPLE), '兜底')).toBe('荣耀换标：一个环的诞生')

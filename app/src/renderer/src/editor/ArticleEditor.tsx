@@ -3,12 +3,14 @@ import {
   useEffect,
   useImperativeHandle,
   useRef,
+  type CSSProperties,
   type ReactElement
 } from 'react'
 import { useEditor, EditorContent, BubbleMenu } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import type { JSONContent } from '@tiptap/react'
 import { mdToDoc, docToMd, type ArticleDoc } from '@shared/markdown'
+import { isHexColor } from '@shared/cards'
 import { FigureImage, type FigureImageStorage } from './FigureImage'
 import { FigSuggest, type FigSuggestStorage } from './FigSuggest'
 import { FigureGallery } from './FigureGallery'
@@ -35,6 +37,8 @@ interface ArticleEditorProps {
   markdown: string
   /** 工程目录绝对路径，用于解析图片相对路径 */
   projectDir: string
+  /** 文章强调色（meta.accent）：排版装饰/加粗色跟随；缺省默认蓝 */
+  accent?: string
   onChange: (md: string) => void
   /** 选区浮动条「AI 修改」：App 打开修改弹窗 */
   onAiModify?: () => void
@@ -52,7 +56,7 @@ interface ArticleEditorProps {
  * - lastEmitted 防止 onChange → props.markdown 回流时循环 setContent
  */
 const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(function ArticleEditor(
-  { markdown, projectDir, onChange, onAiModify, onAiReview, onFigAction, onEditFigureSource },
+  { markdown, projectDir, accent, onChange, onAiModify, onAiReview, onFigAction, onEditFigureSource },
   ref
 ): ReactElement {
   const lastEmitted = useRef(markdown)
@@ -241,7 +245,16 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
           </button>
         </div>
       </BubbleMenu>
-        <EditorContent editor={editor} className="article-editor selectable h-full" />
+        <EditorContent
+          editor={editor}
+          className="article-editor selectable h-full"
+          // 强调色变量注入：非法/缺省不设，CSS 回 var 默认蓝
+          style={
+            accent && isHexColor(accent)
+              ? ({ '--article-accent': accent } as CSSProperties)
+              : undefined
+          }
+        />
       </div>
     </div>
   )

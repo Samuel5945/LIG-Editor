@@ -1,4 +1,5 @@
 import type { ArticleDoc, BlockNode, FigureGalleryAttrs, InlineNode, ParagraphNode } from './markdown'
+import { isHexColor } from './cards'
 
 /**
  * article.md → 公众号可粘贴 HTML（M7 导出）
@@ -30,17 +31,31 @@ const S = {
   hint: 'font-size:12px;color:#bbb;line-height:1.6;margin-top:6px;text-align:center;'
 } as const
 
+type Styles = { -readonly [K in keyof typeof S]: string }
+
+/** 强调色着色点（与编辑器排版同构）：H2 竖条 / H3 短条 / 引用边线 / 加粗词；缺省/非法色用默认灰黑 */
+function buildStyles(accent?: string): Styles {
+  const s: Styles = { ...S }
+  if (!accent || !isHexColor(accent)) return s
+  const c = accent.trim()
+  s.h2 = `${S.h2}border-left:4px solid ${c};padding-left:10px;`
+  s.h3 = `${S.h3}border-left:3px solid ${c};padding-left:8px;`
+  s.blockquote = S.blockquote.replace('#d9d9d9', c)
+  s.strong = `font-weight:bold;color:${c};`
+  return s
+}
+
 function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
 
-function inlineToHtml(content: InlineNode[] | undefined): string {
+function inlineToHtml(content: InlineNode[] | undefined, s: Styles): string {
   if (!content) return ''
   return content
     .map((n) => {
       if (n.type === 'hardBreak') return '<br>'
       const text = escapeHtml(n.text)
-      return n.marks?.some((mk) => mk.type === 'bold') ? `<strong style="${S.strong}">${text}</strong>` : text
+      return n.marks?.some((mk) => mk.type === 'bold') ? `<strong style="${s.strong}">${text}</strong>` : text
     })
     .join('')
 }
@@ -79,28 +94,28 @@ function galleryToHtml(attrs: FigureGalleryAttrs, resolveImg: (src: string) => s
   return `<section style="${S.figure}"><section style="${S.swipeBox}">${items}</section><p style="${S.hint}">← 左右滑动查看 ${images.length} 张 →</p>${cap}</section>`
 }
 
-function blockToHtml(block: BlockNode, resolveImg: (src: string) => string): string {
+function blockToHtml(block: BlockNode, resolveImg: (src: string) => string, s: Styles): string {
   switch (block.type) {
     case 'heading': {
       const level = Math.min(Math.max(block.attrs.level, 1), 3)
-      const style = level === 1 ? S.h1 : level === 2 ? S.h2 : S.h3
-      return `<h${level} style="${style}">${inlineToHtml(block.content)}</h${level}>`
+      const style = level === 1 ? s.h1 : level === 2 ? s.h2 : s.h3
+      return `<h${level} style="${style}">${inlineToHtml(block.content, s)}</h${level}>`
     }
     case 'paragraph': {
-      const inner = inlineToHtml(block.content)
-      return inner.trim() ? `<p style="${S.p}">${inner}</p>` : ''
+      const inner = inlineToHtml(block.content, s)
+      return inner.trim() ? `<p style="${s.p}">${inner}</p>` : ''
     }
     case 'blockquote': {
       const paras = block.content
         .map(
           (p: ParagraphNode, i: number) =>
-            `<p style="${i === block.content.length - 1 ? S.quotePLast : S.quoteP}">${inlineToHtml(p.content)}</p>`
+            `<p style="${i === block.content.length - 1 ? s.quotePLast : s.quoteP}">${inlineToHtml(p.content, s)}</p>`
         )
         .join('')
-      return `<blockquote style="${S.blockquote}">${paras}</blockquote>`
+      return `<blockquote style="${s.blockquote}">${paras}</blockquote>`
     }
     case 'horizontalRule':
-      return `<hr style="${S.hr}">`
+      return `<hr style="${s.hr}">`
     case 'figureImage': {
       const { src, alt, caption } = block.attrs
       const cap = caption ? `<p style="${S.caption}">${escapeHtml(caption)}</p>` : ''
@@ -113,13 +128,14 @@ function blockToHtml(block: BlockNode, resolveImg: (src: string) => string): str
   }
 }
 
-/** doc → 正文片段 HTML（粘贴公众号用这段；不含 <html> 外壳） */
-export function docToExportHtml(doc: ArticleDoc, resolveImg: (src: string) => string): string {
+/** doc → 正文片段 HTML（粘贴公众号用这段；不含 <html> 外壳）；accent 为文章强调色（meta.accent） */
+export function docToExportHtml(doc: ArticleDoc, resolveImg: (src: string) => string, accent?: string): string {
+  const s = buildStyles(accent)
   const body = (doc.content ?? [])
-    .map((b) => blockToHtml(b, resolveImg))
+    .map((b) => blockToHtml(b, resolveImg, s))
     .filter(Boolean)
     .join('\n')
-  return `<section style="${S.root}">\n${body}\n</section>`
+  return `<section style="${s.root}">\n${body}\n</section>`
 }
 
 /** 片段 → 完整独立页面（article.html / 手机预览） */

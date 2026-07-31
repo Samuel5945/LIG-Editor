@@ -31,6 +31,8 @@ export interface ProjectMeta {
   cover?: CoverInfo
   /** 工程形态：article 文章（默认）/ cards 贴图（中央区显示贴图面板，风格存 cards.json） */
   format?: 'article' | 'cards'
+  /** 文章强调色（十六进制）：编辑器排版装饰与导出 HTML 同步跟随；缺省 = 默认蓝 */
+  accent?: string
   style_skill?: string
   created_at: string
   updated_at: string

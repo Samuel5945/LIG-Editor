@@ -25,6 +25,8 @@ interface ChatPanelProps {
   onSkillsChanged: () => void
   /** 对话换强调色确认后经 App 转发 CardsPanel.setAccent（仅贴图形态可用） */
   onApplyAccent?: (color: string | null) => Promise<void>
+  /** 对话换文章强调色确认后经 App 写 meta.accent（仅文章形态可用） */
+  onApplyArticleAccent?: (color: string | null) => Promise<void>
   /** 对话修改正文确认后经 App 写回编辑器（仅文章形态可用） */
   onApplyArticle?: (md: string) => void
   /** 空白态功能卡片：切到「脑暴创作」/「审阅」页签 */
@@ -58,6 +60,7 @@ export default function ChatPanel({
   onToast,
   onSkillsChanged,
   onApplyAccent,
+  onApplyArticleAccent,
   onApplyArticle,
   onGoBrainstorm,
   onGoReview
@@ -206,20 +209,21 @@ export default function ChatPanel({
     [cards, onToast, onSkillsChanged]
   )
 
-  /** 换强调色确认卡点「应用」：经 App 转发 CardsPanel 整组重渲 */
+  /** 换强调色确认卡点「应用」：按工程形态分流——贴图整组重渲，文章写 meta.accent 即时跟色 */
   const applyAccent = useCallback(
     async (idx: number, color: string | null) => {
-      if (!onApplyAccent) return
+      const apply = format === 'cards' ? onApplyAccent : onApplyArticleAccent
+      if (!apply) return
       setAccentCards((prev) => ({ ...prev, [idx]: 'applying' }))
       try {
-        await onApplyAccent(color)
+        await apply(color)
         setAccentCards((prev) => ({ ...prev, [idx]: 'done' }))
       } catch (err) {
         setAccentCards((prev) => ({ ...prev, [idx]: 'error' }))
         onToast(`换色失败：${err instanceof Error ? err.message : err}`)
       }
     },
-    [onApplyAccent, onToast]
+    [format, onApplyAccent, onApplyArticleAccent, onToast]
   )
 
   /** 修改正文确认卡点「应用」：经 App 写回编辑器（md 唯一事实源，自动保存接管） */
@@ -438,28 +442,44 @@ export default function ChatPanel({
               {accentParsed?.accent !== undefined && (
                 <div className="mt-1 max-w-[90%] rounded-lg border border-panel-3 bg-panel-2 px-2.5 py-2">
                   <p className="flex items-center gap-2 font-medium text-ink">
-                    🎨 换贴图强调色：
+                    🎨 换{format === 'cards' ? '贴图' : '文章'}强调色：
                     {accentParsed.accent ? (
                       <>
                         <span className="inline-block h-4 w-4 rounded-full border border-panel-3" style={{ background: accentParsed.accent }} />
                         {accentParsed.accent}
                       </>
                     ) : (
-                      '恢复平台默认色'
+                      '恢复默认色'
                     )}
                   </p>
-                  {format !== 'cards' || !onApplyAccent ? (
-                    <p className="mt-1 text-ink-dim">当前工程不是贴图形态，无法应用</p>
-                  ) : accentState === 'done' ? (
-                    <p className="mt-1 text-ink">✅ 已应用，全组重渲完成</p>
+                  {format === 'cards' ? (
+                    !onApplyAccent ? (
+                      <p className="mt-1 text-ink-dim">换色通道未就绪，无法应用</p>
+                    ) : accentState === 'done' ? (
+                      <p className="mt-1 text-ink">✅ 已应用，全组重渲完成</p>
+                    ) : (
+                      <button
+                        onClick={() => void applyAccent(i, accentParsed.accent ?? null)}
+                        disabled={accentState === 'applying'}
+                        className="mt-1.5 rounded bg-accent px-3 py-1 text-white hover:opacity-90 disabled:opacity-40"
+                      >
+                        {accentState === 'applying' ? '应用中，整组重渲…' : '✓ 应用并重渲全组'}
+                      </button>
+                    )
+                  ) : format === 'article' && onApplyArticleAccent ? (
+                    accentState === 'done' ? (
+                      <p className="mt-1 text-ink">✅ 已应用，编辑器与导出排版已跟色</p>
+                    ) : (
+                      <button
+                        onClick={() => void applyAccent(i, accentParsed.accent ?? null)}
+                        disabled={accentState === 'applying'}
+                        className="mt-1.5 rounded bg-accent px-3 py-1 text-white hover:opacity-90 disabled:opacity-40"
+                      >
+                        {accentState === 'applying' ? '应用中…' : '✓ 应用到文章排版'}
+                      </button>
+                    )
                   ) : (
-                    <button
-                      onClick={() => void applyAccent(i, accentParsed.accent ?? null)}
-                      disabled={accentState === 'applying'}
-                      className="mt-1.5 rounded bg-accent px-3 py-1 text-white hover:opacity-90 disabled:opacity-40"
-                    >
-                      {accentState === 'applying' ? '应用中，整组重渲…' : '✓ 应用并重渲全组'}
-                    </button>
+                    <p className="mt-1 text-ink-dim">当前未打开工程，无法应用</p>
                   )}
                 </div>
               )}

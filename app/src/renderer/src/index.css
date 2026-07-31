@@ -28,7 +28,8 @@ body {
   border-radius: 4px;
 }
 
-/* ---- TipTap 正文排版（公众号阅读感）---- */
+/* ---- TipTap 正文排版（公众号阅读感）----
+   强调色走 --article-accent 变量（meta.accent 由 ArticleEditor 注入），缺省默认蓝 */
 .article-editor .ProseMirror {
   @apply min-h-full px-16 py-10 text-[15px] leading-8 text-slate-200 outline-none;
   max-width: 760px;
@@ -41,11 +42,13 @@ body {
 }
 .article-editor .ProseMirror h1::after {
   content: '';
-  @apply mx-auto mt-3 block h-[3px] w-12 rounded-full bg-accent;
+  @apply mx-auto mt-3 block h-[3px] w-12 rounded-full;
+  background: var(--article-accent, #4f8cff);
 }
 /* H2 小节标题：左侧强调色竖条，一眼区分层级 */
 .article-editor .ProseMirror h2 {
-  @apply mb-4 mt-10 border-l-4 border-accent pl-3 text-xl font-bold leading-snug text-white;
+  @apply mb-4 mt-10 border-l-4 pl-3 text-xl font-bold leading-snug text-white;
+  border-left-color: var(--article-accent, #4f8cff);
 }
 /* H3 子标题：强调色菱形前缀 */
 .article-editor .ProseMirror h3 {
@@ -53,14 +56,16 @@ body {
 }
 .article-editor .ProseMirror h3::before {
   content: '';
-  @apply mb-[3px] mr-2 inline-block h-2 w-2 rotate-45 rounded-[2px] bg-accent align-middle;
+  @apply mb-[3px] mr-2 inline-block h-2 w-2 rotate-45 rounded-[2px] align-middle;
+  background: var(--article-accent, #4f8cff);
 }
 .article-editor .ProseMirror p {
   @apply my-4;
 }
 /* 引用：底色块 + 强调色边线，从正文里浮出来 */
 .article-editor .ProseMirror blockquote {
-  @apply my-5 rounded-r-lg border-l-4 border-accent/60 bg-slate-800/60 py-2 pl-4 pr-3 text-slate-400;
+  @apply my-5 rounded-r-lg border-l-4 bg-slate-800/60 py-2 pl-4 pr-3 text-slate-400;
+  border-left-color: color-mix(in srgb, var(--article-accent, #4f8cff) 60%, transparent);
 }
 .article-editor .ProseMirror blockquote p {
   @apply my-1;
@@ -69,9 +74,10 @@ body {
 .article-editor .ProseMirror hr {
   @apply mx-auto my-10 w-16 border-t-2 border-slate-600;
 }
-/* 加粗词上浅蓝，重点从正文里跳出来 */
+/* 加粗词上强调色（提亮保深底可读），重点从正文里跳出来 */
 .article-editor .ProseMirror strong {
-  @apply font-bold text-sky-300;
+  @apply font-bold;
+  color: color-mix(in srgb, var(--article-accent, #4f8cff) 70%, white);
 }
 /* 空文档占位 */
 .article-editor .ProseMirror p.is-editor-empty:first-child::before {

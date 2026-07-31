@@ -640,6 +640,7 @@ export default function App(): JSX.Element {
                     ref={editorRef}
                     markdown={article}
                     projectDir={paths ? `${paths.workspace}\\${current}` : ''}
+                    accent={meta?.accent}
                     onChange={setArticle}
                     onAiModify={handleAiModify}
                     onAiReview={handleAiReview}
@@ -735,6 +736,14 @@ export default function App(): JSX.Element {
                 }
                 if (!cardsRef.current) throw new Error('贴图面板未就绪，请切到贴图页再试')
                 await cardsRef.current.setAccent(color)
+              }}
+              onApplyArticleAccent={async (color) => {
+                // 文章强调色落 meta.accent：编辑器 CSS 变量即时跟色，导出/推送同源读色
+                if (!currentRef.current) throw new Error('先打开工程')
+                const m = await window.api.invoke('project:readMeta', currentRef.current)
+                m.accent = color ?? undefined
+                await window.api.invoke('project:writeMeta', currentRef.current, m)
+                setMeta(m)
               }}
               onApplyArticle={(md) => {
                 // 对话修改稿写回唯一事实源，切到正文页给作者看结果（自动保存/撤销照常接管）
@@ -866,6 +875,7 @@ export default function App(): JSX.Element {
           project={current}
           projectDir={`${paths.workspace}\\${current}`}
           markdown={article}
+          accent={meta?.accent}
           onToast={setToast}
           onClose={() => setShowExport(false)}
         />
