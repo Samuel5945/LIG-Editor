@@ -604,6 +604,15 @@ export default function App(): JSX.Element {
                 )}
               </>
             )}
+            {current && centerTab === 'titlecover' && meta?.format !== 'cards' && (
+              <button
+                onClick={handleOpenExport}
+                disabled={!article.trim()}
+                className="rounded px-2 py-0.5 hover:bg-panel-3 disabled:opacity-40"
+              >
+                📤 导出
+              </button>
+            )}
             <span className="ml-auto">
               {current ? (
                 <>
