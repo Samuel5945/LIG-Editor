@@ -30,6 +30,9 @@ export default function IntegrationDialog({
   const [importPath, setImportPath] = useState('')
   // 公众号推送凭据（独立存储，本页签单独保存）
   const [wechat, setWechat] = useState<WechatSettings>({ appId: '', appSecret: '' })
+  // 公网 IP 查询（IP 白名单辅助）
+  const [fetchingIp, setFetchingIp] = useState(false)
+  const [ipResult, setIpResult] = useState<{ ok: boolean; text: string } | null>(null)
 
   const refreshSkills = useCallback(async () => {
     setSkills(await window.api.invoke('skill:list'))
@@ -49,6 +52,25 @@ export default function IntegrationDialog({
       onToast(`保存失败：${err instanceof Error ? err.message : err}`)
     }
   }, [wechat, onToast])
+
+  const fetchPublicIp = useCallback(async () => {
+    setFetchingIp(true)
+    setIpResult(null)
+    try {
+      const res = await window.api.invoke('wechat:public-ip')
+      if (res.ok && res.ip) {
+        setIpResult({ ok: true, text: res.ip })
+        await navigator.clipboard.writeText(res.ip)
+        onToast(`公网 IP ${res.ip} 已复制到剪贴板`)
+      } else {
+        setIpResult({ ok: false, text: res.error ?? '获取失败' })
+      }
+    } catch (err) {
+      setIpResult({ ok: false, text: err instanceof Error ? err.message : String(err) })
+    } finally {
+      setFetchingIp(false)
+    }
+  }, [onToast])
 
   const copy = useCallback(
     async (label: string, text: string) => {
@@ -158,8 +180,30 @@ export default function IntegrationDialog({
                   💾 保存
                 </button>
                 <span className="text-[11px] text-slate-500">
-                  两处都在公众平台「设置与开发-基本配置」获取；还需把本机公网 IP 加入「IP 白名单」
+                  两处都在公众平台「设置与开发-基本配置」获取
                 </span>
+              </div>
+
+              <div className="space-y-2 rounded border border-slate-700 bg-slate-800/40 p-3">
+                <p className="text-[11px] text-slate-400">
+                  IP 白名单辅助：推送草稿需把本机公网 IP 加入公众平台「基本配置-IP 白名单」
+                </p>
+                <div className="flex flex-wrap items-center gap-3">
+                  <button onClick={fetchPublicIp} disabled={fetchingIp} className={btnGhost}>
+                    {fetchingIp ? '查询中…' : '🌐 获取本机公网 IP'}
+                  </button>
+                  <button
+                    onClick={() => window.open('https://developers.weixin.qq.com/platform')}
+                    className={btnGhost}
+                  >
+                    🔗 前往微信开发者平台 ↗
+                  </button>
+                </div>
+                {ipResult && (
+                  <p className={`break-all text-[11px] ${ipResult.ok ? 'text-green-400' : 'text-red-400'}`}>
+                    {ipResult.ok ? `✓ 公网 IP：${ipResult.text}（已复制，粘贴到白名单即可）` : `✗ ${ipResult.text}`}
+                  </p>
+                )}
               </div>
             </div>
           ) : tab === 'mcp' ? (
