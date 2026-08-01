@@ -16,10 +16,18 @@ export interface PushDraftResult {
   error?: string
 }
 
+/** 获取本机公网 IP 结果（用于填写公众平台 API IP 白名单） */
+export interface PublicIpResult {
+  ok: boolean
+  ip?: string
+  error?: string
+}
+
 /** IPC 通道名（UI 接入层注册用） */
 export const WECHAT_CHANNELS = {
   getSettings: 'wechat:get-settings',
   setSettings: 'wechat:set-settings',
   pushDraft: 'wechat:push-draft',
-  pushCards: 'wechat:push-cards'
+  pushCards: 'wechat:push-cards',
+  publicIp: 'wechat:public-ip'
 } as const

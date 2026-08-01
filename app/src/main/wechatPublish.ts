@@ -2,7 +2,7 @@ import { basename, extname, join } from 'path'
 import { existsSync, readFileSync } from 'fs'
 import { mdToDoc } from '@shared/markdown'
 import { docToExportHtml, extractTitle } from '@shared/exportHtml'
-import type { PushDraftResult } from '@shared/wechat'
+import type { PushDraftResult, PublicIpResult } from '@shared/wechat'
 import { projectDir, readMeta, readTextFile } from './projectStore'
 import { getWechatSettings } from './wechatStore'
 import { readCards } from './cardsStore'
@@ -66,6 +66,40 @@ async function getAccessToken(): Promise<string> {
 /** 配置变更后清缓存（换号立即生效） */
 export function invalidateToken(): void {
   cachedToken = null
+}
+
+// ---------- 公网 IP 查询（IP 白名单辅助） ----------
+
+/** 多个公网 IP 查询源，逐个兜底（任一可用即返回） */
+const IP_SOURCES: { url: string; parse: (text: string) => string }[] = [
+  { url: 'https://api.ipify.org', parse: (t) => t.trim() },
+  { url: 'https://api.ip.sb/ip', parse: (t) => t.trim() },
+  { url: 'https://ipinfo.io/ip', parse: (t) => t.trim() }
+]
+
+const IPV4_RE = /^\d{1,3}(\.\d{1,3}){3}$/
+
+/**
+ * 获取本机公网出口 IP（用于填写公众平台「基本配置-IP 白名单」）。
+ * 主进程发起，走系统网络栈；多源兜底 + 单源 8s 超时。
+ */
+export async function getPublicIp(): Promise<PublicIpResult> {
+  let lastErr = '未知错误'
+  for (const src of IP_SOURCES) {
+    try {
+      const res = await fetch(src.url, { signal: AbortSignal.timeout(8_000) })
+      if (!res.ok) {
+        lastErr = `${src.url} 返回 HTTP ${res.status}`
+        continue
+      }
+      const ip = src.parse(await res.text())
+      if (IPV4_RE.test(ip)) return { ok: true, ip }
+      lastErr = `${src.url} 返回了无法识别的内容`
+    } catch (err) {
+      lastErr = err instanceof Error ? err.message : String(err)
+    }
+  }
+  return { ok: false, error: `无法获取公网 IP：${lastErr}` }
 }
 
 // ---------- 图片上传 ----------
