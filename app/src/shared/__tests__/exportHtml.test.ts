@@ -32,7 +32,7 @@ describe('docToExportHtml（M7 导出模板）', () => {
   })
 
   it('标题/加粗/引用/图注/分隔线齐全', () => {
-    expect(html).toMatch(/<h1 style="[^"]*">荣耀换标：一个环的诞生<\/h1>/)
+    expect(html).toMatch(/<h1 style="[^"]*">荣耀换标：一个环的诞生<\/h1><div style="[^"]*"><\/div>/)
     expect(html).toContain('<strong style=')
     expect(html).toContain('<blockquote style=')
     expect(html).toContain('>从直角到超椭圆</p>')
@@ -82,20 +82,21 @@ describe('docToExportHtml（M7 导出模板）', () => {
 describe('docToExportHtml 强调色', () => {
   const MD = '## 小标题\n\n### 小小标题\n\n**重点**正文。\n\n> 引用一句。\n'
 
-  it('合法色着到 H2/H3/引用/加粗', () => {
+  it('合法色着到 H2竖条/H3菱形/引用边线/加粗', () => {
     const out = docToExportHtml(mdToDoc(MD), (src) => src, '#e53935')
-    expect(out).toContain('border-left:4px solid #e53935;padding-left:10px;')
-    expect(out).toContain('border-left:3px solid #e53935;padding-left:8px;')
-    expect(out).toContain('border-left:3px solid #e53935;') // 引用边线替换掉默认灰
-    expect(out).not.toContain('#d9d9d9')
-    expect(out).toContain('color:#e53935')
+    expect(out).toContain('border-left:4px solid #e53935;padding-left:12px;') // H2 竖条
+    expect(out).toMatch(/<span style="[^"]*background:#e53935/) // H3 菱形
+    expect(out).toContain('border-left:4px solid #e53935;') // 引用边线
+    expect(out).toContain('color:#e53935') // 加粗词
+    expect(out).not.toContain('#4f8cff')
   })
 
-  it('非法色/缺省回默认样式', () => {
+  it('非法色/缺省回默认蓝（与编辑器一致，不再变灰）', () => {
     for (const bad of [undefined, 'red', '#12345g']) {
       const out = docToExportHtml(mdToDoc(MD), (src) => src, bad)
-      expect(out).toContain('#d9d9d9')
-      expect(out).not.toContain('border-left:4px solid')
+      expect(out).toContain('border-left:4px solid #4f8cff;padding-left:12px;')
+      expect(out).toMatch(/<span style="[^"]*background:#4f8cff/)
+      expect(out).not.toContain('#d9d9d9')
     }
   })
 })
