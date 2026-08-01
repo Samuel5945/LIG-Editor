@@ -111,6 +111,20 @@ export interface LlmTestResult {
   message: string
 }
 
+/** GET /v1/models 返回的单个模型条目 */
+export interface ModelInfo {
+  id: string
+  /** 部分供应商返回所属组织 */
+  owned_by?: string
+}
+
+/** 拉取模型列表结果 */
+export interface FetchModelsResult {
+  ok: boolean
+  models: ModelInfo[]
+  error?: string
+}
+
 // ---------- 副驾驶（M5） ----------
 
 /** 会话摘要（chat/*.json 文件名即 id） */
@@ -224,6 +238,8 @@ export interface IpcApi {
   /** 发起流式对话；增量通过 llm:stream 事件推送 */
   'llm:chatStart': (requestId: string, messages: ChatMessage[]) => void
   'llm:abort': (requestId: string) => void
+  /** 拉取供应商可用模型列表（GET /v1/models） */
+  'llm:fetchModels': (provider: ProviderConfig) => FetchModelsResult
   // ---- 副驾驶（M5）----
   'chat:list': (project: string) => ChatSessionMeta[]
   'chat:read': (project: string, id: string) => ChatSession

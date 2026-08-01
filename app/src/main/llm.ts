@@ -1,5 +1,5 @@
 import { net } from 'electron'
-import type { ChatMessage, LlmTestResult, ProviderConfig } from '@shared/types'
+import type { ChatMessage, FetchModelsResult, LlmTestResult, ModelInfo, ProviderConfig } from '@shared/types'
 import { broadcast } from './ipc'
 import { getTextProvider } from './settingsStore'
 
@@ -72,6 +72,38 @@ export async function testProvider(provider: ProviderConfig): Promise<LlmTestRes
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     return { ok: false, message: ctrl.signal.aborted ? '连接超时（30s）' : msg }
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+/** 拉取供应商可用模型列表（GET /v1/models，OpenAI 标准接口） */
+export async function fetchModels(provider: ProviderConfig): Promise<FetchModelsResult> {
+  const url = provider.baseUrl.replace(/\/+$/, '') + '/models'
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), 15_000)
+  try {
+    const res = await net.fetch(url, {
+      method: 'GET',
+      headers: authHeaders(provider.apiKey),
+      signal: ctrl.signal
+    })
+    if (!res.ok) {
+      const text = (await res.text()).slice(0, 300)
+      return { ok: false, models: [], error: `HTTP ${res.status}：${text}` }
+    }
+    const json = (await res.json()) as { data?: { id: string; owned_by?: string }[] }
+    const models: ModelInfo[] = (json.data ?? [])
+      .filter((m) => typeof m.id === 'string' && m.id.length > 0)
+      .map((m) => ({ id: m.id, owned_by: m.owned_by }))
+      .sort((a, b) => a.id.localeCompare(b.id))
+    if (models.length === 0) {
+      return { ok: false, models: [], error: '接口返回了空模型列表' }
+    }
+    return { ok: true, models }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return { ok: false, models: [], error: ctrl.signal.aborted ? '请求超时（15s）' : msg }
   } finally {
     clearTimeout(timer)
   }
