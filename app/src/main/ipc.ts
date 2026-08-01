@@ -6,7 +6,7 @@ import { getAppPaths } from './paths'
 import * as store from './projectStore'
 import { watchProject, stopProjectWatch } from './watcher'
 import { getLlmSettings, setLlmSettings } from './settingsStore'
-import { testProvider, chatStart, abortChat } from './llm'
+import { testProvider, chatStart, abortChat, fetchModels } from './llm'
 import { listSkills, readSkill, importSkill, setSkillEnabled, saveSkill, removeSkill } from './skillStore'
 import { resolveSkillInstall } from './skillFetch'
 import { webResearch, webSearch } from './webSearch'
@@ -66,6 +66,7 @@ export function registerIpc(): void {
     void chatStart(requestId, messages)
   })
   handle('llm:abort', (requestId) => abortChat(requestId))
+  handle('llm:fetchModels', (provider) => fetchModels(provider))
 
   // ---- 副驾驶（M5）----
   handle('chat:list', (project) => store.listChatSessions(project))
