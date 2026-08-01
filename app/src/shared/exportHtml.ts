@@ -11,21 +11,33 @@ import { isHexColor } from './cards'
  * - resolveImg 决定图片 src 形态：相对路径（article.html）/ asset://（预览）/ dataURL（富文本复制）
  */
 
+/** 默认强调色：与编辑器 --article-accent 缺省值一致（index.css），未设/非法色时推送不再变灰 */
+const DEFAULT_ACCENT = '#4f8cff'
+
+/**
+ * 排版规格与编辑器 index.css 的 .article-editor .ProseMirror 对齐（字号/行高/间距/装饰同构）。
+ * 颜色按白底适配（编辑器是深底浅字，公众号是白底深字）；H1 下划线短横 / H3 菱形在编辑器里是
+ * 伪元素，公众号会剥掉伪元素，改由 blockToHtml 用真实 DOM 元素还原同样形状。
+ */
 const S = {
-  root: 'font-size:16px;line-height:1.8;color:#333;letter-spacing:0.4px;word-break:break-word;',
-  h1: 'font-size:22px;font-weight:bold;color:#1a1a1a;line-height:1.4;margin:28px 0 18px;text-align:center;',
-  h2: 'font-size:18px;font-weight:bold;color:#1a1a1a;line-height:1.5;margin:32px 0 14px;',
-  h3: 'font-size:16px;font-weight:bold;color:#1a1a1a;line-height:1.5;margin:24px 0 12px;',
-  p: 'font-size:16px;line-height:1.8;color:#333;margin:0 0 16px;text-align:justify;',
-  strong: 'font-weight:bold;color:#111;',
+  root: 'font-size:15px;line-height:2.13;color:#333;letter-spacing:0.02em;word-break:break-word;',
+  h1Wrap: 'text-align:center;',
+  h1: 'font-size:26px;font-weight:bold;color:#1a1a1a;line-height:1.375;letter-spacing:0.025em;margin:32px 0 0;',
+  h1Bar: 'width:48px;height:3px;border-radius:9999px;margin:12px auto 0;',
+  h2: 'font-size:20px;font-weight:bold;color:#1a1a1a;line-height:1.375;margin:40px 0 16px;',
+  h3: 'font-size:17px;font-weight:600;color:#1a1a1a;line-height:1.375;margin:32px 0 12px;',
+  h3Diamond:
+    'display:inline-block;width:8px;height:8px;border-radius:2px;transform:rotate(45deg);margin-right:8px;vertical-align:middle;',
+  p: 'font-size:15px;line-height:2.13;color:#333;margin:16px 0;',
+  strong: 'font-weight:bold;',
   blockquote:
-    'margin:20px 0;padding:12px 16px;border-left:3px solid #d9d9d9;background:#f7f7f7;color:#777;font-size:15px;line-height:1.8;',
-  quoteP: 'margin:0 0 8px;font-size:15px;line-height:1.8;color:#777;',
-  quotePLast: 'margin:0;font-size:15px;line-height:1.8;color:#777;',
-  hr: 'margin:32px auto;border:0 none;border-top:1px solid #e8e8e8;width:64px;',
+    'margin:20px 0;padding:8px 12px 8px 16px;border-left:4px solid #4f8cff;border-top-right-radius:8px;border-bottom-right-radius:8px;background:#f7f7f7;color:#777;font-size:15px;line-height:2.13;',
+  quoteP: 'margin:4px 0;font-size:15px;line-height:2.13;color:#777;',
+  quotePLast: 'margin:4px 0;font-size:15px;line-height:2.13;color:#777;',
+  hr: 'margin:40px auto;border:0 none;border-top:2px solid #e8e8e8;width:64px;',
   figure: 'margin:20px 0;text-align:center;',
-  img: 'max-width:100%;border-radius:6px;',
-  caption: 'font-size:13px;color:#888;line-height:1.6;margin-top:8px;text-align:center;',
+  img: 'max-width:100%;max-height:420px;border-radius:4px;',
+  caption: 'font-size:12px;color:#888;line-height:1.6;margin-top:8px;text-align:center;',
   swipeBox: 'overflow-x:scroll;white-space:nowrap;-webkit-overflow-scrolling:touch;',
   swipeImg: 'display:inline-block;width:80%;margin-right:8px;border-radius:6px;vertical-align:top;',
   hint: 'font-size:12px;color:#bbb;line-height:1.6;margin-top:6px;text-align:center;'
@@ -33,14 +45,14 @@ const S = {
 
 type Styles = { -readonly [K in keyof typeof S]: string }
 
-/** 强调色着色点（与编辑器排版同构）：H2 竖条 / H3 短条 / 引用边线 / 加粗词；缺省/非法色用默认灰黑 */
+/** 强调色着色（与编辑器同源同构）：H1 短横 / H2 竖条 / H3 菱形 / 引用边线 / 加粗词；缺省/非法色回默认蓝 */
 function buildStyles(accent?: string): Styles {
   const s: Styles = { ...S }
-  if (!accent || !isHexColor(accent)) return s
-  const c = accent.trim()
-  s.h2 = `${S.h2}border-left:4px solid ${c};padding-left:10px;`
-  s.h3 = `${S.h3}border-left:3px solid ${c};padding-left:8px;`
-  s.blockquote = S.blockquote.replace('#d9d9d9', c)
+  const c = accent && isHexColor(accent) ? accent.trim() : DEFAULT_ACCENT
+  s.h1Bar = `${S.h1Bar}background:${c};`
+  s.h2 = `${S.h2}border-left:4px solid ${c};padding-left:12px;`
+  s.h3Diamond = `${S.h3Diamond}background:${c};`
+  s.blockquote = S.blockquote.replace('#4f8cff', c)
   s.strong = `font-weight:bold;color:${c};`
   return s
 }
@@ -98,8 +110,16 @@ function blockToHtml(block: BlockNode, resolveImg: (src: string) => string, s: S
   switch (block.type) {
     case 'heading': {
       const level = Math.min(Math.max(block.attrs.level, 1), 3)
-      const style = level === 1 ? s.h1 : level === 2 ? s.h2 : s.h3
-      return `<h${level} style="${style}">${inlineToHtml(block.content, s)}</h${level}>`
+      const inner = inlineToHtml(block.content, s)
+      if (level === 1) {
+        // 居中大标题 + 强调色短横收尾（复刻编辑器 h1::after，公众号剥伪元素故用真实块）
+        return `<section style="${s.h1Wrap}"><h1 style="${s.h1}">${inner}</h1><div style="${s.h1Bar}"></div></section>`
+      }
+      if (level === 3) {
+        // 强调色菱形前缀（复刻编辑器 h3::before）
+        return `<h3 style="${s.h3}"><span style="${s.h3Diamond}"></span>${inner}</h3>`
+      }
+      return `<h2 style="${s.h2}">${inner}</h2>`
     }
     case 'paragraph': {
       const inner = inlineToHtml(block.content, s)
