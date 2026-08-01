@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ReactElement } from 'react'
-import type { LlmSettings, LlmTestResult, ProviderConfig } from '@shared/types'
+import type { LlmSettings, LlmTestResult, ModelInfo, ProviderConfig } from '@shared/types'
 
 interface SettingsDialogProps {
   onClose: () => void
@@ -13,6 +13,9 @@ export default function SettingsDialog({ onClose }: SettingsDialogProps): ReactE
   const [testResult, setTestResult] = useState<LlmTestResult | null>(null)
   const [savedFlash, setSavedFlash] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [models, setModels] = useState<ModelInfo[]>([])
+  const [fetchingModels, setFetchingModels] = useState(false)
+  const [modelsError, setModelsError] = useState<string | null>(null)
 
   useEffect(() => {
     window.api.invoke('settings:getLlm').then((s) => {
@@ -72,6 +75,20 @@ export default function SettingsDialog({ onClose }: SettingsDialogProps): ReactE
     setTesting(false)
   }, [provider])
 
+  const runFetchModels = useCallback(async () => {
+    if (!provider) return
+    setFetchingModels(true)
+    setModelsError(null)
+    setModels([])
+    const result = await window.api.invoke('llm:fetchModels', provider)
+    if (result.ok) {
+      setModels(result.models)
+    } else {
+      setModelsError(result.error ?? '未知错误')
+    }
+    setFetchingModels(false)
+  }, [provider])
+
   const save = useCallback(async () => {
     if (!settings) return
     setSaveError(null)
@@ -103,6 +120,8 @@ export default function SettingsDialog({ onClose }: SettingsDialogProps): ReactE
                 onClick={() => {
                   setSelectedId(p.id)
                   setTestResult(null)
+                  setModels([])
+                  setModelsError(null)
                 }}
                 className={`mb-1 block w-full truncate rounded px-2 py-1.5 text-left text-xs ${
                   p.id === selectedId ? 'bg-panel-3 text-ink' : 'text-ink-dim hover:bg-panel-3'
@@ -156,6 +175,48 @@ export default function SettingsDialog({ onClose }: SettingsDialogProps): ReactE
                   <input className={field} value={provider.imageModel} onChange={(e) => patchProvider({ imageModel: e.target.value })} />
                 </div>
               </div>
+
+              <div className="mt-2 flex items-center gap-2">
+                <button
+                  onClick={runFetchModels}
+                  disabled={fetchingModels}
+                  className="rounded border border-panel-3 px-2.5 py-1 text-[11px] text-ink-dim hover:border-accent hover:text-accent disabled:opacity-50"
+                >
+                  {fetchingModels ? '拉取中…' : '↓ 拉取可用模型'}
+                </button>
+                {modelsError && <span className="text-[11px] text-red-400">✗ {modelsError}</span>}
+              </div>
+
+              {models.length > 0 && (
+                <div className="mt-2 flex gap-3">
+                  <div className="flex-1">
+                    <label className="mb-1 block text-[11px] text-ink-dim">从列表选文本模型（{models.length} 个）</label>
+                    <select
+                      className={field}
+                      value=""
+                      onChange={(e) => { if (e.target.value) patchProvider({ textModel: e.target.value }) }}
+                    >
+                      <option value="">选择模型…</option>
+                      {models.map((m) => (
+                        <option key={m.id} value={m.id}>{m.id}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex-1">
+                    <label className="mb-1 block text-[11px] text-ink-dim">从列表选图像模型</label>
+                    <select
+                      className={field}
+                      value=""
+                      onChange={(e) => { if (e.target.value) patchProvider({ imageModel: e.target.value }) }}
+                    >
+                      <option value="">选择模型…</option>
+                      {models.map((m) => (
+                        <option key={m.id} value={m.id}>{m.id}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
 
               <label className={label}>图像调用格式</label>
               <select
