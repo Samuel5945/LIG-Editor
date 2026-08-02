@@ -73,15 +73,15 @@ export interface ProviderConfig {
   apiKey: string
   textModel: string
   imageModel: string
-  /** 图像调用格式：标准 OpenAI images / Agnes images 变体（size档位+ratio+return_base64） */
-  imageApi: 'openai-images' | 'agnes-images'
+  /** 图像调用格式：标准 OpenAI images / Agnes images 变体 / APIMart 异步任务制（gpt-image-2、nano-banana） */
+  imageApi: 'openai-images' | 'agnes-images' | 'apimart-images'
 }
 
-/** AI 生图可选参数（Agnes 档位式尺寸 + 宽高比；标准 OpenAI 只用 size） */
+/** AI 生图可选参数（档位式尺寸 + 宽高比；标准 OpenAI 只用 size 精确尺寸） */
 export interface ImageGenOptions {
-  /** Agnes：1K/2K/3K/4K；OpenAI：1024x1024 等精确尺寸 */
+  /** Agnes：1K/2K/3K/4K；APIMart：分辨率档位 1k/2k/4k；OpenAI：1024x1024 等精确尺寸 */
   size?: string
-  /** Agnes 专用：1:1 / 4:3 / 16:9 / 3:4 / 9:16 / 2:3 / 3:2 / 21:9 */
+  /** Agnes / APIMart 专用：1:1 / 4:3 / 16:9 / 3:4 / 9:16 / 2:3 / 3:2 / 21:9（APIMart 作 size 比例） */
   ratio?: string
 }
 

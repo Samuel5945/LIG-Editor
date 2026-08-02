@@ -226,6 +226,7 @@ export default function SettingsDialog({ onClose }: SettingsDialogProps): ReactE
               >
                 <option value="openai-images">OpenAI images/generations</option>
                 <option value="agnes-images">Agnes images（档位尺寸+比例）</option>
+                <option value="apimart-images">APIMart 异步任务（gpt-image-2 / nano-banana）</option>
               </select>
 
               <div className="mt-3 flex items-center gap-2">
