@@ -101,9 +101,15 @@ export interface SearchSettings {
   apiKey: string
 }
 
+/** OpenAI 多模态内容片段（vision 图片 + 纯文本） */
+export type ContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string } }
+
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant'
-  content: string
+  /** 纯文本 或 多模态片段数组（含图片时走 OpenAI vision 格式） */
+  content: string | ContentPart[]
 }
 
 export interface LlmTestResult {

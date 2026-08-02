@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react'
-import type { IdeaCard, WebSearchResult } from '@shared/types'
+import type { ContentPart, IdeaCard, WebSearchResult } from '@shared/types'
 import { CARD_FORMAT_LABEL, parseCardItems, type CardFormat } from '@shared/cards'
 import { chatOnce, extractJsonArray } from '../copilot/llm'
 import { brainstormMessages, outlineMessages, fullArticleMessages, cardsMessages } from '../copilot/prompts'
@@ -8,6 +8,8 @@ import { extractFileText } from '../copilot/material'
 interface Attachment {
   name: string
   text: string
+  /** 图片附件的 dataURL（走 vision 多模态）；文档附件此字段为空 */
+  dataUrl?: string
 }
 
 /** 从选题库/外部带入的种子：ts 变化即触发直接出大纲 */
@@ -70,7 +72,8 @@ export default function BrainstormPanel({
   const articleRef = useRef(article)
   articleRef.current = article
 
-  const material = attachments.map((a) => `【${a.name}】\n${a.text}`).join('\n\n---\n\n')
+  const material = attachments.filter((a) => !a.dataUrl).map((a) => `【${a.name}】\n${a.text}`).join('\n\n---\n\n')
+  const imageAttachments = attachments.filter((a) => a.dataUrl)
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight })
@@ -83,8 +86,17 @@ export default function BrainstormPanel({
       if (!files) return
       for (const f of Array.from(files)) {
         try {
-          const text = await extractFileText(f)
-          setAttachments((prev) => [...prev, { name: f.name, text }])
+          if (f.type.startsWith('image/')) {
+            const dataUrl = await new Promise<string>((res) => {
+              const r = new FileReader()
+              r.onload = () => res(r.result as string)
+              r.readAsDataURL(f)
+            })
+            setAttachments((prev) => [...prev, { name: f.name, text: '', dataUrl }])
+          } else {
+            const text = await extractFileText(f)
+            setAttachments((prev) => [...prev, { name: f.name, text }])
+          }
         } catch (err) {
           onToast(`${f.name} 解析失败：${err instanceof Error ? err.message : err}`)
         }
@@ -122,7 +134,18 @@ export default function BrainstormPanel({
     setStreamText('')
     setPhase('brainstorming')
     const web = await searchWeb(ask.trim() || attachments[0]?.name || '')
-    const { promise, abort } = chatOnce(brainstormMessages(material, ask.trim(), skill, web), setStreamText)
+    const msgs = brainstormMessages(material, ask.trim(), skill, web)
+    // 图片附件：把最后一条 user 消息转为多模态 ContentPart[]（vision）
+    if (imageAttachments.length > 0) {
+      const last = msgs[msgs.length - 1]
+      const text = typeof last.content === 'string' ? last.content : ''
+      const parts: ContentPart[] = [
+        ...imageAttachments.map((img) => ({ type: 'image_url' as const, image_url: { url: img.dataUrl! } })),
+        { type: 'text' as const, text }
+      ]
+      msgs[msgs.length - 1] = { ...last, content: parts }
+    }
+    const { promise, abort } = chatOnce(msgs, setStreamText)
     abortRef.current = abort
     try {
       const full = await promise
@@ -141,7 +164,7 @@ export default function BrainstormPanel({
     } finally {
       abortRef.current = null
     }
-  }, [ask, material, skill, onToast, searchWeb, attachments])
+  }, [ask, material, imageAttachments, skill, onToast, searchWeb, attachments])
 
   // ---- 大纲（来自选题卡 / 直接要求 / 选题库种子） ----
 
@@ -315,13 +338,13 @@ export default function BrainstormPanel({
         {(phase === 'input' || phase === 'brainstorming') && (
           <>
             <p className="mb-2 text-ink-dim">
-              投喂素材（txt/md/pdf）和要求 → 脑暴选题卡 → 生成大纲 → 立项写正文。全程独立上下文，不影响对话。
+              投喂素材（图片/txt/md/pdf）和要求 → 脑暴选题卡 → 生成大纲 → 立项写正文。全程独立上下文，不影响对话。
             </p>
             <input
               ref={fileRef}
               type="file"
               multiple
-              accept=".txt,.md,.pdf"
+              accept=".txt,.md,.pdf,image/png,image/jpeg,image/webp,image/gif"
               className="hidden"
               onChange={(e) => {
                 addFiles(e.target.files)
@@ -346,7 +369,10 @@ export default function BrainstormPanel({
               </button>
               {attachments.map((a, i) => (
                 <span key={i} className="flex items-center gap-1 rounded bg-panel-3 px-1.5 py-1 text-[10px] text-ink-dim">
-                  {a.name}（{a.text.length}字）
+                  {a.dataUrl ? (
+                    <img src={a.dataUrl} alt={a.name} className="h-6 w-6 rounded object-cover" />
+                  ) : null}
+                  {a.dataUrl ? a.name : `${a.name}（${a.text.length}字）`}
                   <button onClick={() => setAttachments((prev) => prev.filter((_, j) => j !== i))} className="hover:text-red-400">
                     ✕
                   </button>
