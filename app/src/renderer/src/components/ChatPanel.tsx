@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type ReactElement } from 'rea
 import type {
   ChatMessage,
   ChatSessionMeta,
+  ContentPart,
   SkillInstallDirective,
   SkillResolveResult,
   WebSearchResult
@@ -11,6 +12,13 @@ import { cardsPlainText, parseAccentDirective } from '@shared/cards'
 import { parseArticleUpdate } from '@shared/articleUpdate'
 import { chatOnce } from '../copilot/llm'
 import { chatContext, freeChatSystemPrompt, webContext } from '../copilot/prompts'
+import { extractFileText } from '../copilot/material'
+
+/** 从消息 content（可能是多模态数组）提取纯文本（渲染/标题/解析用） */
+function contentText(content: string | ContentPart[]): string {
+  if (typeof content === 'string') return content
+  return content.filter((p) => p.type === 'text').map((p) => (p as { type: 'text'; text: string }).text).join('')
+}
 
 interface ChatPanelProps {
   project: string | null
@@ -79,6 +87,10 @@ export default function ChatPanel({
   const [accentCards, setAccentCards] = useState<Record<number, 'applying' | 'done' | 'error'>>({})
   // 修改正文确认卡状态（按 assistant 消息索引挂卡）
   const [articleCards, setArticleCards] = useState<Record<number, 'done'>>({})
+  // 附件：图片（dataURL 走 vision）+ 文档（提取文本拼入消息）
+  const [attachImages, setAttachImages] = useState<{ name: string; dataUrl: string }[]>([])
+  const [attachDocs, setAttachDocs] = useState<{ name: string; text: string }[]>([])
+  const attachRef = useRef<HTMLInputElement>(null)
   const abortRef = useRef<(() => void) | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const sessionCreatedRef = useRef<string | null>(null)
@@ -156,7 +168,7 @@ export default function ChatPanel({
       const firstUser = msgs.find((m) => m.role === 'user')
       await window.api.invoke('chat:write', project, {
         id,
-        title: (firstUser?.content ?? '新会话').slice(0, 24),
+        title: contentText(firstUser?.content ?? '新会话').slice(0, 24),
         created_at: sessionCreatedRef.current,
         updated_at: now,
         messages: msgs
@@ -240,7 +252,7 @@ export default function ChatPanel({
   /** 索引 idx 之前最近一条用户消息原文（inline 内容提取用） */
   const userTextBefore = useCallback(
     (idx: number): string => {
-      for (let i = idx - 1; i >= 0; i--) if (messages[i].role === 'user') return messages[i].content
+      for (let i = idx - 1; i >= 0; i--) if (messages[i].role === 'user') return contentText(messages[i].content)
       return ''
     },
     [messages]
@@ -261,10 +273,34 @@ export default function ChatPanel({
     return chatContext('article', article.slice(0, 8000))
   }, [ctxOn, project, format, article])
 
+  // ---- 附件处理 ----
+  const addAttachments = useCallback(
+    async (files: FileList | null) => {
+      if (!files) return
+      for (const f of Array.from(files)) {
+        if (f.type.startsWith('image/')) {
+          const dataUrl = await new Promise<string>((res) => {
+            const r = new FileReader()
+            r.onload = () => res(r.result as string)
+            r.readAsDataURL(f)
+          })
+          setAttachImages((prev) => [...prev, { name: f.name, dataUrl }])
+        } else if (/\.(txt|md|pdf)$/i.test(f.name)) {
+          const text = await extractFileText(f)
+          setAttachDocs((prev) => [...prev, { name: f.name, text }])
+        } else {
+          onToast(`不支持的文件类型：${f.name}（仅图片 / txt / md / pdf）`)
+        }
+      }
+    },
+    [onToast]
+  )
+
   const send = useCallback(
     async (preset?: string) => {
       const text = (preset ?? input).trim()
-      if (!text || streaming) return
+      if (streaming) return
+      if (!text && attachImages.length === 0 && attachDocs.length === 0) return
       if (!preset) setInput('')
       setError(null)
       setStreaming(true)
@@ -281,12 +317,29 @@ export default function ChatPanel({
         }
       }
       const ctx = await buildContext()
-      const display = [...messages, { role: 'user', content: text } as ChatMessage]
+      // 文档附件：提取文本拼入上下文
+      const docCtx = attachDocs.length > 0
+        ? `<附件文档>\n${attachDocs.map((d) => `【${d.name}】\n${d.text}`).join('\n\n---\n\n')}\n</附件文档>\n`
+        : ''
+      // 可见消息：文本 + 图片数量提示
+      const imgNote = attachImages.length > 0 ? ` [附 ${attachImages.length} 张图片]` : ''
+      const display = [...messages, { role: 'user', content: text + imgNote } as ChatMessage]
       setMessages([...display, { role: 'assistant', content: '' }])
-      const apiUser: ChatMessage = {
-        role: 'user',
-        content: `${ctx}${web.length > 0 ? `${webContext(web)}\n` : ''}${text}`
+      // API 消息：有图片时走多模态 ContentPart[]，否则纯文本
+      const textContent = `${ctx}${docCtx}${web.length > 0 ? `${webContext(web)}\n` : ''}${text}`
+      let apiContent: string | ContentPart[]
+      if (attachImages.length > 0) {
+        apiContent = [
+          ...attachImages.map((img) => ({ type: 'image_url' as const, image_url: { url: img.dataUrl } })),
+          { type: 'text' as const, text: textContent }
+        ]
+      } else {
+        apiContent = textContent
       }
+      const apiUser: ChatMessage = { role: 'user', content: apiContent }
+      // 发完清附件
+      setAttachImages([])
+      setAttachDocs([])
       const api: ChatMessage[] = [
         { role: 'system', content: freeChatSystemPrompt(skill) },
         ...messages,
@@ -311,7 +364,7 @@ export default function ChatPanel({
         abortRef.current = null
       }
     },
-    [input, streaming, messages, skill, webOn, onToast, persist, resolveCard, buildContext]
+    [input, streaming, messages, skill, webOn, onToast, persist, resolveCard, buildContext, attachImages, attachDocs]
   )
 
   const abort = useCallback(() => abortRef.current?.(), [])
@@ -393,7 +446,8 @@ export default function ChatPanel({
         )}
         {messages.map((m, i) => {
           // assistant 消息剥离 skill-install / cards-accent / article-update 指令块，指令转为下方确认卡片
-          const parsed = m.role === 'assistant' ? parseSkillDirective(m.content) : null
+          const mText = contentText(m.content)
+          const parsed = m.role === 'assistant' ? parseSkillDirective(mText) : null
           const accentParsed = parsed ? parseAccentDirective(parsed.cleaned) : null
           const articleParsed = accentParsed ? parseArticleUpdate(accentParsed.cleaned) : null
           const card = cards[i]
@@ -406,7 +460,7 @@ export default function ChatPanel({
                   m.role === 'user' ? 'bg-accent/20 text-ink' : 'bg-panel-3 text-ink'
                 }`}
               >
-                {(articleParsed ? articleParsed.cleaned : m.content) ||
+                {(articleParsed ? articleParsed.cleaned : mText) ||
                   (streaming && i === messages.length - 1 ? '…' : '')}
                 {articleParsed?.pending && (
                   <span className="block text-ink-dim">✍ 正在生成修改稿…</span>
@@ -561,6 +615,28 @@ export default function ChatPanel({
 
       {/* 输入区 */}
       <div className="border-t border-panel-3 p-2">
+        {/* 附件预览条 */}
+        {(attachImages.length > 0 || attachDocs.length > 0) && (
+          <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
+            {attachImages.map((img, i) => (
+              <span key={`img-${i}`} className="relative inline-block">
+                <img src={img.dataUrl} alt={img.name} className="h-10 w-10 rounded border border-panel-3 object-cover" />
+                <button
+                  onClick={() => setAttachImages((prev) => prev.filter((_, k) => k !== i))}
+                  className="absolute -right-1 -top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-red-500 text-[8px] text-white"
+                >
+                  ✕
+                </button>
+              </span>
+            ))}
+            {attachDocs.map((doc, i) => (
+              <span key={`doc-${i}`} className="inline-flex items-center gap-1 rounded bg-panel-3 px-1.5 py-0.5 text-[10px] text-ink-dim">
+                📄 {doc.name.length > 12 ? doc.name.slice(0, 12) + '…' : doc.name}
+                <button onClick={() => setAttachDocs((prev) => prev.filter((_, k) => k !== i))} className="text-red-400">✕</button>
+              </span>
+            ))}
+          </div>
+        )}
         <textarea
           rows={2}
           value={input}
@@ -571,10 +647,25 @@ export default function ChatPanel({
               send()
             }
           }}
-          placeholder="自由对话，Enter 发送"
+          placeholder="自由对话，Enter 发送（可附带图片/文档）"
           className="w-full resize-none rounded bg-panel-3 p-2 text-xs text-ink outline-none placeholder:text-ink-dim"
         />
+        <input
+          ref={attachRef}
+          type="file"
+          multiple
+          accept="image/png,image/jpeg,image/webp,image/gif,.txt,.md,.pdf"
+          className="hidden"
+          onChange={(e) => { void addAttachments(e.target.files); e.target.value = '' }}
+        />
         <div className="mt-1 flex items-center justify-end gap-2">
+          <button
+            onClick={() => attachRef.current?.click()}
+            title="附带图片（走 vision）或文档（提取文本）"
+            className="rounded px-2 py-1 text-xs text-ink-dim hover:bg-panel-3"
+          >
+            📎 附件
+          </button>
           <button
             onClick={() => setWebOn((v) => !v)}
             title="联网搜索：开启后每轮先搜索再回答（时效性问题建议开）"
@@ -588,7 +679,7 @@ export default function ChatPanel({
             title="工程上下文：开启后每轮自动附带当前正文/贴图文案，AI 能直接回答内容相关问题"
             className={`mr-auto rounded px-2 py-1 text-xs disabled:opacity-40 ${ctxOn && project ? 'bg-accent/20 text-accent' : 'text-ink-dim hover:bg-panel-3'}`}
           >
-            📎 上下文{ctxOn && project ? '：开' : ''}
+            📄 上下文{ctxOn && project ? '：开' : ''}
           </button>
           {streaming ? (
             <button onClick={abort} className="rounded bg-panel-3 px-3 py-1 text-xs text-red-400 hover:bg-panel">
@@ -597,7 +688,7 @@ export default function ChatPanel({
           ) : (
             <button
               onClick={() => void send()}
-              disabled={!input.trim()}
+              disabled={!input.trim() && attachImages.length === 0 && attachDocs.length === 0}
               className="rounded bg-accent px-3 py-1 text-xs text-white hover:opacity-90 disabled:opacity-40"
             >
               发送
