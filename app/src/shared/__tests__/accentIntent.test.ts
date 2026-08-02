@@ -21,6 +21,20 @@ describe('parseAccentIntent（纯换色指令直连）', () => {
     expect(parseAccentIntent('配色换成莫兰迪绿')).toEqual({ color: '#a3b899' })
   })
 
+  it('识别传统色名', () => {
+    expect(parseAccentIntent('强调色改成藏青')).toEqual({ color: '#2e4e7e' })
+    expect(parseAccentIntent('换成朱砂')).toEqual({ color: '#e34234' })
+    expect(parseAccentIntent('配色改鹅黄')).toEqual({ color: '#f8e6a8' })
+    expect(parseAccentIntent('强调色换藕荷')).toEqual({ color: '#e4c6d0' })
+    expect(parseAccentIntent('改成高级灰')).toEqual({ color: '#8c8c8c' })
+  })
+
+  it('A→B 句式取目标色（动词之后），不取源色', () => {
+    expect(parseAccentIntent('把金色改为蓝色')).toEqual({ color: '#4f8cff' })
+    expect(parseAccentIntent('把蓝色改成金色')).toEqual({ color: '#c9a227' })
+    expect(parseAccentIntent('强调色从绿色换成藏青')).toEqual({ color: '#2e4e7e' })
+  })
+
   it('识别 hex 色值（含不带 # 的裸色值）', () => {
     expect(parseAccentIntent('强调色改成#FF6B35')).toEqual({ color: '#ff6b35' })
     expect(parseAccentIntent('配色设为 #4f8cff')).toEqual({ color: '#4f8cff' })
