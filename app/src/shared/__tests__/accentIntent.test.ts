@@ -14,9 +14,18 @@ describe('parseAccentIntent（纯换色指令直连）', () => {
     expect(parseAccentIntent('标题强调色换红色')).toEqual({ color: '#e63946' })
   })
 
-  it('识别 hex 色值', () => {
+  it('识别浅色/柔和色名（用户偏好）', () => {
+    expect(parseAccentIntent('强调色换成清新浅绿')).toEqual({ color: '#81c784' })
+    expect(parseAccentIntent('换成浅绿')).toEqual({ color: '#81c784' })
+    expect(parseAccentIntent('强调色改浅蓝')).toEqual({ color: '#90caf9' })
+    expect(parseAccentIntent('配色换成莫兰迪绿')).toEqual({ color: '#a3b899' })
+  })
+
+  it('识别 hex 色值（含不带 # 的裸色值）', () => {
     expect(parseAccentIntent('强调色改成#FF6B35')).toEqual({ color: '#ff6b35' })
     expect(parseAccentIntent('配色设为 #4f8cff')).toEqual({ color: '#4f8cff' })
+    expect(parseAccentIntent('换成81c784')).toEqual({ color: '#81c784' })
+    expect(parseAccentIntent('用 81c784')).toEqual({ color: '#81c784' })
   })
 
   it('识别恢复默认', () => {
