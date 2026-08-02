@@ -4,6 +4,7 @@ import {
   useEffect,
   useImperativeHandle,
   useRef,
+  useState,
   type CSSProperties,
   type ReactElement
 } from 'react'
@@ -15,6 +16,18 @@ import { isHexColor } from '@shared/cards'
 import { FigureImage, type FigureImageStorage } from './FigureImage'
 import { FigSuggest, type FigSuggestStorage } from './FigSuggest'
 import { FigureGallery } from './FigureGallery'
+
+/** 工具栏快速换色预设：常用参考色，选不中用取色器自定义 */
+const ACCENT_PRESETS: { color: string; name: string }[] = [
+  { color: '#4f8cff', name: '默认蓝' },
+  { color: '#c9a227', name: '金' },
+  { color: '#e63946', name: '红' },
+  { color: '#ff6b35', name: '橙' },
+  { color: '#16a085', name: '绿' },
+  { color: '#7c5cff', name: '紫' },
+  { color: '#e86fa4', name: '粉' },
+  { color: '#5b6470', name: '灰' }
+]
 
 export interface EditorSelection {
   from: number
@@ -51,6 +64,8 @@ interface ArticleEditorProps {
   onFigAction?: FigSuggestStorage['onAction']
   /** 源码图「改源码重渲染」：App 打开代码绘图弹窗编辑 figures/*.html，desc 为原图提示词（M6） */
   onEditFigureSource?: (figureSource: string, desc: string) => void
+  /** 工具栏快速换强调色：null = 恢复默认蓝 */
+  onAccentChange?: (color: string | null) => void
 }
 
 /**
@@ -59,10 +74,11 @@ interface ArticleEditorProps {
  * - lastEmitted 防止 onChange → props.markdown 回流时循环 setContent
  */
 const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(function ArticleEditor(
-  { markdown, project, projectDir, accent, onChange, onAiModify, onAiReview, onFigAction, onEditFigureSource },
+  { markdown, project, projectDir, accent, onChange, onAiModify, onAiReview, onFigAction, onEditFigureSource, onAccentChange },
   ref
 ): ReactElement {
   const lastEmitted = useRef(markdown)
+  const [accentOpen, setAccentOpen] = useState(false)
 
   const editor = useEditor({
     extensions: [
@@ -255,6 +271,63 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
             e.target.value = ''
           }}
         />
+        {/* 强调色快速换色 */}
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setAccentOpen((v) => !v)}
+            title="快速修改文章强调色"
+            className="flex items-center gap-1 rounded px-2 py-0.5 text-slate-300 hover:bg-slate-700"
+          >
+            <span
+              className="inline-block h-3 w-3 rounded-full border border-slate-500"
+              style={{ background: accent && isHexColor(accent) ? accent : '#4f8cff' }}
+            />
+            强调色
+          </button>
+          {accentOpen && (
+            <div className="absolute left-0 top-full z-50 mt-1 w-56 rounded-lg border border-slate-700 bg-slate-900 p-2 shadow-xl">
+              <div className="grid grid-cols-8 gap-1">
+                {ACCENT_PRESETS.map((p) => (
+                  <button
+                    key={p.color}
+                    type="button"
+                    title={p.name}
+                    onClick={() => {
+                      onAccentChange?.(p.color)
+                      setAccentOpen(false)
+                    }}
+                    className={`h-5 w-5 rounded-full border border-slate-600 ${
+                      (accent ?? '#4f8cff').toLowerCase() === p.color ? 'ring-2 ring-white' : ''
+                    }`}
+                    style={{ background: p.color }}
+                  />
+                ))}
+              </div>
+              <div className="mt-2 flex items-center gap-2">
+                <label className="flex flex-1 items-center gap-1 text-[10px] text-slate-400">
+                  自定义
+                  <input
+                    type="color"
+                    value={accent && isHexColor(accent) ? accent : '#4f8cff'}
+                    onChange={(e) => onAccentChange?.(e.target.value)}
+                    className="h-6 w-8 cursor-pointer rounded border border-slate-600 bg-transparent"
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onAccentChange?.(null)
+                    setAccentOpen(false)
+                  }}
+                  className="rounded border border-slate-600 px-2 py-1 text-[10px] text-slate-300 hover:bg-slate-700"
+                >
+                  恢复默认
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
         <span className="ml-auto text-[10px] text-slate-500">Ctrl+Z 撤销 · Ctrl+Y 重做 · Ctrl+B 加粗</span>
       </div>
       <div className="min-h-0 flex-1 overflow-auto">

@@ -92,6 +92,7 @@ export function readMeta(name: string): ProjectMeta {
     titles: raw.titles ?? [],
     cover: raw.cover,
     format: raw.format ?? 'article',
+    accent: raw.accent,
     style_skill: raw.style_skill,
     created_at: raw.created_at ?? new Date().toISOString(),
     updated_at: raw.updated_at ?? new Date().toISOString()

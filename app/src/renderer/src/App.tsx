@@ -330,6 +330,15 @@ export default function App(): JSX.Element {
     []
   )
 
+  /** 文章强调色落 meta.accent：编辑器 CSS 变量即时跟色，导出/推送同源读色；null = 恢复默认 */
+  const handleApplyArticleAccent = useCallback(async (color: string | null) => {
+    if (!currentRef.current) throw new Error('先打开工程')
+    const m = await window.api.invoke('project:readMeta', currentRef.current)
+    m.accent = color ?? undefined
+    await window.api.invoke('project:writeMeta', currentRef.current, m)
+    setMeta(m)
+  }, [])
+
   /** 源码图「改源码重渲染」→ 代码绘图弹窗编辑模式；完成后只刷图不插节点 */
   const handleEditFigureSource = useCallback((figureSource: string, desc: string) => {
     setFigRequest({
@@ -656,6 +665,7 @@ export default function App(): JSX.Element {
                     onAiReview={handleAiReview}
                     onFigAction={handleFigAction}
                     onEditFigureSource={handleEditFigureSource}
+                    onAccentChange={handleApplyArticleAccent}
                   />
                 </div>
               )
@@ -747,14 +757,7 @@ export default function App(): JSX.Element {
                 if (!cardsRef.current) throw new Error('贴图面板未就绪，请切到贴图页再试')
                 await cardsRef.current.setAccent(color)
               }}
-              onApplyArticleAccent={async (color) => {
-                // 文章强调色落 meta.accent：编辑器 CSS 变量即时跟色，导出/推送同源读色
-                if (!currentRef.current) throw new Error('先打开工程')
-                const m = await window.api.invoke('project:readMeta', currentRef.current)
-                m.accent = color ?? undefined
-                await window.api.invoke('project:writeMeta', currentRef.current, m)
-                setMeta(m)
-              }}
+              onApplyArticleAccent={handleApplyArticleAccent}
               onApplyArticle={(md) => {
                 // 对话修改稿写回唯一事实源，切到正文页给作者看结果（自动保存/撤销照常接管）
                 setCenterTab('article')

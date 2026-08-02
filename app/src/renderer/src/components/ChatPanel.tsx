@@ -13,6 +13,7 @@ import { parseArticleUpdate } from '@shared/articleUpdate'
 import { chatOnce } from '../copilot/llm'
 import { chatContext, freeChatSystemPrompt, webContext } from '../copilot/prompts'
 import { extractFileText } from '../copilot/material'
+import { parseAccentIntent } from '@shared/accentIntent'
 
 /** 从消息 content（可能是多模态数组）提取纯文本（渲染/标题/解析用） */
 function contentText(content: string | ContentPart[]): string {
@@ -301,6 +302,31 @@ export default function ChatPanel({
       const text = (preset ?? input).trim()
       if (streaming) return
       if (!text && attachImages.length === 0 && attachDocs.length === 0) return
+      // 纯换强调色指令：客户端直连，跳过 LLM（省 token + 即时生效）；拿不准则回落下方正常流程
+      const accentIntent = parseAccentIntent(text)
+      const accentApply = format === 'cards' ? onApplyAccent : onApplyArticleAccent
+      if (accentIntent && accentApply) {
+        if (!preset) setInput('')
+        setError(null)
+        setStreaming(true)
+        const userMsg: ChatMessage = { role: 'user', content: text }
+        setMessages([...messages, userMsg])
+        try {
+          await accentApply(accentIntent.color)
+          const kind = format === 'cards' ? '贴图' : '文章'
+          const reply = accentIntent.color
+            ? `已把${kind}强调色改为 ${accentIntent.color}，排版/导出/推送同步跟色。`
+            : `已恢复${kind}默认强调色。`
+          const all = [...messages, userMsg, { role: 'assistant', content: reply } as ChatMessage]
+          setMessages(all)
+          await persist(all)
+        } catch (err) {
+          setError(err instanceof Error ? err.message : String(err))
+        } finally {
+          setStreaming(false)
+        }
+        return
+      }
       if (!preset) setInput('')
       setError(null)
       setStreaming(true)
@@ -364,7 +390,7 @@ export default function ChatPanel({
         abortRef.current = null
       }
     },
-    [input, streaming, messages, skill, webOn, onToast, persist, resolveCard, buildContext, attachImages, attachDocs]
+    [input, streaming, messages, skill, webOn, onToast, persist, resolveCard, buildContext, attachImages, attachDocs, format, onApplyAccent, onApplyArticleAccent]
   )
 
   const abort = useCallback(() => abortRef.current?.(), [])
