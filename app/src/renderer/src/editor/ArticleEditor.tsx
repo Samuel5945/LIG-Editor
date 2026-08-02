@@ -1,5 +1,6 @@
 import {
   forwardRef,
+  useCallback,
   useEffect,
   useImperativeHandle,
   useRef,
@@ -35,6 +36,8 @@ export interface ArticleEditorHandle {
 interface ArticleEditorProps {
   /** md 唯一事实源（App 持有） */
   markdown: string
+  /** 工程名（project:saveAsset 存图用） */
+  project: string
   /** 工程目录绝对路径，用于解析图片相对路径 */
   projectDir: string
   /** 文章强调色（meta.accent）：排版装饰/加粗色跟随；缺省默认蓝 */
@@ -56,7 +59,7 @@ interface ArticleEditorProps {
  * - lastEmitted 防止 onChange → props.markdown 回流时循环 setContent
  */
 const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(function ArticleEditor(
-  { markdown, projectDir, accent, onChange, onAiModify, onAiReview, onFigAction, onEditFigureSource },
+  { markdown, project, projectDir, accent, onChange, onAiModify, onAiReview, onFigAction, onEditFigureSource },
   ref
 ): ReactElement {
   const lastEmitted = useRef(markdown)
@@ -187,6 +190,27 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
     }
   }, [editor])
 
+  // ---- 自由插入图片 ----
+  const fileInput = useRef<HTMLInputElement>(null)
+
+  const insertImage = useCallback(
+    async (file: File) => {
+      if (!editor || !file.type.startsWith('image/')) return
+      const buf = await file.arrayBuffer()
+      const b64 = btoa(new Uint8Array(buf).reduce((d, b) => d + String.fromCharCode(b), ''))
+      const ext = file.name.replace(/^.*\./, '').toLowerCase() || 'png'
+      const relPath = await window.api.invoke(
+        'project:saveAsset', project, `assets/import-${Date.now()}.${ext}`, b64
+      )
+      editor
+        .chain()
+        .focus()
+        .insertContent({ type: 'figureImage', attrs: { src: relPath, alt: file.name, caption: '', figureSource: '' } })
+        .run()
+    },
+    [editor, project]
+  )
+
   if (!editor) return <div className="p-6 text-sm text-slate-500">编辑器加载中…</div>
 
   return (
@@ -211,6 +235,26 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
         >
           ↪ 重做
         </button>
+        <div className="mx-1 h-4 w-px bg-slate-700" />
+        <button
+          type="button"
+          onClick={() => fileInput.current?.click()}
+          title="在光标处插入本地图片"
+          className="rounded px-2 py-0.5 text-slate-300 hover:bg-slate-700"
+        >
+          🖼 插入图片
+        </button>
+        <input
+          ref={fileInput}
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/gif"
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0]
+            if (f) void insertImage(f)
+            e.target.value = ''
+          }}
+        />
         <span className="ml-auto text-[10px] text-slate-500">Ctrl+Z 撤销 · Ctrl+Y 重做 · Ctrl+B 加粗</span>
       </div>
       <div className="min-h-0 flex-1 overflow-auto">
