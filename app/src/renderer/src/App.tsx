@@ -647,6 +647,7 @@ export default function App(): JSX.Element {
                   <ArticleEditor
                     key={current}
                     ref={editorRef}
+                    project={current}
                     markdown={article}
                     projectDir={paths ? `${paths.workspace}\\${current}` : ''}
                     accent={meta?.accent}
