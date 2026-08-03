@@ -61,6 +61,15 @@ function decryptKey(p: { apiKeyEnc?: string; apiKey?: string }): string {
   return p.apiKey ?? ''
 }
 
+/** 读取时归正 imageApi：apimart-images / agnes-images 原样保留；
+ * 历史迁移——Agnes 域名下早期存盘的 openai-images（其端点禁止顶层 response_format）归正为 agnes-images；
+ * 未知/缺省值按 baseUrl 域名回退 */
+function migrateImageApi(api: string | undefined, baseUrl: string): ProviderConfig['imageApi'] {
+  if (api === 'apimart-images' || api === 'agnes-images') return api
+  if (/agnes-ai\.(com|cn)/.test(baseUrl)) return 'agnes-images'
+  return 'openai-images'
+}
+
 export function getLlmSettings(): LlmSettings {
   const file = settingsFile()
   if (!existsSync(file)) {
@@ -78,12 +87,7 @@ export function getLlmSettings(): LlmSettings {
         apiKey: decryptKey(p),
         textModel: p.textModel,
         imageModel: p.imageModel,
-        // 迁移：Agnes 域名下早期存盘的 openai-images（其端点禁止顶层 response_format）与
-        // 已删除的 agnes-chat 选项，都归正为 agnes-images
-        imageApi:
-          p.imageApi === 'openai-images' && !/agnes-ai\.(com|cn)/.test(p.baseUrl)
-            ? 'openai-images'
-            : 'agnes-images'
+        imageApi: migrateImageApi(p.imageApi, p.baseUrl)
       })),
       textProviderId: disk.textProviderId,
       imageProviderId: disk.imageProviderId,
