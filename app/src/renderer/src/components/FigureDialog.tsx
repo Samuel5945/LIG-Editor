@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type ReactElement } from 'rea
 import { applyCutout, CUTOUT_ALGOS, type CutoutAlgo, type RawImage } from '@shared/cutout'
 import type { GalleryImage } from '@shared/markdown'
 import { splitFigDesc } from '@shared/markdown'
+import { imageFormatFor, type ImageFormatSpec } from '@shared/imageFormats'
 import type { FigPipeline, FigureInsert } from '../editor/FigSuggest'
 import { chatOnce } from '../copilot/llm'
 import { figureHtmlMessages, imagePromptMessages } from '../copilot/prompts'
@@ -101,8 +102,10 @@ function AiPane({
   const seed = splitFigDesc(request.desc)
   const [prompt, setPrompt] = useState(seed.prompt)
   const [caption, setCaption] = useState(seed.caption)
-  const [size, setSize] = useState('1K')
-  const [ratio, setRatio] = useState('4:3')
+  // 按当前图像供应商协议渲染尺寸/比例选项（Agnes 档位+比例 / APIMart 15 比例+清晰度 / OpenAI 像素）
+  const [spec, setSpec] = useState<ImageFormatSpec>(() => imageFormatFor(null))
+  const [size, setSize] = useState(spec.defaultSize)
+  const [ratio, setRatio] = useState(spec.defaultRatio)
   const [b64, setB64] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [polishing, setPolishing] = useState(false)
@@ -110,6 +113,23 @@ function AiPane({
   const abortRef = useRef<(() => void) | null>(null)
 
   useEffect(() => () => abortRef.current?.(), [])
+
+  // 读图像供应商协议 → 切换格式规格（读失败保持 Agnes 默认格式）
+  useEffect(() => {
+    window.api
+      .invoke('settings:getLlm')
+      .then((s) => {
+        const p = s.providers.find((x) => x.id === s.imageProviderId)
+        setSpec(imageFormatFor(p?.imageApi))
+      })
+      .catch(() => {})
+  }, [])
+
+  // 规格变化后夹取非法值：当前 size/ratio 不在新规格选项里 → 用该规格默认值
+  useEffect(() => {
+    if (!spec.sizes.some((o) => o.value === size)) setSize(spec.defaultSize)
+    if (spec.ratios.length > 0 && !spec.ratios.some((o) => o.value === ratio)) setRatio(spec.defaultRatio)
+  }, [spec, size, ratio])
 
   /** 内置 LLM 回读正文定位语境，把简短描述扩写成详细无歧义的生图提示词，流式写回描述框 */
   const polish = useCallback(() => {
@@ -159,21 +179,26 @@ function AiPane({
         placeholder="想要一张什么样的配图…可先写一句话再点「AI 优化描述」扩写成详细提示词"
       />
       <div className="flex flex-wrap items-center gap-2">
-        <label className="text-xs text-slate-400">尺寸</label>
+        <label className="text-xs text-slate-400">{spec.sizeLabel}</label>
         <select value={size} onChange={(e) => setSize(e.target.value)} className={selectCls}>
-          <option value="1K">1K</option>
-          <option value="2K">2K</option>
-          <option value="3K">3K</option>
-          <option value="4K">4K</option>
-        </select>
-        <label className="text-xs text-slate-400">比例</label>
-        <select value={ratio} onChange={(e) => setRatio(e.target.value)} className={selectCls}>
-          {['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3', '21:9'].map((r) => (
-            <option key={r} value={r}>
-              {r}
+          {spec.sizes.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
             </option>
           ))}
         </select>
+        {spec.ratios.length > 0 && (
+          <>
+            <label className="text-xs text-slate-400">比例</label>
+            <select value={ratio} onChange={(e) => setRatio(e.target.value)} className={selectCls}>
+              {spec.ratios.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </>
+        )}
         <button
           onClick={polish}
           disabled={polishing || busy || !prompt.trim()}
@@ -183,9 +208,10 @@ function AiPane({
           {polishing ? '优化中…' : '🪄 AI 优化描述'}
         </button>
         <button onClick={generate} disabled={busy || polishing || !prompt.trim()} className={btnPrimary}>
-          {busy ? '生成中…（约 10-60 秒）' : b64 ? '🔄 重新生成' : '✨ 生成图片'}
+          {busy ? `生成中…（${spec.waitHint}）` : b64 ? '🔄 重新生成' : '✨ 生成图片'}
         </button>
       </div>
+      <p className="text-[11px] text-slate-500">{spec.hint}</p>
       {error && <div className="rounded bg-red-900/30 px-3 py-2 text-xs text-red-400">{error}</div>}
       {b64 && (
         <>
