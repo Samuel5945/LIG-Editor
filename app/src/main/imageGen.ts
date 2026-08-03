@@ -8,8 +8,9 @@ import { getImageProvider } from './settingsStore'
  * - openai-images：标准 POST /images/generations，response_format 顶层，取 b64_json 或 url
  * - agnes-images：Agnes 变体（官方文档：size 档位+ratio，return_base64 代替顶层 response_format）
  * - apimart-images：APIMart 异步任务制（gpt-image-2 / nano-banana）——POST 提交拿 task_id，
- *   轮询 GET /tasks/{id} 至 completed，取 result.images[0].url[0] 下载转 base64；
- *   size 传比例（16:9 等）、resolution 传清晰度档位（1k/2k/4k），不支持 response_format
+ *   轮询 GET /v1/tasks/{id} 至终态，取 result.images[0].url[0] 下载转 base64；
+ *   size 传比例（16:9 等）、resolution 传清晰度档位（1k/2k/4k，nano-banana/imagen-4 不带
+ *   resolution、seedream-5.0-pro 仅 1K/2K），不支持 response_format
  */
 
 export async function generateImage(prompt: string, opts: ImageGenOptions = {}): Promise<string> {
@@ -66,7 +67,18 @@ async function generateViaAgnesImages(provider: ProviderConfig, prompt: string, 
   return extractImagesResult((await resp.json()) as ImagesResponse)
 }
 
-// ---- APIMart 异步任务制（gpt-image-2 / nano-banana）----
+// ---- APIMart 异步任务制（gpt-image-2 / nano-banana 等）----
+// 契约对齐 Nomi 已验证实现（tests/transport-spike/apimart.mjs 真 key 端到端核验）：
+//   创建  POST {base}/v1/images/generations   body { model, prompt, size?, resolution?, image_urls? }
+//         → { code:200, data:[{ status:"submitted", task_id }] }（task_id 在 data[0].task_id）
+//   轮询  GET  {base}/v1/tasks/{task_id}（task_id 走路径参数，非 query）
+//         → { code, data:{ status, result:{ images:[{ url:[...] }] }, error:{ message } } }
+//   status 动词：submitted|pending|processing|completed|succeeded|failed|cancelled|error
+// 模型差异（apimartImages.js 对账）：
+//   - nano-banana（gemini-2.5-flash-image-preview）：仅 size，resolution 固定 1K → 省略走默认
+//   - imagen-4：仅 size，无 resolution 字段
+//   - seedream-5.0-pro：resolution 仅 1K/2K（3K/4K 会 400）
+//   - gpt-image-2 / seedream-4.5 / qwen-image / z-image-turbo：size + resolution（1k/2k/4k）
 
 interface ApimartSubmitResponse {
   code?: number
@@ -77,16 +89,28 @@ interface ApimartSubmitResponse {
 interface ApimartTaskResponse {
   code?: number
   data?: {
-    status?: string // submitted | processing | completed | failed
+    status?: string // submitted | pending | processing | completed | failed | cancelled | error
     error?: { message?: string }
     result?: { images?: { url?: string[] }[] }
   }
   error?: { code?: number; message?: string }
 }
 
+/** 不带 resolution 字段的模型（nano-banana 固定 1K；imagen-4 无此参数）——兼容别名、大小写不敏感 */
+function apimartNoResolution(model: string): boolean {
+  const m = model.toLowerCase()
+  return m.includes('nano-banana') || m.includes('gemini-2.5-flash-image') || m.includes('imagen')
+}
+/** resolution 仅支持 1K/2K 的模型（seedream-5.0-pro：3K/4K 会 400） */
+function apimartMax2k(model: string): boolean {
+  return model.toLowerCase().includes('seedream-5')
+}
+
 /** UI 的档位（1K/2K/3K/4K）→ APIMart resolution；APIMart 无 3k 档，3K 就近取 2k */
-function apimartResolution(size?: string): string {
-  switch ((size ?? '1K').toUpperCase()) {
+function apimartResolution(model: string, size?: string): string {
+  const tier = (size ?? '1K').toUpperCase()
+  if (apimartMax2k(model) && tier === '4K') return '2k'
+  switch (tier) {
     case '2K':
       return '2k'
     case '4K':
@@ -102,19 +126,26 @@ function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms))
 }
 
+/** APIMart 基址归一：裸域（api.apimart.ai）自动补 /v1；已带 /v1 的不重复拼接 */
+function apimartBase(baseUrl: string): string {
+  const base = baseUrl.replace(/\/+$/, '')
+  return /\/v1$/.test(base) ? base : `${base}/v1`
+}
+
 async function generateViaApimartImages(provider: ProviderConfig, prompt: string, opts: ImageGenOptions): Promise<string> {
-  const base = provider.baseUrl.replace(/\/+$/, '')
-  // 提交生图任务：size 传比例（16:9 等），resolution 传清晰度档位；不支持 response_format
+  const base = apimartBase(provider.baseUrl)
+  const model = provider.imageModel
+  // 提交生图任务：size 传比例（16:9 等），resolution 传清晰度档位（仅支持的模型）；不支持 response_format
+  const body: Record<string, string> = {
+    model,
+    prompt,
+    size: opts.ratio ?? '1:1'
+  }
+  if (!apimartNoResolution(model)) body.resolution = apimartResolution(model, opts.size)
   const submitResp = await net.fetch(`${base}/images/generations`, {
     method: 'POST',
     headers: headers(provider.apiKey),
-    body: JSON.stringify({
-      model: provider.imageModel,
-      prompt,
-      n: 1,
-      size: opts.ratio ?? '1:1',
-      resolution: apimartResolution(opts.size)
-    }),
+    body: JSON.stringify(body),
     signal: AbortSignal.timeout(60_000)
   })
   const submit = (await submitResp.json()) as ApimartSubmitResponse
@@ -135,15 +166,16 @@ async function generateViaApimartImages(provider: ProviderConfig, prompt: string
     })
     const task = (await taskResp.json()) as ApimartTaskResponse
     const status = task.data?.status
-    if (status === 'completed') {
+    // 终态归一：completed/succeeded/success 取图；failed/cancelled/error 报错
+    if (status === 'completed' || status === 'succeeded' || status === 'success') {
       const imgUrl = task.data?.result?.images?.[0]?.url?.[0]
       if (!imgUrl) throw new Error('生图完成但响应中没有图片 URL')
       return downloadToBase64(imgUrl)
     }
-    if (status === 'failed') {
-      throw new Error(`生图失败：${task.data?.error?.message ?? '任务失败'}`)
+    if (status === 'failed' || status === 'cancelled' || status === 'error') {
+      throw new Error(`生图失败：${task.data?.error?.message ?? `任务状态 ${status}`}`)
     }
-    // submitted / processing → 继续轮询
+    // submitted / pending / processing → 继续轮询
   }
   throw new Error('生图超时（300 秒未完成），可到 APIMart 后台按任务 ID 查看')
 }
