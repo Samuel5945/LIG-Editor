@@ -77,11 +77,15 @@ export interface ProviderConfig {
   imageApi: 'openai-images' | 'agnes-images' | 'apimart-images'
 }
 
-/** AI 生图可选参数（档位式尺寸 + 宽高比；标准 OpenAI 只用 size 精确尺寸） */
+/** AI 生图可选参数。size/ratio 的语义随图像协议不同（UI 选项由 shared/imageFormats.ts 统一定义）：
+ * - openai-images：只用 size 的精确像素尺寸（1024x1024 等），忽略 ratio
+ * - agnes-images：size=尺寸档位 1K/2K/3K/4K，ratio=宽高比
+ * - apimart-images：ratio=官方比例（1:1/16:9/21:9 等，作 size 下发），size=清晰度档位映射 resolution
+ *   （APIMart 仅 1k/2k/4k，无 3K；nano-banana/imagen 无 resolution 字段） */
 export interface ImageGenOptions {
-  /** Agnes：1K/2K/3K/4K；APIMart：分辨率档位 1k/2k/4k；OpenAI：1024x1024 等精确尺寸 */
+  /** openai：1024x1024 等；agnes：1K/2K/3K/4K；apimart：清晰度档位（映射 1k/2k/4k） */
   size?: string
-  /** Agnes / APIMart 专用：1:1 / 4:3 / 16:9 / 3:4 / 9:16 / 2:3 / 3:2 / 21:9（APIMart 作 size 比例） */
+  /** agnes / apimart 专用宽高比；apimart 作 size 比例字段下发 */
   ratio?: string
 }
 
