@@ -119,7 +119,7 @@ function AiPane({
     window.api
       .invoke('settings:getLlm')
       .then((s) => {
-        const p = s.providers.find((x) => x.id === s.imageProviderId)
+        const p = s.providers.find((x) => x.id === s.imageProviderId) ?? s.providers[0]
         setSpec(imageFormatFor(p?.imageApi))
       })
       .catch(() => {})
