@@ -1,6 +1,6 @@
 /**
- * 供应商精选目录（纯展示层）：已知供应商官网跳转链接 + 置顶供应商标识
- * 只影响 UI 展示顺序与外链，不干预默认模型与任何调用逻辑
+ * 供应商精选目录：内置供应商种子（基元律动）+ 置顶标识 + 官网跳转链接
+ * 内置种子只做一次性展示预置；默认文本/生图模型与任何调用逻辑不受影响
  */
 
 export interface ProviderSiteLink {
@@ -8,7 +8,16 @@ export interface ProviderSiteLink {
   url: string
 }
 
-/** 置顶供应商：基元律动（TokenRhythm）——仅显示置顶，不参与任何默认逻辑 */
+/** 内置供应商种子：基元律动（TokenRhythm）。模型字段留空，用户注册填 Key 后自选模型 */
+export const RHYTHM_PROVIDER_SEED = {
+  name: '基元律动',
+  baseUrl: 'https://tokenrhythm.studio/v1',
+  textModel: '',
+  imageModel: '',
+  imageApi: 'openai-images' as const
+}
+
+/** 置顶供应商：基元律动（TokenRhythm）——默认置顶展示，不参与任何默认模型逻辑 */
 export function isRhythmProvider(p: { name: string; baseUrl: string }): boolean {
   return p.baseUrl.includes('tokenrhythm.studio') || p.name.includes('基元律动')
 }

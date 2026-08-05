@@ -3,6 +3,7 @@ import { existsSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { randomUUID } from 'crypto'
 import type { LlmSettings, ProviderConfig, SearchSettings } from '@shared/types'
+import { RHYTHM_PROVIDER_SEED, isRhythmProvider } from '@shared/providerSites'
 import { getAppPaths } from './paths'
 
 /**
@@ -25,6 +26,8 @@ interface DiskSettings {
   pinnedIds?: string[]
   /** 被手动取消置顶的默认置顶供应商 id（展示用） */
   unpinnedIds?: string[]
+  /** 一次性内置标记：已预置基元律动（用户删除后不复活） */
+  rhythmSeeded?: boolean
   search?: { provider: SearchSettings['provider']; apiKeyEnc?: string; apiKey?: string }
 }
 
@@ -34,8 +37,9 @@ function settingsFile(): string {
   return join(getAppPaths().settings, 'llm.json')
 }
 
-/** 首次运行预置 Agnes AI（免费额度，OpenAI 兼容；国内版域名免代理直连） */
+/** 首次运行预置：内置基元律动（展示置顶）+ Agnes AI（默认文本/生图供应商，免费额度免代理直连） */
 function presetSettings(): LlmSettings {
+  const rhythm: ProviderConfig = { id: randomUUID(), apiKey: '', ...RHYTHM_PROVIDER_SEED }
   const agnes: ProviderConfig = {
     id: randomUUID(),
     name: 'Agnes AI',
@@ -45,7 +49,22 @@ function presetSettings(): LlmSettings {
     imageModel: 'agnes-image-2.1-flash',
     imageApi: 'agnes-images'
   }
-  return { providers: [agnes], textProviderId: agnes.id, imageProviderId: agnes.id, search: { ...DEFAULT_SEARCH } }
+  return { providers: [rhythm, agnes], textProviderId: agnes.id, imageProviderId: agnes.id, search: { ...DEFAULT_SEARCH } }
+}
+
+/** 一次性内置种子：存量配置没有基元律动时补入列表首位（纯展示预置，不动已指定的默认模型）。
+ * 标记位保证只执行一次——用户手动删除后不会复活；
+ * 默认供应商未指定（null 回退 providers[0]）时改指原首项，避免回退落到空 Key 的内置项 */
+function seedRhythmOnce(disk: DiskSettings): boolean {
+  if (disk.rhythmSeeded) return false
+  disk.rhythmSeeded = true
+  if (!disk.providers.some((p) => isRhythmProvider(p))) {
+    const oldFirstId = disk.providers[0]?.id ?? null
+    disk.providers = [{ id: randomUUID(), apiKeyEnc: '', ...RHYTHM_PROVIDER_SEED }, ...disk.providers]
+    if (!disk.textProviderId && oldFirstId) disk.textProviderId = oldFirstId
+    if (!disk.imageProviderId && oldFirstId) disk.imageProviderId = oldFirstId
+  }
+  return true
 }
 
 function encryptKey(plain: string): Pick<DiskProvider, 'apiKeyEnc' | 'apiKey'> {
@@ -85,6 +104,8 @@ export function getLlmSettings(): LlmSettings {
   }
   try {
     const disk = JSON.parse(readFileSync(file, 'utf-8')) as DiskSettings
+    // 一次性内置基元律动（落盘保留 apiKeyEnc 原样，不做解密/重加密往返）
+    if (seedRhythmOnce(disk)) writeFileSync(file, JSON.stringify(disk, null, 2))
     return {
       providers: disk.providers.map((p) => ({
         id: p.id,
@@ -110,6 +131,13 @@ export function getLlmSettings(): LlmSettings {
 }
 
 export function setLlmSettings(settings: LlmSettings): void {
+  // 承继既有内置标记：用户删掉基元律动后保存，不能被读取端迁移重新加回
+  let rhythmSeeded = false
+  try {
+    rhythmSeeded = (JSON.parse(readFileSync(settingsFile(), 'utf-8')) as DiskSettings).rhythmSeeded ?? false
+  } catch {
+    rhythmSeeded = false
+  }
   const disk: DiskSettings = {
     providers: settings.providers.map((p) => ({
       id: p.id,
@@ -125,6 +153,7 @@ export function setLlmSettings(settings: LlmSettings): void {
     providerOrder: settings.providerOrder,
     pinnedIds: settings.pinnedIds,
     unpinnedIds: settings.unpinnedIds,
+    rhythmSeeded,
     search: { provider: settings.search?.provider ?? 'none', ...encryptKey(settings.search?.apiKey ?? '') }
   }
   writeFileSync(settingsFile(), JSON.stringify(disk, null, 2))
