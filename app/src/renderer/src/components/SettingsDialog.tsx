@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type ReactElement } from 'react'
 import type { LlmSettings, LlmTestResult, ModelInfo, ProviderConfig } from '@shared/types'
 import { imageFormatFor } from '@shared/imageFormats'
+import { isRhythmProvider, providerSiteLinks } from '@shared/providerSites'
 
 interface SettingsDialogProps {
   onClose: () => void
@@ -28,11 +29,51 @@ export default function SettingsDialog({ onClose }: SettingsDialogProps): ReactE
   useEffect(() => {
     window.api.invoke('settings:getLlm').then((s) => {
       setSettings(s)
-      setSelectedId(s.providers[0]?.id ?? null)
+      // 初始选中跟随展示顺序（置顶供应商优先）
+      const first = [...s.providers].sort(
+        (a, b) => Number(isRhythmProvider(a)) - Number(isRhythmProvider(b))
+      )[0]
+      setSelectedId(first?.id ?? null)
     })
   }, [])
 
   const provider = settings?.providers.find((p) => p.id === selectedId) ?? null
+
+  /** 展示顺序：基元律动固定置顶（仅展示，不影响默认模型），其余按用户拖拽保存的顺序 */
+  const displayProviders = settings
+    ? [...settings.providers].sort((a, b) => {
+        const pa = isRhythmProvider(a) ? 0 : 1
+        const pb = isRhythmProvider(b) ? 0 : 1
+        if (pa !== pb) return pa - pb
+        const order = settings.providerOrder ?? []
+        const ia = order.indexOf(a.id)
+        const ib = order.indexOf(b.id)
+        return (ia === -1 ? Number.MAX_SAFE_INTEGER : ia) - (ib === -1 ? Number.MAX_SAFE_INTEGER : ib)
+      })
+    : []
+
+  const [dragId, setDragId] = useState<string | null>(null)
+  const [overId, setOverId] = useState<string | null>(null)
+
+  /** 拖拽落位后更新展示顺序；置顶项恒在首位，只对其余条目重排 */
+  const onDropProvider = useCallback(
+    (targetId: string) => {
+      if (!settings || !dragId || dragId === targetId) return
+      const pinned = displayProviders.filter((p) => isRhythmProvider(p)).map((p) => p.id)
+      const rest = displayProviders.filter((p) => !isRhythmProvider(p)).map((p) => p.id)
+      const from = rest.indexOf(dragId)
+      if (from === -1) return
+      rest.splice(from, 1)
+      let to = rest.indexOf(targetId)
+      if (to === -1) to = 0 // 落在置顶行上 → 移到第一位
+      rest.splice(to, 0, dragId)
+      setSettings({ ...settings, providerOrder: [...pinned, ...rest] })
+    },
+    [settings, dragId, displayProviders]
+  )
+
+  /** 当前选中供应商的官网跳转（仅已知供应商，系统浏览器打开） */
+  const siteLinks = providerSiteLinks(provider)
 
   /** 按 id 打补丁（供应商页与默认模型页共用；函数式更新避免两页互相覆盖） */
   const patchProviderById = useCallback((id: string | null, patch: Partial<ProviderConfig>) => {
@@ -144,28 +185,54 @@ export default function SettingsDialog({ onClose }: SettingsDialogProps): ReactE
             <aside className="flex w-44 shrink-0 flex-col border-r border-panel-3 bg-panel p-2">
               <p className="mb-2 px-1 text-xs font-bold">模型供应商</p>
               <div className="flex-1 overflow-auto">
-                {settings.providers.map((p) => (
-                  <button
-                    key={p.id}
-                    onClick={() => {
-                      setSelectedId(p.id)
-                      setTestResult(null)
-                      setModels([])
-                      setModelsError(null)
-                    }}
-                    className={`mb-1 flex w-full items-center rounded px-2 py-1.5 text-left text-xs ${
-                      p.id === selectedId ? 'bg-panel-3 text-ink' : 'text-ink-dim hover:bg-panel-3'
-                    }`}
-                  >
-                    <span className="truncate">{p.name}</span>
-                    {settings.textProviderId === p.id && (
-                      <span className="ml-1 shrink-0 rounded bg-panel-3 px-1 text-[10px] text-accent">文本</span>
-                    )}
-                    {settings.imageProviderId === p.id && (
-                      <span className="ml-1 shrink-0 rounded bg-panel-3 px-1 text-[10px] text-accent">生图</span>
-                    )}
-                  </button>
-                ))}
+                {displayProviders.map((p) => {
+                  const pinned = isRhythmProvider(p)
+                  return (
+                    <button
+                      key={p.id}
+                      onClick={() => {
+                        setSelectedId(p.id)
+                        setTestResult(null)
+                        setModels([])
+                        setModelsError(null)
+                      }}
+                      draggable={!pinned}
+                      onDragStart={() => setDragId(p.id)}
+                      onDragOver={(e) => {
+                        e.preventDefault()
+                        setOverId(p.id)
+                      }}
+                      onDragLeave={() => setOverId((v) => (v === p.id ? null : v))}
+                      onDrop={(e) => {
+                        e.preventDefault()
+                        onDropProvider(p.id)
+                        setDragId(null)
+                        setOverId(null)
+                      }}
+                      onDragEnd={() => {
+                        setDragId(null)
+                        setOverId(null)
+                      }}
+                      title={pinned ? '展示置顶（不影响默认模型）' : '拖动调整显示顺序'}
+                      className={`mb-1 flex w-full items-center rounded px-2 py-1.5 text-left text-xs ${
+                        p.id === selectedId ? 'bg-panel-3 text-ink' : 'text-ink-dim hover:bg-panel-3'
+                      } ${pinned ? '' : 'cursor-grab'} ${
+                        dragId && overId === p.id && dragId !== p.id ? 'ring-1 ring-accent' : ''
+                      } ${dragId === p.id ? 'opacity-50' : ''}`}
+                    >
+                      <span className="truncate">{p.name}</span>
+                      {pinned && (
+                        <span className="ml-1 shrink-0 rounded bg-panel-3 px-1 text-[10px] text-accent">置顶</span>
+                      )}
+                      {settings.textProviderId === p.id && (
+                        <span className="ml-1 shrink-0 rounded bg-panel-3 px-1 text-[10px] text-accent">文本</span>
+                      )}
+                      {settings.imageProviderId === p.id && (
+                        <span className="ml-1 shrink-0 rounded bg-panel-3 px-1 text-[10px] text-accent">生图</span>
+                      )}
+                    </button>
+                  )
+                })}
               </div>
               <button
                 onClick={addProvider}
@@ -185,6 +252,20 @@ export default function SettingsDialog({ onClose }: SettingsDialogProps): ReactE
                     value={provider.name}
                     onChange={(e) => patchProviderById(provider.id, { name: e.target.value })}
                   />
+                  {siteLinks.length > 0 && (
+                    <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                      <span className="text-[11px] text-ink-dim">官网：</span>
+                      {siteLinks.map((l) => (
+                        <button
+                          key={l.url}
+                          onClick={() => window.open(l.url)}
+                          className="text-[11px] text-accent hover:underline"
+                        >
+                          {l.label} ↗
+                        </button>
+                      ))}
+                    </div>
+                  )}
 
                   <label className={label}>Base URL</label>
                   <input
@@ -325,7 +406,7 @@ export default function SettingsDialog({ onClose }: SettingsDialogProps): ReactE
                   onChange={(e) => setSettings({ ...settings, textProviderId: e.target.value || null })}
                 >
                   <option value="">未指定（默认用列表第一个）</option>
-                  {settings.providers.map((p) => (
+                  {displayProviders.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.name}
                     </option>
@@ -355,7 +436,7 @@ export default function SettingsDialog({ onClose }: SettingsDialogProps): ReactE
                   onChange={(e) => setSettings({ ...settings, imageProviderId: e.target.value || null })}
                 >
                   <option value="">未指定（默认用列表第一个）</option>
-                  {settings.providers.map((p) => (
+                  {displayProviders.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.name}
                     </option>

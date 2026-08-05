@@ -19,6 +19,8 @@ interface DiskSettings {
   providers: DiskProvider[]
   textProviderId: string | null
   imageProviderId: string | null
+  /** 供应商展示顺序（仅设置界面排序用，不影响默认模型） */
+  providerOrder?: string[]
   search?: { provider: SearchSettings['provider']; apiKeyEnc?: string; apiKey?: string }
 }
 
@@ -91,6 +93,7 @@ export function getLlmSettings(): LlmSettings {
       })),
       textProviderId: disk.textProviderId,
       imageProviderId: disk.imageProviderId,
+      providerOrder: disk.providerOrder,
       search: disk.search
         ? { provider: disk.search.provider, apiKey: decryptKey(disk.search) }
         : { ...DEFAULT_SEARCH }
@@ -113,6 +116,7 @@ export function setLlmSettings(settings: LlmSettings): void {
     })),
     textProviderId: settings.textProviderId,
     imageProviderId: settings.imageProviderId,
+    providerOrder: settings.providerOrder,
     search: { provider: settings.search?.provider ?? 'none', ...encryptKey(settings.search?.apiKey ?? '') }
   }
   writeFileSync(settingsFile(), JSON.stringify(disk, null, 2))

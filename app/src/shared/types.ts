@@ -94,6 +94,8 @@ export interface LlmSettings {
   /** 文本/图像默认供应商分开指定 */
   textProviderId: string | null
   imageProviderId: string | null
+  /** 供应商展示顺序（仅设置界面排序用，不影响默认模型与任何调用） */
+  providerOrder?: string[]
   /** 联网搜索配置：默认免密内置，可选搜索 API 提升时效与质量 */
   search: SearchSettings
 }
