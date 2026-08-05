@@ -205,6 +205,8 @@ export default function IntegrationDialog({
                   </p>
                 )}
               </div>
+
+              <p className="pt-2 text-center text-[11px] text-slate-400">欢迎关注公众号@LIG人生如戏 获取更新</p>
             </div>
           ) : tab === 'mcp' ? (
             card ? (
