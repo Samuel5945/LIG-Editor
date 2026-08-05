@@ -228,6 +228,27 @@ score 为 1-10 分（可一位小数），按分数从高到低排列。围栏�
   ]
 }
 
+/** 封面：通读正文提取关键信息 → 横版封面生图提示词（纯文本，用户可在界面二次编辑后再生图） */
+export function coverPromptMessages(article: string, skill: string | null): ChatMessage[] {
+  return [
+    { role: 'system', content: systemPrompt(skill) },
+    {
+      role: 'user',
+      content: `请通读下面的公众号文章，提取主题与最有画面感的关键信息（核心场景、主体对象、情绪基调），为它写一段公众号横版封面插画的生图提示词。
+
+<文章>
+${article.slice(0, 6000)}
+</文章>
+
+要求：
+- 提示词 80-150 字一段话：写清主体、场景、构图视角、艺术风格、色彩搭配，紧扣文章关键信息，不要只复述标题
+- 主体居中、四周留出裁切余量（封面会被裁成 2.35:1 头图与 1:1 方图两种规格）
+- 色彩现代明快，画面中不出现任何文字、字母、字幕或水印
+- 只输出提示词本身一段话，不要解释、不要引号、不要围栏`
+    }
+  ]
+}
+
 /** 排版优化：不改内容，只整理排版（段落/小标题/重点加粗/分隔） */
 export function polishLayoutMessages(article: string, skill: string | null): ChatMessage[] {
   return [
