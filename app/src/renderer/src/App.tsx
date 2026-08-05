@@ -431,7 +431,7 @@ export default function App(): JSX.Element {
       {/* 顶栏 */}
       <header className="flex h-11 shrink-0 items-center gap-3 border-b border-panel-3 bg-panel-2 px-4">
         <span className="text-sm font-bold">图文编辑器</span>
-        <span className="text-xs text-ink-dim">本地优先的公众号图文创作工作台</span>
+        <span className="text-xs text-ink-dim">@LIG人生如戏的图文创作平台公测版</span>
         <div className="ml-auto flex items-center gap-2 text-xs text-ink-dim">
           <button onClick={() => setShowSettings(true)} className="rounded px-2 py-1 hover:bg-panel-3">
             模型接入
