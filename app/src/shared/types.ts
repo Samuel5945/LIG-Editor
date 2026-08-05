@@ -96,6 +96,8 @@ export interface LlmSettings {
   imageProviderId: string | null
   /** 供应商展示顺序（仅设置界面排序用，不影响默认模型与任何调用） */
   providerOrder?: string[]
+  /** 手动置顶的供应商 id（展示用；基元律动默认恒置顶，无需入列） */
+  pinnedIds?: string[]
   /** 联网搜索配置：默认免密内置，可选搜索 API 提升时效与质量 */
   search: SearchSettings
 }

@@ -39,12 +39,17 @@ export default function SettingsDialog({ onClose }: SettingsDialogProps): ReactE
 
   const provider = settings?.providers.find((p) => p.id === selectedId) ?? null
 
-  /** 展示顺序：基元律动固定置顶（仅展示，不影响默认模型），其余按用户拖拽保存的顺序 */
+  /** 置顶集合：基元律动默认恒置顶；其余供应商可手动置顶（均为纯展示，不影响默认模型） */
+  const pinnedSet = new Set(settings?.pinnedIds ?? [])
+  const isPinned = (p: { id: string; name: string; baseUrl: string }) =>
+    isRhythmProvider(p) || pinnedSet.has(p.id)
+
+  /** 展示顺序：基元律动恒首位 → 手动置顶 → 未置顶，各组内按用户拖拽保存的顺序 */
   const displayProviders = settings
     ? [...settings.providers].sort((a, b) => {
-        const pa = isRhythmProvider(a) ? 0 : 1
-        const pb = isRhythmProvider(b) ? 0 : 1
-        if (pa !== pb) return pa - pb
+        const ra = isRhythmProvider(a) ? 0 : pinnedSet.has(a.id) ? 1 : 2
+        const rb = isRhythmProvider(b) ? 0 : pinnedSet.has(b.id) ? 1 : 2
+        if (ra !== rb) return ra - rb
         const order = settings.providerOrder ?? []
         const ia = order.indexOf(a.id)
         const ib = order.indexOf(b.id)
@@ -55,21 +60,47 @@ export default function SettingsDialog({ onClose }: SettingsDialogProps): ReactE
   const [dragId, setDragId] = useState<string | null>(null)
   const [overId, setOverId] = useState<string | null>(null)
 
-  /** 拖拽落位后更新展示顺序；置顶项恒在首位，只对其余条目重排 */
+  /** 拖拽落位：重排展示顺序；落在置顶行上 → 该项置顶，落在普通行上 → 取消置顶（基元律动恒置顶） */
   const onDropProvider = useCallback(
     (targetId: string) => {
       if (!settings || !dragId || dragId === targetId) return
-      const pinned = displayProviders.filter((p) => isRhythmProvider(p)).map((p) => p.id)
-      const rest = displayProviders.filter((p) => !isRhythmProvider(p)).map((p) => p.id)
-      const from = rest.indexOf(dragId)
-      if (from === -1) return
-      rest.splice(from, 1)
-      let to = rest.indexOf(targetId)
-      if (to === -1) to = 0 // 落在置顶行上 → 移到第一位
-      rest.splice(to, 0, dragId)
-      setSettings({ ...settings, providerOrder: [...pinned, ...rest] })
+      const display = displayProviders.map((p) => p.id)
+      const target = settings.providers.find((p) => p.id === targetId)
+      const dragged = settings.providers.find((p) => p.id === dragId)
+      if (!display.includes(dragId) || !target || !dragged) return
+      const next = display.filter((id) => id !== dragId)
+      next.splice(next.indexOf(targetId), 0, dragId)
+      const nextPinned = new Set(settings.pinnedIds ?? [])
+      if (isPinned(target) && !isRhythmProvider(dragged)) nextPinned.add(dragId)
+      if (!isPinned(target)) nextPinned.delete(dragId)
+      setSettings({ ...settings, providerOrder: next, pinnedIds: [...nextPinned] })
     },
-    [settings, dragId, displayProviders]
+    [settings, dragId, displayProviders, isPinned]
+  )
+
+  /** 手动置顶 / 取消置顶（基元律动不可取消）；置顶时挪到置顶区末尾 */
+  const togglePin = useCallback(
+    (id: string) => {
+      if (!settings) return
+      const p = settings.providers.find((x) => x.id === id)
+      if (!p || isRhythmProvider(p)) return
+      const cur = new Set(settings.pinnedIds ?? [])
+      if (cur.has(id)) {
+        cur.delete(id)
+        setSettings({ ...settings, pinnedIds: [...cur] })
+        return
+      }
+      const display = displayProviders.map((x) => x.id).filter((x) => x !== id)
+      let insertAt = display.findIndex((x) => {
+        const q = settings.providers.find((pp) => pp.id === x)
+        return !!q && !isRhythmProvider(q) && !cur.has(x)
+      })
+      if (insertAt === -1) insertAt = display.length
+      display.splice(insertAt, 0, id)
+      cur.add(id)
+      setSettings({ ...settings, providerOrder: display, pinnedIds: [...cur] })
+    },
+    [settings, displayProviders]
   )
 
   /** 当前选中供应商的官网跳转（仅已知供应商，系统浏览器打开） */
@@ -106,7 +137,9 @@ export default function SettingsDialog({ onClose }: SettingsDialogProps): ReactE
       ...settings,
       providers: rest,
       textProviderId: settings.textProviderId === selectedId ? rest[0].id : settings.textProviderId,
-      imageProviderId: settings.imageProviderId === selectedId ? rest[0].id : settings.imageProviderId
+      imageProviderId: settings.imageProviderId === selectedId ? rest[0].id : settings.imageProviderId,
+      providerOrder: settings.providerOrder?.filter((id) => id !== selectedId),
+      pinnedIds: settings.pinnedIds?.filter((id) => id !== selectedId)
     })
     setSelectedId(rest[0].id)
   }, [settings, selectedId])
@@ -185,52 +218,71 @@ export default function SettingsDialog({ onClose }: SettingsDialogProps): ReactE
             <aside className="flex w-44 shrink-0 flex-col border-r border-panel-3 bg-panel p-2">
               <p className="mb-2 px-1 text-xs font-bold">模型供应商</p>
               <div className="flex-1 overflow-auto">
-                {displayProviders.map((p) => {
-                  const pinned = isRhythmProvider(p)
+                {displayProviders.map((p, i) => {
+                  const pinned = isPinned(p)
+                  const rhythm = isRhythmProvider(p)
+                  const showDivider = i > 0 && !pinned && isPinned(displayProviders[i - 1])
                   return (
-                    <button
-                      key={p.id}
-                      onClick={() => {
-                        setSelectedId(p.id)
-                        setTestResult(null)
-                        setModels([])
-                        setModelsError(null)
-                      }}
-                      draggable={!pinned}
-                      onDragStart={() => setDragId(p.id)}
-                      onDragOver={(e) => {
-                        e.preventDefault()
-                        setOverId(p.id)
-                      }}
-                      onDragLeave={() => setOverId((v) => (v === p.id ? null : v))}
-                      onDrop={(e) => {
-                        e.preventDefault()
-                        onDropProvider(p.id)
-                        setDragId(null)
-                        setOverId(null)
-                      }}
-                      onDragEnd={() => {
-                        setDragId(null)
-                        setOverId(null)
-                      }}
-                      title={pinned ? '展示置顶（不影响默认模型）' : '拖动调整显示顺序'}
-                      className={`mb-1 flex w-full items-center rounded px-2 py-1.5 text-left text-xs ${
-                        p.id === selectedId ? 'bg-panel-3 text-ink' : 'text-ink-dim hover:bg-panel-3'
-                      } ${pinned ? '' : 'cursor-grab'} ${
-                        dragId && overId === p.id && dragId !== p.id ? 'ring-1 ring-accent' : ''
-                      } ${dragId === p.id ? 'opacity-50' : ''}`}
-                    >
-                      <span className="truncate">{p.name}</span>
-                      {pinned && (
-                        <span className="ml-1 shrink-0 rounded bg-panel-3 px-1 text-[10px] text-accent">置顶</span>
-                      )}
-                      {settings.textProviderId === p.id && (
-                        <span className="ml-1 shrink-0 rounded bg-panel-3 px-1 text-[10px] text-accent">文本</span>
-                      )}
-                      {settings.imageProviderId === p.id && (
-                        <span className="ml-1 shrink-0 rounded bg-panel-3 px-1 text-[10px] text-accent">生图</span>
-                      )}
-                    </button>
+                    <div key={p.id}>
+                      {showDivider && <div className="mb-1 border-t border-panel-3" />}
+                      <button
+                        onClick={() => {
+                          setSelectedId(p.id)
+                          setTestResult(null)
+                          setModels([])
+                          setModelsError(null)
+                        }}
+                        draggable={!rhythm}
+                        onDragStart={() => setDragId(p.id)}
+                        onDragOver={(e) => {
+                          e.preventDefault()
+                          setOverId(p.id)
+                        }}
+                        onDragLeave={() => setOverId((v) => (v === p.id ? null : v))}
+                        onDrop={(e) => {
+                          e.preventDefault()
+                          onDropProvider(p.id)
+                          setDragId(null)
+                          setOverId(null)
+                        }}
+                        onDragEnd={() => {
+                          setDragId(null)
+                          setOverId(null)
+                        }}
+                        title={
+                          rhythm
+                            ? '默认置顶（不可拖动）'
+                            : pinned
+                              ? '拖动排序；点 ◆ 取消置顶'
+                              : '拖动调整顺序；点 ◇ 置顶'
+                        }
+                        className={`mb-1 flex w-full items-center rounded px-2 py-1.5 text-left text-xs ${
+                          p.id === selectedId ? 'bg-panel-3 text-ink' : 'text-ink-dim hover:bg-panel-3'
+                        } ${rhythm ? '' : 'cursor-grab'} ${
+                          dragId && overId === p.id && dragId !== p.id ? 'ring-1 ring-accent' : ''
+                        } ${dragId === p.id ? 'opacity-50' : ''}`}
+                      >
+                        <span
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            if (!rhythm) togglePin(p.id)
+                          }}
+                          title={rhythm ? '默认置顶' : pinned ? '取消置顶' : '置顶'}
+                          className={`mr-1 shrink-0 text-[10px] leading-none ${
+                            pinned ? 'text-accent' : 'text-ink-dim opacity-40 hover:opacity-100'
+                          } ${rhythm ? 'cursor-default' : 'cursor-pointer'}`}
+                        >
+                          {pinned ? '◆' : '◇'}
+                        </span>
+                        <span className="truncate">{p.name}</span>
+                        {settings.textProviderId === p.id && (
+                          <span className="ml-1 shrink-0 rounded bg-panel-3 px-1 text-[10px] text-accent">文本</span>
+                        )}
+                        {settings.imageProviderId === p.id && (
+                          <span className="ml-1 shrink-0 rounded bg-panel-3 px-1 text-[10px] text-accent">生图</span>
+                        )}
+                      </button>
+                    </div>
                   )
                 })}
               </div>
