@@ -23,6 +23,8 @@ interface DiskSettings {
   providerOrder?: string[]
   /** 手动置顶的供应商 id（展示用） */
   pinnedIds?: string[]
+  /** 被手动取消置顶的默认置顶供应商 id（展示用） */
+  unpinnedIds?: string[]
   search?: { provider: SearchSettings['provider']; apiKeyEnc?: string; apiKey?: string }
 }
 
@@ -97,6 +99,7 @@ export function getLlmSettings(): LlmSettings {
       imageProviderId: disk.imageProviderId,
       providerOrder: disk.providerOrder,
       pinnedIds: disk.pinnedIds,
+      unpinnedIds: disk.unpinnedIds,
       search: disk.search
         ? { provider: disk.search.provider, apiKey: decryptKey(disk.search) }
         : { ...DEFAULT_SEARCH }
@@ -121,6 +124,7 @@ export function setLlmSettings(settings: LlmSettings): void {
     imageProviderId: settings.imageProviderId,
     providerOrder: settings.providerOrder,
     pinnedIds: settings.pinnedIds,
+    unpinnedIds: settings.unpinnedIds,
     search: { provider: settings.search?.provider ?? 'none', ...encryptKey(settings.search?.apiKey ?? '') }
   }
   writeFileSync(settingsFile(), JSON.stringify(disk, null, 2))

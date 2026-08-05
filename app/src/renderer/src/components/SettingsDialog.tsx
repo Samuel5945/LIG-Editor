@@ -39,16 +39,24 @@ export default function SettingsDialog({ onClose }: SettingsDialogProps): ReactE
 
   const provider = settings?.providers.find((p) => p.id === selectedId) ?? null
 
-  /** 置顶集合：基元律动默认恒置顶；其余供应商可手动置顶（均为纯展示，不影响默认模型） */
+  /** 置顶状态：基元律动默认置顶（可手动取消，记 unpinnedIds）；其余默认不置顶（可手动置顶，记 pinnedIds）。
+   * 均为纯展示，不影响默认模型 */
   const pinnedSet = new Set(settings?.pinnedIds ?? [])
+  const unpinnedSet = new Set(settings?.unpinnedIds ?? [])
   const isPinned = (p: { id: string; name: string; baseUrl: string }) =>
-    isRhythmProvider(p) || pinnedSet.has(p.id)
+    isRhythmProvider(p) ? !unpinnedSet.has(p.id) : pinnedSet.has(p.id)
 
-  /** 展示顺序：基元律动恒首位 → 手动置顶 → 未置顶，各组内按用户拖拽保存的顺序 */
+  /** 展示层级：基元律动置顶时恒首位(0) → 手动置顶(1) → 未置顶(2) */
+  const rankOf = (p: ProviderConfig) => {
+    if (isRhythmProvider(p)) return unpinnedSet.has(p.id) ? 2 : 0
+    return pinnedSet.has(p.id) ? 1 : 2
+  }
+
+  /** 展示顺序：按层级分组，各组内按用户拖拽保存的顺序 */
   const displayProviders = settings
     ? [...settings.providers].sort((a, b) => {
-        const ra = isRhythmProvider(a) ? 0 : pinnedSet.has(a.id) ? 1 : 2
-        const rb = isRhythmProvider(b) ? 0 : pinnedSet.has(b.id) ? 1 : 2
+        const ra = rankOf(a)
+        const rb = rankOf(b)
         if (ra !== rb) return ra - rb
         const order = settings.providerOrder ?? []
         const ia = order.indexOf(a.id)
@@ -60,7 +68,8 @@ export default function SettingsDialog({ onClose }: SettingsDialogProps): ReactE
   const [dragId, setDragId] = useState<string | null>(null)
   const [overId, setOverId] = useState<string | null>(null)
 
-  /** 拖拽落位：重排展示顺序；落在置顶行上 → 该项置顶，落在普通行上 → 取消置顶（基元律动恒置顶） */
+  /** 拖拽落位：重排展示顺序；落在置顶行上 → 该项置顶，落在普通行上 → 取消置顶
+   * （基元律动默认置顶，取消记 unpinnedIds；其余记 pinnedIds） */
   const onDropProvider = useCallback(
     (targetId: string) => {
       if (!settings || !dragId || dragId === targetId) return
@@ -71,19 +80,32 @@ export default function SettingsDialog({ onClose }: SettingsDialogProps): ReactE
       const next = display.filter((id) => id !== dragId)
       next.splice(next.indexOf(targetId), 0, dragId)
       const nextPinned = new Set(settings.pinnedIds ?? [])
-      if (isPinned(target) && !isRhythmProvider(dragged)) nextPinned.add(dragId)
-      if (!isPinned(target)) nextPinned.delete(dragId)
-      setSettings({ ...settings, providerOrder: next, pinnedIds: [...nextPinned] })
+      const nextUnpinned = new Set(settings.unpinnedIds ?? [])
+      if (isRhythmProvider(dragged)) {
+        if (isPinned(target)) nextUnpinned.delete(dragId)
+        else nextUnpinned.add(dragId)
+      } else {
+        if (isPinned(target)) nextPinned.add(dragId)
+        else nextPinned.delete(dragId)
+      }
+      setSettings({ ...settings, providerOrder: next, pinnedIds: [...nextPinned], unpinnedIds: [...nextUnpinned] })
     },
     [settings, dragId, displayProviders, isPinned]
   )
 
-  /** 手动置顶 / 取消置顶（基元律动不可取消）；置顶时挪到置顶区末尾 */
+  /** 手动置顶 / 取消置顶：基元律动默认置顶，切换记 unpinnedIds；其余记 pinnedIds，置顶时挪到置顶区末尾 */
   const togglePin = useCallback(
     (id: string) => {
       if (!settings) return
       const p = settings.providers.find((x) => x.id === id)
-      if (!p || isRhythmProvider(p)) return
+      if (!p) return
+      if (isRhythmProvider(p)) {
+        const cur = new Set(settings.unpinnedIds ?? [])
+        if (cur.has(id)) cur.delete(id)
+        else cur.add(id)
+        setSettings({ ...settings, unpinnedIds: [...cur] })
+        return
+      }
       const cur = new Set(settings.pinnedIds ?? [])
       if (cur.has(id)) {
         cur.delete(id)
@@ -93,14 +115,14 @@ export default function SettingsDialog({ onClose }: SettingsDialogProps): ReactE
       const display = displayProviders.map((x) => x.id).filter((x) => x !== id)
       let insertAt = display.findIndex((x) => {
         const q = settings.providers.find((pp) => pp.id === x)
-        return !!q && !isRhythmProvider(q) && !cur.has(x)
+        return !!q && rankOf(q) === 2
       })
       if (insertAt === -1) insertAt = display.length
       display.splice(insertAt, 0, id)
       cur.add(id)
       setSettings({ ...settings, providerOrder: display, pinnedIds: [...cur] })
     },
-    [settings, displayProviders]
+    [settings, displayProviders, rankOf]
   )
 
   /** 当前选中供应商的官网跳转（仅已知供应商，系统浏览器打开） */
@@ -139,7 +161,8 @@ export default function SettingsDialog({ onClose }: SettingsDialogProps): ReactE
       textProviderId: settings.textProviderId === selectedId ? rest[0].id : settings.textProviderId,
       imageProviderId: settings.imageProviderId === selectedId ? rest[0].id : settings.imageProviderId,
       providerOrder: settings.providerOrder?.filter((id) => id !== selectedId),
-      pinnedIds: settings.pinnedIds?.filter((id) => id !== selectedId)
+      pinnedIds: settings.pinnedIds?.filter((id) => id !== selectedId),
+      unpinnedIds: settings.unpinnedIds?.filter((id) => id !== selectedId)
     })
     setSelectedId(rest[0].id)
   }, [settings, selectedId])
@@ -232,7 +255,7 @@ export default function SettingsDialog({ onClose }: SettingsDialogProps): ReactE
                           setModels([])
                           setModelsError(null)
                         }}
-                        draggable={!rhythm}
+                        draggable
                         onDragStart={() => setDragId(p.id)}
                         onDragOver={(e) => {
                           e.preventDefault()
@@ -250,27 +273,27 @@ export default function SettingsDialog({ onClose }: SettingsDialogProps): ReactE
                           setOverId(null)
                         }}
                         title={
-                          rhythm
-                            ? '默认置顶（不可拖动）'
-                            : pinned
-                              ? '拖动排序；点 ◆ 取消置顶'
-                              : '拖动调整顺序；点 ◇ 置顶'
+                          pinned
+                            ? rhythm
+                              ? '默认置顶；拖动排序，点图钉可取消置顶'
+                              : '拖动排序；点图钉取消置顶'
+                            : '拖动调整顺序；点图钉置顶'
                         }
-                        className={`mb-1 flex w-full items-center rounded px-2 py-1.5 text-left text-xs ${
+                        className={`mb-1 flex w-full cursor-grab items-center rounded px-1.5 py-1.5 text-left text-xs ${
                           p.id === selectedId ? 'bg-panel-3 text-ink' : 'text-ink-dim hover:bg-panel-3'
-                        } ${rhythm ? '' : 'cursor-grab'} ${
-                          dragId && overId === p.id && dragId !== p.id ? 'ring-1 ring-accent' : ''
-                        } ${dragId === p.id ? 'opacity-50' : ''}`}
+                        } ${dragId && overId === p.id && dragId !== p.id ? 'ring-1 ring-accent' : ''} ${
+                          dragId === p.id ? 'opacity-50' : ''
+                        }`}
                       >
                         <span
                           onClick={(e) => {
                             e.stopPropagation()
-                            if (!rhythm) togglePin(p.id)
+                            togglePin(p.id)
                           }}
-                          title={rhythm ? '默认置顶' : pinned ? '取消置顶' : '置顶'}
-                          className={`mr-1 shrink-0 text-[10px] leading-none ${
-                            pinned ? 'text-accent' : 'text-ink-dim opacity-40 hover:opacity-100'
-                          } ${rhythm ? 'cursor-default' : 'cursor-pointer'}`}
+                          title={pinned ? (rhythm ? '取消置顶（默认置顶）' : '取消置顶') : '置顶'}
+                          className={`mr-1 flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded text-sm leading-none hover:bg-panel-3 ${
+                            pinned ? 'text-accent' : 'text-ink-dim opacity-50 hover:opacity-100'
+                          }`}
                         >
                           {pinned ? '◆' : '◇'}
                         </span>
