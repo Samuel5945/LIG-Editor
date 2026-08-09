@@ -38,3 +38,49 @@ export function diffLines(a: string, b: string): DiffLine[] {
   while (j < n) out.push({ type: 'add', text: bl[j++] })
   return out
 }
+
+export interface DiffSeg {
+  type: 'same' | 'del' | 'add'
+  text: string
+}
+
+/** 字符级 diff（LCS）：对比两段短文本（修订补丁的原文 vs 新版），标出具体改了哪几个字。
+ * 两长度乘积过大时退化为「整删+整增」，避免 O(m*n) 爆炸 */
+export function diffChars(a: string, b: string): DiffSeg[] {
+  if (a === b) return a ? [{ type: 'same', text: a }] : []
+  if (a.length * b.length > 250000) {
+    return [...(a ? [{ type: 'del' as const, text: a }] : []), ...(b ? [{ type: 'add' as const, text: b }] : [])]
+  }
+  const m = a.length
+  const n = b.length
+  const dp: number[][] = Array.from({ length: m + 1 }, () => new Array<number>(n + 1).fill(0))
+  for (let i = m - 1; i >= 0; i--) {
+    for (let j = n - 1; j >= 0; j--) {
+      dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1])
+    }
+  }
+  const raw: DiffSeg[] = []
+  let i = 0
+  let j = 0
+  while (i < m && j < n) {
+    if (a[i] === b[j]) {
+      raw.push({ type: 'same', text: a[i] })
+      i++
+      j++
+    } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+      raw.push({ type: 'del', text: a[i++] })
+    } else {
+      raw.push({ type: 'add', text: b[j++] })
+    }
+  }
+  while (i < m) raw.push({ type: 'del', text: a[i++] })
+  while (j < n) raw.push({ type: 'add', text: b[j++] })
+  // 合并相邻同类型片段，避免一字一块的碎片渲染
+  const out: DiffSeg[] = []
+  for (const seg of raw) {
+    const last = out[out.length - 1]
+    if (last && last.type === seg.type) last.text += seg.text
+    else out.push({ ...seg })
+  }
+  return out
+}

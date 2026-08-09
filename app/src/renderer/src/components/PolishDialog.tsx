@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react'
-import { diffLines, type DiffLine } from '@shared/lineDiff'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react'
+import { diffLines, diffChars, type DiffLine } from '@shared/lineDiff'
 import { chatOnce } from '../copilot/llm'
 import { polishLayoutMessages, applyReviewMessages } from '../copilot/prompts'
 
@@ -13,15 +13,15 @@ interface PolishDialogProps {
   onClose: () => void
 }
 
-/** 全文优化弹窗：排版优化流式重写 / 按审阅报告出补丁本地精准覆盖 → 行级 diff → 确认覆盖全文 */
+/** 全文优化弹窗：排版优化流式重写→行级 diff；按审阅报告出补丁本地精准覆盖→逐条字符级对比卡片 → 确认覆盖全文 */
 export default function PolishDialog({ article, skill, review, onConfirm, onClose }: PolishDialogProps): ReactElement {
   const isReview = !!review?.trim()
   const [result, setResult] = useState('')
   const [running, setRunning] = useState(false)
   const [done, setDone] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  // 修订模式：补丁应用统计（失配项列出供人工处理）
-  const [patchInfo, setPatchInfo] = useState<{ applied: number; failed: string[] } | null>(null)
+  // 修订模式：补丁应用统计与命中明细（失配项列出供人工处理；items 用于逐条对比展示）
+  const [patchInfo, setPatchInfo] = useState<{ applied: number; failed: string[]; items: { old: string; new: string }[] } | null>(null)
   const abortRef = useRef<(() => void) | null>(null)
   const [streamLen, setStreamLen] = useState(0)
 
@@ -48,6 +48,7 @@ export default function PolishDialog({ article, skill, review, onConfirm, onClos
           if (patches.length === 0) throw new Error('未解析到任何修订补丁，可重试')
           let text = article
           const failed: string[] = []
+          const items: { old: string; new: string }[] = []
           let applied = 0
           for (const p of patches) {
             const idx = text.indexOf(p.old)
@@ -57,9 +58,10 @@ export default function PolishDialog({ article, skill, review, onConfirm, onClos
             }
             text = text.slice(0, idx) + p.new + text.slice(idx + p.old.length)
             applied++
+            items.push(p)
           }
           if (applied === 0) throw new Error('补丁均未在正文中命中（正文可能已变动），可重试')
-          setPatchInfo({ applied, failed })
+          setPatchInfo({ applied, failed, items })
           setResult(text)
         } else {
           setResult(full.trim() + '\n')
@@ -87,7 +89,8 @@ export default function PolishDialog({ article, skill, review, onConfirm, onClos
     onClose()
   }, [onClose])
 
-  const diff = done ? diffLines(article, result) : null
+  // 行级全文对比只用于排版优化（整体重写）；审阅修订按补丁逐条展示，不再铺全文 diff
+  const diff = done && !isReview ? diffLines(article, result) : null
   const changed = diff?.filter((l) => l.type !== 'same').length ?? 0
   // 只展示变化处前后各一行上下文，其余未变行折叠，不把全文铺出来
   const rows = diff ? collapseSame(diff) : null
@@ -143,11 +146,23 @@ export default function PolishDialog({ article, skill, review, onConfirm, onClos
             </p>
           )}
 
+          {done && isReview && patchInfo && patchInfo.items.length > 0 && (
+            <div className="max-h-[55vh] space-y-3 overflow-auto pr-1">
+              <p className="text-ink-dim">逐条对比（红=删掉的内容，绿=新增的内容）：</p>
+              {patchInfo.items.map((p, i) => (
+                <div key={i} className="rounded border border-panel-3 bg-panel p-2.5">
+                  <p className="mb-1.5 text-[10px] text-ink-dim">
+                    修订 {i + 1} / {patchInfo.items.length}
+                  </p>
+                  <DiffPair oldText={p.old} newText={p.new} />
+                </div>
+              ))}
+            </div>
+          )}
+
           {rows && (
             <>
-              <p className="mb-1 text-ink-dim">
-                {isReview ? '修订对比' : '排版对比'}（红=原文，绿=新版，共 {changed} 行变化，未变部分已折叠）
-              </p>
+              <p className="mb-1 text-ink-dim">排版对比（红=原文，绿=新版，共 {changed} 行变化，未变部分已折叠）</p>
               <div className="selectable max-h-[55vh] overflow-auto rounded bg-panel p-2 leading-5">
                 {rows.map((l, i) =>
                   l.type === 'skip' ? (
@@ -241,4 +256,45 @@ function collapseSame(diff: DiffLine[], ctx = 1): DiffRow[] {
     i = j
   }
   return rows
+}
+
+/** 单条修订对比：上行原文（红=删掉的字），下行新版（绿=新增的字），字符级 diff 精确到改动的字 */
+function DiffPair({ oldText, newText }: { oldText: string; newText: string }): ReactElement {
+  const segs = useMemo(() => diffChars(oldText, newText), [oldText, newText])
+  return (
+    <div className="space-y-1.5 text-xs leading-6">
+      <div className="selectable whitespace-pre-wrap rounded border-l-2 border-red-500/70 bg-red-500/10 px-2.5 py-1.5">
+        <span className="mr-1.5 select-none rounded bg-red-500/25 px-1 align-middle text-[10px] text-red-300">原</span>
+        {segs
+          .filter((s) => s.type !== 'add')
+          .map((s, i) =>
+            s.type === 'del' ? (
+              <del key={i} className="rounded bg-red-500/25 px-0.5 text-red-300">
+                {s.text}
+              </del>
+            ) : (
+              <span key={i} className="text-ink">
+                {s.text}
+              </span>
+            )
+          )}
+      </div>
+      <div className="selectable whitespace-pre-wrap rounded border-l-2 border-green-500/70 bg-green-500/10 px-2.5 py-1.5">
+        <span className="mr-1.5 select-none rounded bg-green-500/25 px-1 align-middle text-[10px] text-green-300">改</span>
+        {segs
+          .filter((s) => s.type !== 'del')
+          .map((s, i) =>
+            s.type === 'add' ? (
+              <span key={i} className="rounded bg-green-500/25 px-0.5 text-green-300">
+                {s.text}
+              </span>
+            ) : (
+              <span key={i} className="text-ink">
+                {s.text}
+              </span>
+            )
+          )}
+      </div>
+    </div>
+  )
 }
