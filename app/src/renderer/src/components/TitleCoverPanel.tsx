@@ -89,12 +89,19 @@ export default function TitleCoverPanel({
     }
   }, [titling, article, skill, project, meta.format, onMetaUpdated, onToast])
 
-  const pickImage = useCallback((file: File) => {
-    const url = URL.createObjectURL(file)
-    const image = new Image()
-    image.onload = () => setImg(image)
-    image.src = url
-  }, [])
+  const pickImage = useCallback(
+    (file: File) => {
+      const url = URL.createObjectURL(file)
+      const image = new Image()
+      image.onload = () => setImg(image)
+      image.onerror = () => {
+        URL.revokeObjectURL(url)
+        onToast('图片加载失败，换一张 PNG/JPG 试试')
+      }
+      image.src = url
+    },
+    [onToast]
+  )
 
   // ---- 封面提示词：LLM 通读正文提取关键信息，流式写进输入框供用户二次编辑 ----
 
