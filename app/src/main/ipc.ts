@@ -32,6 +32,18 @@ export function registerIpc(): void {
   handle('app:ping', () => 'pong')
   handle('app:getPaths', () => getAppPaths())
 
+  // ---- 窗口控制（无边框自绘标题栏）----
+  const targetWin = (): BrowserWindow | null =>
+    BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null
+  handle('win:minimize', () => targetWin()?.minimize())
+  handle('win:toggleMaximize', () => {
+    const w = targetWin()
+    if (!w) return
+    if (w.isMaximized()) w.unmaximize()
+    else w.maximize()
+  })
+  handle('win:close', () => targetWin()?.close())
+
   // ---- 工程管理（M2）----
   handle('project:list', () => store.listProjects())
   handle('project:create', (name) => store.createProject(name))
