@@ -1,5 +1,6 @@
 import { net } from 'electron'
 import type { ChatMessage, FetchModelsResult, LlmTestResult, ModelInfo, ProviderConfig } from '@shared/types'
+import { knownImageModels } from '@shared/providerSites'
 import { broadcast } from './ipc'
 import { getTextProvider } from './settingsStore'
 
@@ -77,9 +78,12 @@ export async function testProvider(provider: ProviderConfig): Promise<LlmTestRes
   }
 }
 
-/** 拉取供应商可用模型列表（GET /v1/models，OpenAI 标准接口） */
+/** 拉取供应商可用模型列表（GET /v1/models，OpenAI 标准接口）。
+ * 部分供应商（如基元律动）的 /v1/models 不含生图模型，用精选目录 knownImageModels 并入补齐 */
 export async function fetchModels(provider: ProviderConfig): Promise<FetchModelsResult> {
   const url = provider.baseUrl.replace(/\/+$/, '') + '/models'
+  const known = knownImageModels(provider)
+  const knownAsModels: ModelInfo[] = known.map((id) => ({ id }))
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), 15_000)
   try {
@@ -90,19 +94,25 @@ export async function fetchModels(provider: ProviderConfig): Promise<FetchModels
     })
     if (!res.ok) {
       const text = (await res.text()).slice(0, 300)
+      // 列表拉取失败但有精选生图模型时照样返回，图像模型下拉仍可选
+      if (knownAsModels.length > 0) return { ok: true, models: knownAsModels }
       return { ok: false, models: [], error: `HTTP ${res.status}：${text}` }
     }
     const json = (await res.json()) as { data?: { id: string; owned_by?: string }[] }
     const models: ModelInfo[] = (json.data ?? [])
       .filter((m) => typeof m.id === 'string' && m.id.length > 0)
       .map((m) => ({ id: m.id, owned_by: m.owned_by }))
-      .sort((a, b) => a.id.localeCompare(b.id))
-    if (models.length === 0) {
+    const merged = [
+      ...models,
+      ...knownAsModels.filter((k) => !models.some((m) => m.id === k.id))
+    ].sort((a, b) => a.id.localeCompare(b.id))
+    if (merged.length === 0) {
       return { ok: false, models: [], error: '接口返回了空模型列表' }
     }
-    return { ok: true, models }
+    return { ok: true, models: merged }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
+    if (knownAsModels.length > 0) return { ok: true, models: knownAsModels }
     return { ok: false, models: [], error: ctrl.signal.aborted ? '请求超时（15s）' : msg }
   } finally {
     clearTimeout(timer)

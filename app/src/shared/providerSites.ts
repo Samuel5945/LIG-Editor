@@ -8,18 +8,26 @@ export interface ProviderSiteLink {
   url: string
 }
 
-/** 内置供应商种子：基元律动（TokenRhythm）。模型字段留空，用户注册填 Key 后自选模型 */
+/** 内置供应商种子：基元律动（TokenRhythm）。
+ * 生图默认 wan2.7-image（已实测可用，填 Key 即能生图）；文本模型留空，注册后自选 */
 export const RHYTHM_PROVIDER_SEED = {
   name: '基元律动',
   baseUrl: 'https://tokenrhythm.studio/v1',
   textModel: '',
-  imageModel: '',
+  imageModel: 'wan2.7-image',
   imageApi: 'openai-images' as const
 }
 
 /** 置顶供应商：基元律动（TokenRhythm）——默认置顶展示，不参与任何默认模型逻辑 */
 export function isRhythmProvider(p: { name: string; baseUrl: string }): boolean {
   return p.baseUrl.includes('tokenrhythm.studio') || p.name.includes('基元律动')
+}
+
+/** 已知供应商的生图模型目录（均已实测可用）：这些模型不在其 /v1/models 返回里，
+ * 拉取模型列表时并入，保证「从列表选图像模型」能选到 */
+export function knownImageModels(p: { name: string; baseUrl: string }): string[] {
+  if (isRhythmProvider(p)) return ['wan2.7-image', 'qwen-image-2.0']
+  return []
 }
 
 export function isAgnesProvider(p: { name: string; baseUrl: string }): boolean {
