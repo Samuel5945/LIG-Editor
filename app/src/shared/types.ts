@@ -234,6 +234,10 @@ export interface WebSearchResult {
 export interface IpcApi {
   'app:getPaths': () => AppPaths
   'app:ping': () => string
+  // ---- 窗口控制（无边框自绘标题栏）----
+  'win:minimize': () => void
+  'win:toggleMaximize': () => void
+  'win:close': () => void
   /** 扫描 workspace 下所有含 project.json 的工程 */
   'project:list': () => ProjectSummary[]
   'project:create': (name: string) => ProjectSummary

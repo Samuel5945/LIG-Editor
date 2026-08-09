@@ -1,4 +1,4 @@
-import { app, BrowserWindow, net, protocol, shell } from 'electron'
+import { app, BrowserWindow, Menu, net, protocol, shell } from 'electron'
 import { join, normalize } from 'path'
 import { pathToFileURL } from 'url'
 import { registerIpc } from './ipc'
@@ -35,6 +35,8 @@ function createWindow(): BrowserWindow {
     minWidth: 1100,
     minHeight: 680,
     show: false,
+    frame: false, // 无边框：去掉系统标题栏，顶栏由渲染层自绘（拖拽+窗口控制按钮）
+    autoHideMenuBar: true,
     backgroundColor: '#1b1d23',
     title: '图文编辑器',
     webPreferences: {
@@ -44,6 +46,8 @@ function createWindow(): BrowserWindow {
   })
 
   win.on('ready-to-show', () => win.show())
+  // 菜单栏不可见但保留挂载（复制/粘贴/撤销等编辑快捷键依赖菜单角色）
+  win.setMenuBarVisibility(false)
 
   // 外链一律走系统浏览器
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -82,6 +86,8 @@ app.whenReady().then(() => {
   registerIpc()
   watchWorkspace()
   startBridge()
+  // 只保留编辑/视图菜单的快捷键（菜单栏不显示）：复制粘贴、撤销、开发者工具等照常可用
+  Menu.setApplicationMenu(Menu.buildFromTemplate([{ role: 'editMenu' }, { role: 'viewMenu' }]))
   createWindow()
 
   app.on('activate', () => {
