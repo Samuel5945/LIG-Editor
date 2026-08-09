@@ -2,6 +2,73 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ---------- 双主题色板：深色为默认，html.light 切日间 ----------
+   所有颜色以 RGB 三元组存放，Tailwind 侧用 rgb(var(--x) / <alpha-value>) 消费 */
+:root {
+  color-scheme: dark;
+  --panel: 27 29 35; /* #1b1d23 */
+  --panel-2: 34 37 45; /* #22252d */
+  --panel-3: 42 46 56; /* #2a2e38 */
+  --edge: #33384455;
+  --ink: 226 228 234; /* #e2e4ea */
+  --ink-dim: 154 160 173; /* #9aa0ad */
+  --accent: 79 140 255; /* #4f8cff */
+  --scrollbar: 58 63 75; /* #3a3f4b */
+  /* slate 原色阶（深色语义） */
+  --slate-50: 248 250 252;
+  --slate-100: 241 245 249;
+  --slate-200: 226 232 240;
+  --slate-300: 203 213 225;
+  --slate-400: 148 163 184;
+  --slate-500: 100 116 139;
+  --slate-600: 71 85 105;
+  --slate-700: 51 65 85;
+  --slate-800: 30 41 59;
+  --slate-900: 15 23 42;
+  --slate-950: 2 6 23;
+}
+
+:root.light {
+  color-scheme: light;
+  --panel: 243 244 246; /* 应用底色 */
+  --panel-2: 255 255 255; /* 浮层/卡片 */
+  --panel-3: 229 232 237; /* 控件/悬停 */
+  --edge: #0f172a24;
+  --ink: 28 32 40;
+  --ink-dim: 103 112 127;
+  --accent: 43 100 217; /* 白底下加深保证对比度 */
+  --scrollbar: 195 201 212;
+  /* slate 色阶整体翻转：bg-slate-900 之类的深色底自动变浅，text-slate-300 之类的浅字自动变深 */
+  --slate-50: 2 6 23;
+  --slate-100: 15 23 42;
+  --slate-200: 30 41 59;
+  --slate-300: 51 65 85;
+  --slate-400: 71 85 105;
+  --slate-500: 100 116 139;
+  --slate-600: 148 163 184;
+  --slate-700: 203 213 225;
+  --slate-800: 226 232 240;
+  --slate-900: 241 245 249;
+  --slate-950: 248 250 252;
+}
+
+/* 日间模式下，原本「浅字配深底」的语义色翻到浅底上要加深，保证可读性 */
+:root.light .text-red-300 {
+  color: #b91c1c;
+}
+:root.light .text-green-300 {
+  color: #15803d;
+}
+:root.light .text-emerald-300 {
+  color: #047857;
+}
+:root.light .text-sky-300 {
+  color: #0369a1;
+}
+:root.light .text-amber-300 {
+  color: #b45309;
+}
+
 html,
 body,
 #root {
@@ -19,12 +86,24 @@ body {
   user-select: text;
 }
 
+/* 无边框窗口：顶栏拖拽区 + 交互元素豁免 */
+.app-drag {
+  -webkit-app-region: drag;
+}
+.app-drag button,
+.app-drag input,
+.app-drag select,
+.app-drag textarea,
+.app-drag .no-drag {
+  -webkit-app-region: no-drag;
+}
+
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 ::-webkit-scrollbar-thumb {
-  background: #3a3f4b;
+  background: rgb(var(--scrollbar));
   border-radius: 4px;
 }
 
@@ -38,7 +117,8 @@ body {
 }
 /* H1 大标题：居中 + 强调色短线收尾，和正文拉开仪式感 */
 .article-editor .ProseMirror h1 {
-  @apply mb-7 mt-8 text-center text-[26px] font-bold leading-snug tracking-wide text-white;
+  @apply mb-7 mt-8 text-center text-[26px] font-bold leading-snug tracking-wide;
+  color: rgb(var(--ink));
 }
 .article-editor .ProseMirror h1::after {
   content: '';
@@ -47,7 +127,8 @@ body {
 }
 /* H2 小节标题：左侧强调色竖条，一眼区分层级 */
 .article-editor .ProseMirror h2 {
-  @apply mb-4 mt-10 border-l-4 pl-3 text-xl font-bold leading-snug text-white;
+  @apply mb-4 mt-10 border-l-4 pl-3 text-xl font-bold leading-snug;
+  color: rgb(var(--ink));
   border-left-color: var(--article-accent, #4f8cff);
 }
 /* H3 子标题：强调色菱形前缀 */

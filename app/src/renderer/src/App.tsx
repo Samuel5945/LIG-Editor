@@ -41,6 +41,18 @@ export default function App(): JSX.Element {
   const [showSettings, setShowSettings] = useState(false)
   // M8 接入 / Skill 管理弹窗
   const [showIntegration, setShowIntegration] = useState(false)
+  // 主题：深色为默认，日间可切换（localStorage 持久化，main.tsx 首帧前已套用）
+  const [theme, setTheme] = useState<'dark' | 'light'>(() =>
+    localStorage.getItem('ui-theme') === 'light' ? 'light' : 'dark'
+  )
+  const toggleTheme = useCallback(() => {
+    setTheme((t) => {
+      const next = t === 'dark' ? 'light' : 'dark'
+      document.documentElement.classList.toggle('light', next === 'light')
+      localStorage.setItem('ui-theme', next)
+      return next
+    })
+  }, [])
   // M5 副驾驶
   const [leftTab, setLeftTab] = useState<'projects' | 'ideas'>('projects')
   const [centerTab, setCenterTab] = useState<'article' | 'titlecover'>('article')
@@ -428,16 +440,42 @@ export default function App(): JSX.Element {
 
   return (
     <div className="flex h-full flex-col">
-      {/* 顶栏 */}
-      <header className="flex h-11 shrink-0 items-center gap-3 border-b border-panel-3 bg-panel-2 px-4">
+      {/* 顶栏（无边框自绘标题栏：整条可拖拽移动窗口，右侧窗口控制按钮） */}
+      <header className="app-drag flex h-11 shrink-0 items-center gap-3 border-b border-panel-3 bg-panel-2 pl-4">
         <span className="text-sm font-bold">图文编辑器</span>
         <span className="text-xs text-ink-dim">@LIG人生如戏的图文创作平台公测版</span>
         <div className="ml-auto flex items-center gap-2 text-xs text-ink-dim">
+          <button onClick={toggleTheme} title="切换深色 / 日间模式" className="rounded px-2 py-1 hover:bg-panel-3">
+            {theme === 'dark' ? '☀ 日间' : '☾ 深色'}
+          </button>
           <button onClick={() => setShowSettings(true)} className="rounded px-2 py-1 hover:bg-panel-3">
             模型接入
           </button>
           <button onClick={() => setShowIntegration(true)} className="rounded px-2 py-1 hover:bg-panel-3">
             设置
+          </button>
+        </div>
+        <div className="flex h-full items-stretch">
+          <button
+            onClick={() => void window.api.invoke('win:minimize')}
+            title="最小化"
+            className="w-11 text-sm text-ink-dim hover:bg-panel-3"
+          >
+            ─
+          </button>
+          <button
+            onClick={() => void window.api.invoke('win:toggleMaximize')}
+            title="最大化 / 还原"
+            className="w-11 text-sm text-ink-dim hover:bg-panel-3"
+          >
+            ▢
+          </button>
+          <button
+            onClick={() => void window.api.invoke('win:close')}
+            title="关闭"
+            className="w-11 text-sm text-ink-dim hover:bg-red-600 hover:text-white"
+          >
+            ✕
           </button>
         </div>
       </header>
