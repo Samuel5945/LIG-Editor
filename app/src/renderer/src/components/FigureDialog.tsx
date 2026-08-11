@@ -393,11 +393,23 @@ function stripFence(text: string): string {
 const MAX_IMPORT_EDGE = 1600
 const MAX_GALLERY = 6
 
-/** 多图项：处理后的画布 + 缩略图 + 宽高比 */
+/** 多图项：处理后的画布 + 缩略图 + 宽高比；GIF 另存原始字节（动画保留） */
 interface MultiItem {
   cv: HTMLCanvasElement
   url: string
   ratio: number
+  /** GIF 原图 base64（不带 dataURL 前缀）：落盘用它而非画布重编码 */
+  gifB64?: string
+}
+
+function isGifFile(f: File): boolean {
+  return f.type === 'image/gif' || /\.gif$/i.test(f.name)
+}
+
+/** 文件 → 原始字节 base64（不带 dataURL 前缀），GIF 动图原样保留 */
+async function fileToBase64(f: File): Promise<string> {
+  const buf = await f.arrayBuffer()
+  return btoa(new Uint8Array(buf).reduce((d, b) => d + String.fromCharCode(b), ''))
 }
 
 /** 按图片比例推荐图集构图：全竖/全横/方图/混排各有最优布局与取景框 */
@@ -432,6 +444,7 @@ async function fileToCanvas(file: File): Promise<HTMLCanvasElement> {
 function ImportPane({ project, request }: { project: string; request: FigureRequest }): ReactElement {
   const seed = splitFigDesc(request.desc)
   const [raw, setRaw] = useState<RawImage | null>(null) // 单图抠图模式
+  const [gifRaw, setGifRaw] = useState<{ b64: string; url: string } | null>(null) // 单 GIF：原字节保留，动画不丢
   const [multi, setMulti] = useState<MultiItem[]>([]) // 多图轮播模式
   const [layout, setLayout] = useState('swipe-h')
   const [frame, setFrame] = useState('')
@@ -443,25 +456,43 @@ function ImportPane({ project, request }: { project: string; request: FigureRequ
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
-  /** 选 1 张进抠图流程；多选（或多图模式下追加）进轮播流程，上限 6 张 */
+  /** 选 1 张进抠图流程（GIF 走原字节通道，不进抠图）；多选（或多图模式下追加）进轮播流程，上限 6 张 */
   const loadFiles = useCallback(
     async (files: File[]) => {
       if (!files.length) return
       try {
         if (files.length === 1 && multi.length === 0) {
-          const cv = await fileToCanvas(files[0])
+          const f = files[0]
+          if (isGifFile(f)) {
+            // GIF 动图：canvas 重编码会丢动画，原字节直通保存
+            const b64 = await fileToBase64(f)
+            setGifRaw({ b64, url: `data:image/gif;base64,${b64}` })
+            setRaw(null)
+            setError(null)
+            return
+          }
+          const cv = await fileToCanvas(f)
           const data = cv.getContext('2d')!.getImageData(0, 0, cv.width, cv.height)
           setRaw({ width: cv.width, height: cv.height, data: data.data })
+          setGifRaw(null)
           setError(null)
           return
         }
         const room = MAX_GALLERY - multi.length
         const items: MultiItem[] = []
         for (const f of files.slice(0, room)) {
+          if (isGifFile(f)) {
+            // 图集里的 GIF：缩略用画布静帧算比例，落盘用原始字节保动画
+            const b64 = await fileToBase64(f)
+            const cv = await fileToCanvas(f)
+            items.push({ cv, url: `data:image/gif;base64,${b64}`, ratio: cv.width / cv.height, gifB64: b64 })
+            continue
+          }
           const cv = await fileToCanvas(f)
           items.push({ cv, url: cv.toDataURL('image/jpeg', 0.8), ratio: cv.width / cv.height })
         }
         setMulti((prev) => [...prev, ...items].slice(0, MAX_GALLERY))
+        setGifRaw(null)
         setReason(null)
         setError(files.length > room ? `最多 ${MAX_GALLERY} 张，多余的已忽略` : null)
       } catch {
@@ -498,6 +529,13 @@ function ImportPane({ project, request }: { project: string; request: FigureRequ
     request.onDone({ src: rel, alt: seed.caption, caption: seed.caption, figureSource: '' })
   }, [raw, project, request, seed.caption])
 
+  /** 单 GIF：原始字节落盘为 .gif，动画原样进正文 */
+  const insertGif = useCallback(async () => {
+    if (!gifRaw) return
+    const rel = await window.api.invoke('project:saveAsset', project, `assets/import-${Date.now()}.gif`, gifRaw.b64)
+    request.onDone({ src: rel, alt: seed.caption, caption: seed.caption, figureSource: '' })
+  }, [gifRaw, project, request, seed.caption])
+
   /** 多图：逐张落盘 assets/ → 插入 figureGallery 轮播节点 */
   const insertGallery = useCallback(async () => {
     if (multi.length < 2 || busy) return
@@ -506,8 +544,15 @@ function ImportPane({ project, request }: { project: string; request: FigureRequ
       const ts = Date.now()
       const images: GalleryImage[] = []
       for (let k = 0; k < multi.length; k++) {
-        const b64 = multi[k].cv.toDataURL('image/png').split(',')[1]
-        const rel = await window.api.invoke('project:saveAsset', project, `assets/import-${ts}-${k + 1}.png`, b64)
+        const it = multi[k]
+        // GIF 用原始字节保动画；其余按画布重编码 PNG
+        const b64 = it.gifB64 ?? it.cv.toDataURL('image/png').split(',')[1]
+        const rel = await window.api.invoke(
+          'project:saveAsset',
+          project,
+          `assets/import-${ts}-${k + 1}.${it.gifB64 ? 'gif' : 'png'}`,
+          b64
+        )
         images.push({ src: rel, alt: `${seed.caption || '图集'} ${k + 1}` })
       }
       request.onDone({ images, layout, frame, caption: seed.caption })
@@ -601,6 +646,19 @@ function ImportPane({ project, request }: { project: string; request: FigureRequ
             图集支持 2-6 张，插入后可在正文内滑动预览、切换轮播/拼图布局；多图不做抠图，需要抠图请单张导入。
           </p>
         </>
+      ) : gifRaw ? (
+        <>
+          <p className="text-[11px] text-slate-500">GIF 动图将按原字节插入正文（动画保留，不做抠图/重编码）</p>
+          <img src={gifRaw.url} alt="GIF 预览" className="max-h-[340px] self-center rounded border border-slate-700" />
+          <div className="flex flex-wrap items-center gap-2">
+            <button onClick={insertGif} className={btnPrimary}>
+              ✓ 保存并插入正文
+            </button>
+            <button onClick={() => setGifRaw(null)} className={btnGhost}>
+              换一张
+            </button>
+          </div>
+        </>
       ) : !raw ? (
         <div
           onClick={() => fileRef.current?.click()}
@@ -611,7 +669,7 @@ function ImportPane({ project, request }: { project: string; request: FigureRequ
           }}
           className="flex h-40 cursor-pointer items-center justify-center rounded-lg border-2 border-dashed border-slate-700 text-xs text-slate-500 hover:border-sky-600 hover:text-sky-400"
         >
-          点击选择或拖入图片（PNG/JPG/WebP）；多选 2-6 张自动生成轮播
+          点击选择或拖入图片（PNG/JPG/WebP/GIF）；多选 2-6 张自动生成轮播
         </div>
       ) : (
         <>
@@ -668,7 +726,7 @@ function ImportPane({ project, request }: { project: string; request: FigureRequ
       <input
         ref={fileRef}
         type="file"
-        accept="image/png,image/jpeg,image/webp"
+        accept="image/png,image/jpeg,image/webp,image/gif"
         multiple
         className="hidden"
         onChange={(e) => {
