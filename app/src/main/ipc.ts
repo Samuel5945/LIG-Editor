@@ -46,6 +46,7 @@ export function registerIpc(): void {
 
   // ---- 工程管理（M2）----
   handle('project:list', () => store.listProjects())
+  handle('project:listCategories', () => store.listCategories())
   handle('project:create', (name, category) => store.createProject(name, category))
   handle('project:setCategory', async (project, category) => {
     // 正在监听的工程目录被迁移：先停监听，迁移后按新路径重新挂上

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { AppPaths, IdeaCard, ProjectData, ProjectMeta, ProjectSummary, SkillInfo } from '@shared/types'
-import { ALL_CATEGORIES, UNCATEGORIZED } from '@shared/categories'
+import { PROJECT_CATEGORIES, UNCATEGORIZED } from '@shared/categories'
 import { CARD_FORMAT_LABEL, parseCardItems, type CardFormat } from '@shared/cards'
 import { chatOnce } from './copilot/llm'
 import { cardsMessages, categoryMessages } from './copilot/prompts'
@@ -78,9 +78,10 @@ export default function App(): JSX.Element {
   const [hasCards, setHasCards] = useState(false)
   // 脑暴入库后自增，驱动选题库自动刷新
   const [ideasVersion, setIdeasVersion] = useState(0)
-  // 项目分类：筛选条件（all = 全部）与 AI 分类进行中
+  // 项目分类：筛选条件（all = 全部）、可用分类列表（预设 + 自定义）与 AI 分类进行中
   const [filterCat, setFilterCat] = useState<string>('all')
   const [categorizing, setCategorizing] = useState(false)
+  const [categories, setCategories] = useState<string[]>(() => [...PROJECT_CATEGORIES, UNCATEGORIZED])
   const editorRef = useRef<ArticleEditorHandle>(null)
   // 贴图面板句柄：右栏贴图审阅的落盘/优化/定位经这里转发
   const cardsRef = useRef<CardsPanelHandle>(null)
@@ -112,6 +113,7 @@ export default function App(): JSX.Element {
 
   const refreshProjects = useCallback(() => {
     window.api.invoke('project:list').then(setProjects)
+    window.api.invoke('project:listCategories').then(setCategories)
   }, [])
 
   const refreshMeta = useCallback(async () => {
@@ -246,14 +248,14 @@ export default function App(): JSX.Element {
       const { promise } = chatOnce(categoryMessages(source, skillContent))
       const full = await promise
       const guess = full.trim()
-      const cat = ALL_CATEGORIES.find((c) => guess.includes(c)) ?? UNCATEGORIZED
+      const cat = categories.find((c) => guess.includes(c)) ?? UNCATEGORIZED
       await applyCategory(name, cat)
     } catch (err) {
       setToast(`AI 分类失败：${err instanceof Error ? err.message : err}`)
     } finally {
       setCategorizing(false)
     }
-  }, [categorizing, skillContent, applyCategory])
+  }, [categorizing, skillContent, categories, applyCategory])
 
   // ---- 自动保存（2s 防抖；太短会让外部冲突窗口过窄）----
 
@@ -546,7 +548,7 @@ export default function App(): JSX.Element {
           ) : (
             <>
               <div className="flex flex-wrap gap-1 border-b border-panel-3 p-2">
-                {['all', ...ALL_CATEGORIES].map((c) => (
+                {['all', ...categories].map((c) => (
                   <button
                     key={c}
                     onClick={() => setFilterCat(c)}
@@ -604,15 +606,24 @@ export default function App(): JSX.Element {
                         <div className="mt-1.5 flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                           <select
                             value={cat}
-                            onChange={(e) => void applyCategory(p.name, e.target.value)}
-                            title="切换分类（工程文件夹随之移动到对应分类目录）"
+                            onChange={(e) => {
+                              const v = e.target.value
+                              if (v === '__new__') {
+                                const custom = window.prompt('输入新分类名称（自动创建 workspace/<分类>/ 文件夹）：')
+                                if (custom && custom.trim()) void applyCategory(p.name, custom.trim())
+                                return
+                              }
+                              void applyCategory(p.name, v)
+                            }}
+                            title="切换分类（工程文件夹随之移动到对应分类目录）；底部可新建自定义分类"
                             className="min-w-0 flex-1 rounded bg-panel px-1.5 py-1 text-[11px] text-ink outline-none"
                           >
-                            {ALL_CATEGORIES.map((c) => (
+                            {categories.map((c) => (
                               <option key={c} value={c}>
                                 {c}
                               </option>
                             ))}
+                            <option value="__new__">＋ 新建分类…</option>
                           </select>
                           <button
                             onClick={() => void aiCategorize()}

@@ -249,6 +249,8 @@ export interface IpcApi {
   'project:delete': (name: string) => void
   /** 切换分类：工程目录迁移到 workspace/<分类>/ 下并更新 meta，返回新 meta */
   'project:setCategory': (project: string, category: string) => ProjectMeta
+  /** 全部可用分类：预设 + 未分类 + workspace 顶层自定义分类文件夹 */
+  'project:listCategories': () => string[]
   /** 打开工程：返回 meta+正文，并让主进程开始监听该工程目录 */
   'project:open': (name: string) => ProjectData
   'project:close': () => void

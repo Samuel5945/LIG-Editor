@@ -85,7 +85,7 @@ export const TOOLS: ToolDef[] = [
         name: { type: 'string', description: '工程名，将作为目录名' },
         category: {
           type: 'string',
-          description: `所属分类（可选，缺省「未分类」）：${ALL_CATEGORIES.join(' / ')}`
+          description: `所属分类（可选，缺省「未分类」）：${ALL_CATEGORIES.join(' / ')}，也支持自定义分类名`
         }
       },
       required: ['name']
@@ -99,7 +99,7 @@ export const TOOLS: ToolDef[] = [
       type: 'object',
       properties: {
         project: P.project,
-        category: { type: 'string', description: `目标分类：${ALL_CATEGORIES.join(' / ')}` }
+        category: { type: 'string', description: `目标分类：${ALL_CATEGORIES.join(' / ')} 或自定义分类名` }
       },
       required: ['project', 'category']
     },
