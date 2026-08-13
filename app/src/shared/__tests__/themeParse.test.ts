@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseThemeFromHtml } from '../themeParse'
+import { parseThemeFromHtml, trimHtmlForTheme } from '../themeParse'
 import { contrastText, CATEGORY_THEMES } from '../categoryThemes'
 
 describe('parseThemeFromHtml（公众号 HTML → 排版调性）', () => {
@@ -70,5 +70,41 @@ describe('contrastText（色块前景自适应）', () => {
   it('生活常识色块标题不再白字压橙底（对比度修复）', () => {
     const life = CATEGORY_THEMES['生活常识']
     expect(contrastText(life.accent)).toBe('#2b2b2b')
+  })
+})
+
+describe('trimHtmlForTheme（公众号 3MB 页面裁剪）', () => {
+  it('提取 id=js_content 正文容器，砍掉 script/style/外围噪音', () => {
+    const big = `<!DOCTYPE html><html><head><title>演示</title>
+<style>.x{color:red}</style></head><body>
+<script>window.__xxx = '巨大脚本'</script>
+<div id="js_content" class="rich_media_content"><section style="background:#fff0f0;">
+<h1 style="border-bottom:3px solid #ff5f5f;">标题</h1><p style="color:#333;">正文</p>
+</section></div>
+<script>window.__more = '尾部脚本'</script></body></html>`
+    const trimmed = trimHtmlForTheme(big)
+    expect(trimmed).toContain('js_content')
+    expect(trimmed).toContain('border-bottom:3px solid #ff5f5f')
+    expect(trimmed).not.toContain('<script')
+    expect(trimmed).not.toContain('<style')
+    expect(trimmed.length).toBeLessThan(big.length)
+  })
+
+  it('非公众号页面：去掉 script/style/注释', () => {
+    const html = `<html><head><style>body{margin:0}</style></head>
+<body><!-- 注释 --><p style="color:#333;">正文</p><script>var a=1</script></body></html>`
+    const trimmed = trimHtmlForTheme(html)
+    expect(trimmed).toContain('color:#333')
+    expect(trimmed).not.toContain('<style')
+    expect(trimmed).not.toContain('<script')
+    expect(trimmed).not.toContain('<!--')
+  })
+
+  it('js_content 内含嵌套 div 也能配对闭合', () => {
+    const html = `<div id="js_content"><section><div><p style="color:#111;">a</p></div></section></div><script>x</script>`
+    const trimmed = trimHtmlForTheme(html)
+    expect(trimmed).toContain('color:#111')
+    expect(trimmed).toContain('</div>')
+    expect(trimmed).not.toContain('<script')
   })
 })

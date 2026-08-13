@@ -2,6 +2,7 @@ import { net } from 'electron'
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs'
 import { join } from 'path'
 import type { ArticleTheme } from '@shared/types'
+import { trimHtmlForTheme } from '@shared/themeParse'
 import { getAppPaths } from './paths'
 
 /**
@@ -57,12 +58,22 @@ export function deleteCustomTheme(name: string): void {
   }
 }
 
-/** 抓取公众号文章/网页 HTML（导入排版的链接入口） */
+/**
+ * 抓取公众号文章/网页 HTML（导入排版的链接入口）。
+ * 公众号原始页面普遍 3MB+，抓取后立即裁剪（提取 js_content 正文容器），
+ * 只把解析所需的小体积 HTML 传回渲染进程。
+ */
 export async function fetchUrlHtml(url: string): Promise<string> {
   if (!/^https?:\/\//i.test(url)) throw new Error('仅支持 http/https 链接')
-  const res = await net.fetch(url, { redirect: 'follow' })
-  if (!res.ok) throw new Error(`抓取失败：HTTP ${res.status}`)
-  const text = await res.text()
-  if (text.length > 3_000_000) throw new Error('页面过大（>3MB），请改用复制正文 HTML')
-  return text
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 30_000)
+  try {
+    const res = await net.fetch(url, { redirect: 'follow', signal: controller.signal })
+    if (!res.ok) throw new Error(`抓取失败：HTTP ${res.status}`)
+    const text = await res.text()
+    if (text.length > 30_000_000) throw new Error('页面过大（>30MB），请改用复制正文 HTML')
+    return trimHtmlForTheme(text)
+  } finally {
+    clearTimeout(timer)
+  }
 }

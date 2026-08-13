@@ -11,6 +11,43 @@ const SANS = '"Microsoft YaHei", "PingFang SC", system-ui, sans-serif'
 const SERIF = '"Source Han Serif SC", "Noto Serif SC", "STSong", "SimSun", serif'
 const MONO = '"Cascadia Code", "JetBrains Mono", Consolas, monospace'
 
+/**
+ * 裁剪抓取到的 HTML，只留排版分析所需的正文：
+ * - 公众号文章优先提取 id="js_content" 正文容器（微信生成的标签规范，可安全配对），
+ *   体积通常从 3MB+ 骤降到几十 KB，解析快且 textarea 不卡；
+ * - 非公众号页面去掉 script/style/注释等噪音。
+ */
+export function trimHtmlForTheme(html: string): string {
+  const js = extractJsContent(html)
+  if (js) return js
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .trim()
+}
+
+/** 提取公众号正文容器 id="js_content" 的内容（含内部全部内联样式标签）；找不到返回 null */
+function extractJsContent(html: string): string | null {
+  const start = /<div[^>]*id=["']js_content["'][^>]*>/i.exec(html)
+  if (!start) return null
+  const body = html.slice(start.index + start[0].length)
+  let depth = 1
+  const re = /<\/?[a-z][^>]*>/gi
+  let m: RegExpExecArray | null
+  while ((m = re.exec(body)) !== null) {
+    const t = m[0]
+    if (/^<\//.test(t)) {
+      depth--
+      if (depth === 0) return html.slice(start.index, start.index + start[0].length + m.index)
+    } else if (!/\/>$/.test(t)) {
+      // 非自闭合开标签（<img/> <br/> 等以 /> 结尾的不计深度）
+      depth++
+    }
+  }
+  return html.slice(start.index)
+}
+
 /** 解析 style 字符串 → 键值对象（小写键） */
 function parseStyle(style: string): Record<string, string> {
   const out: Record<string, string> = {}
