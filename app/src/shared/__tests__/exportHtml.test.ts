@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { mdToDoc } from '../markdown'
 import { docToExportHtml, extractTitle, wrapExportPage } from '../exportHtml'
-import { DEFAULT_THEME } from '../categoryThemes'
+import { DEFAULT_THEME, CATEGORY_THEMES } from '../categoryThemes'
 
 const SAMPLE = `# 荣耀换标：一个环的诞生
 
@@ -100,6 +100,43 @@ describe('docToExportHtml 强调色', () => {
       expect(out).not.toContain('#d9d9d9')
     }
     const out = docToExportHtml(mdToDoc(MD), (src) => src)
+    expect(out).toContain('border-left:4px solid #4f8cff;padding-left:12px;')
+  })
+})
+
+describe('docToExportHtml 分类排版调性（爆款范式）', () => {
+  const MD = '# 标题\n\n## 小节\n\n### 子节\n\n**重点**正文。\n\n> 引用一句。\n\n---\n'
+
+  it('科技数码：深色卡片 + 荧光青 + 色块 H2 + 等宽字体', () => {
+    const out = docToExportHtml(mdToDoc(MD), (src) => src, CATEGORY_THEMES['科技数码'])
+    expect(out).toContain('background:#0d1526') // 深色容器
+    expect(out).toContain('color:#cbd5e1') // 浅色正文
+    expect(out).toContain('border-radius:14px') // 容器圆角
+    expect(out).toContain('border-bottom:3px solid #22d3ee') // H1 下划线
+    expect(out).toContain('background:#22d3ee;border-radius:6px;padding:3px 14px') // H2 色块
+    expect(out).toContain('background:rgba(34,211,238,0.1)') // 引用淡青卡片
+    expect(out).toContain('font-family:"Cascadia Code"') // 等宽字体
+  })
+
+  it('生活常识：暖白卡片 + 胶囊 H1 + 高亮加粗', () => {
+    const out = docToExportHtml(mdToDoc(MD), (src) => src, CATEGORY_THEMES['生活常识'])
+    expect(out).toContain('background:#fffaf2')
+    expect(out).toContain('border-radius:9999px;padding:6px 22px') // H1 胶囊
+    expect(out).toContain('background:#fef3c7;padding:1px 6px') // 高亮加粗
+  })
+
+  it('哲学思考：纯文字 H2 + 通栏细线 + 引号引用', () => {
+    const out = docToExportHtml(mdToDoc(MD), (src) => src, CATEGORY_THEMES['哲学思考'])
+    const h2 = out.match(/<h2 style="([^"]*)">小节<\/h2>/)
+    expect(h2?.[1]).not.toContain('border-left') // H2 无竖条
+    expect(out).toContain('border-top:1px solid #e5e5e5;width:100%') // 通栏细线
+    expect(out).toContain('❝') // 引号标记
+    expect(out).toMatch(/<span style="display:none;"/) // H3 无前缀
+  })
+
+  it('默认调性输出经典排版（结构字段缺省回退）', () => {
+    const out = docToExportHtml(mdToDoc(MD), (src) => src, DEFAULT_THEME)
+    expect(out).not.toContain('background:#0d1526')
     expect(out).toContain('border-left:4px solid #4f8cff;padding-left:12px;')
   })
 })

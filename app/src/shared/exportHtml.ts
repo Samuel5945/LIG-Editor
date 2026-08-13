@@ -10,6 +10,8 @@ import { DEFAULT_THEME, type ArticleTheme } from './categoryThemes'
  *   （stack-v 选项已废弃，旧文档遗留的按拼图导出）
  * - fig-suggest 占位卡不导出
  * - resolveImg 决定图片 src 形态：相对路径（article.html）/ asset://（预览）/ dataURL（富文本复制）
+ * - 排版调性：分类调性驱动结构级风格（背景卡片/标题装饰/引用形态/分隔线/加粗/圆角），
+ *   默认调性输出与历史完全一致的经典排版
  */
 
 /** 默认强调色：与编辑器 --article-accent 缺省值一致（index.css），未设/非法色时推送不再变灰 */
@@ -44,28 +46,121 @@ const S = {
   hint: 'font-size:12px;color:#bbb;line-height:1.6;margin-top:6px;text-align:center;'
 } as const
 
-type Styles = { -readonly [K in keyof typeof S]: string }
+type Styles = { -readonly [K in keyof typeof S]: string } & { quoteMark: string; imgR: string }
 
-/** 按排版调性着色（与编辑器同源同构）：强调色（H1 短横 / H2 竖条 / H3 菱形 / 引用边线 / 加粗词）
- * + 字体/行高/字距/标题对齐；缺省/非法值回默认调性 */
+/** 强调色转淡色底（公众号客户端不认 color-mix，预计算 rgba；非法输入回默认蓝） */
+function tint(hex: string, alpha: number): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim())
+  if (!m) return `rgba(79,140,255,${alpha})`
+  const n = parseInt(m[1], 16)
+  return `rgba(${n >> 16},${(n >> 8) & 0xff},${n & 0xff},${alpha})`
+}
+
+/** 按排版调性着色与造型（与编辑器同源同构）；缺省/非法值回默认调性 */
 function buildStyles(theme?: ArticleTheme): Styles {
   const t = theme ?? DEFAULT_THEME
-  const s: Styles = { ...S }
+  const s: Styles = { ...S, quoteMark: '', imgR: '4px' }
   const c = t.accent && isHexColor(t.accent) ? t.accent.trim() : DEFAULT_ACCENT
   const lh = t.lineHeight || 2.13
-  s.root = `font-size:15px;line-height:${lh};color:#333;letter-spacing:${t.letterSpacing};word-break:break-word;font-family:${t.fontFamily};`
-  s.p = `font-size:15px;line-height:${lh};color:#333;margin:16px 0;`
-  s.quoteP = `margin:4px 0;font-size:15px;line-height:${lh};color:#777;`
-  s.quotePLast = `margin:4px 0;font-size:15px;line-height:${lh};color:#777;`
-  s.blockquote = S.blockquote.replace('line-height:2.13', `line-height:${lh}`).replace('#4f8cff', c)
+  const dark = !!t.bodyBg // 深色卡片：标题/引用/图注整体换浅色系
+  const textColor = dark ? t.bodyText ?? '#cbd5e1' : '#333'
+  const headingColor = t.headingColor ?? (dark ? '#eef2f7' : '#1a1a1a')
+  const subColor = dark ? t.headingColor ?? '#c7d2e0' : '#1a1a1a'
+  const quoteColor = dark ? '#9fb0c3' : '#777'
+  const quoteBg = dark ? 'rgba(255,255,255,0.07)' : '#f7f7f7'
+  const captionColor = dark ? '#8fa0b3' : '#888'
+  const pGap = t.pGap ?? 16
+  const imgR = t.imgRadius ?? 4
+
+  // 正文容器：背景卡片（深色卡片 / 暖色卡片 / 透明白底）
+  s.root = `font-size:15px;line-height:${lh};color:${textColor};letter-spacing:${t.letterSpacing};word-break:break-word;font-family:${t.fontFamily};`
+  if (t.bodyBg) {
+    s.root += `background:${t.bodyBg};border-radius:${t.bodyRadius ?? 0}px;padding:${t.bodyPadding ?? '16px 18px'};`
+  }
+  s.p = `font-size:15px;line-height:${lh};color:${textColor};margin:${pGap}px 0;`
+  s.quoteP = `margin:4px 0;font-size:15px;line-height:${lh};color:${quoteColor};`
+  s.quotePLast = `margin:4px 0;font-size:15px;line-height:${lh};color:${quoteColor};`
+  s.caption = `font-size:12px;color:${captionColor};line-height:1.6;margin-top:8px;text-align:center;`
+  s.hint = `font-size:12px;color:${captionColor};line-height:1.6;margin-top:6px;text-align:center;`
+  s.img = `max-width:100%;max-height:420px;border-radius:${imgR}px;`
+  s.swipeImg = `display:inline-block;width:80%;margin-right:8px;border-radius:${imgR}px;vertical-align:top;`
+  s.imgR = `${imgR}px`
+  s.quoteMark = ''
+  s.strong = strongStyle(t, dark, c)
   s.h1Wrap = `text-align:${t.headingAlign};`
-  // 左对齐调性：短横靠左；居中的保持 auto 居中
-  const barMargin = t.headingAlign === 'left' ? 'margin:12px 0 0;' : 'margin:12px auto 0;'
-  s.h1Bar = `width:48px;height:3px;border-radius:9999px;${barMargin}background:${c};`
-  s.h2 = `${S.h2}border-left:4px solid ${c};padding-left:12px;`
-  s.h3Diamond = `${S.h3Diamond}background:${c};`
-  s.strong = `font-weight:bold;color:${c};`
+
+  // H1 装饰：bar 经典短横 / pill 胶囊色块字底 / underline 下划线
+  const h1Style = t.h1Style ?? 'bar'
+  if (h1Style === 'pill') {
+    s.h1 = `font-size:26px;font-weight:bold;color:#fff;line-height:1.375;letter-spacing:0.025em;margin:32px 0 0;display:inline-block;background:${c};border-radius:9999px;padding:6px 22px;`
+    s.h1Bar = 'display:none;'
+  } else if (h1Style === 'underline') {
+    s.h1 = `font-size:26px;font-weight:bold;color:${headingColor};line-height:1.375;letter-spacing:0.025em;margin:32px 0 0;border-bottom:3px solid ${c};padding-bottom:10px;`
+    if (t.headingAlign === 'left') s.h1 += 'display:inline-block;'
+    s.h1Bar = 'display:none;'
+  } else {
+    s.h1 = `font-size:26px;font-weight:bold;color:${headingColor};line-height:1.375;letter-spacing:0.025em;margin:32px 0 0;`
+    const barMargin = t.headingAlign === 'left' ? 'margin:12px 0 0;' : 'margin:12px auto 0;'
+    s.h1Bar = `width:48px;height:3px;border-radius:9999px;${barMargin}background:${c};`
+  }
+
+  // H2 装饰：leftbar 左竖条 / block 色块标签 / underline 下划线 / plain 纯文字
+  const h2Style = t.h2Style ?? 'leftbar'
+  if (h2Style === 'block') {
+    s.h2 = `font-size:20px;font-weight:bold;color:#fff;line-height:1.375;margin:40px 0 16px;display:inline-block;background:${c};border-radius:6px;padding:3px 14px;`
+  } else if (h2Style === 'underline') {
+    s.h2 = `font-size:20px;font-weight:bold;color:${subColor};line-height:1.375;margin:40px 0 16px;border-bottom:2px solid ${c};padding-bottom:8px;`
+  } else if (h2Style === 'plain') {
+    s.h2 = `font-size:20px;font-weight:bold;color:${subColor};line-height:1.375;margin:40px 0 16px;`
+  } else {
+    s.h2 = `font-size:20px;font-weight:bold;color:${subColor};line-height:1.375;margin:40px 0 16px;border-left:4px solid ${c};padding-left:12px;`
+  }
+
+  // H3 前缀：diamond 菱形 / dot 圆点 / none 无
+  s.h3 = `font-size:17px;font-weight:600;color:${subColor};line-height:1.375;margin:32px 0 12px;`
+  const mark = t.h3Mark ?? 'diamond'
+  if (mark === 'dot') {
+    s.h3Diamond = `display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:8px;vertical-align:middle;background:${c};`
+  } else if (mark === 'none') {
+    s.h3Diamond = 'display:none;'
+  } else {
+    s.h3Diamond = `display:inline-block;width:8px;height:8px;border-radius:2px;transform:rotate(45deg);margin-right:8px;vertical-align:middle;background:${c};`
+  }
+
+  // 引用：leftbar 左条浅底 / card 圆角卡片 / quotes 引号 + 左条
+  const quoteStyle = t.quoteStyle ?? 'leftbar'
+  const quoteTint = tint(c, 0.1)
+  if (quoteStyle === 'card') {
+    s.blockquote = `margin:20px 0;padding:14px 16px;border-radius:12px;background:${quoteTint};color:${quoteColor};font-size:15px;line-height:${lh};`
+  } else if (quoteStyle === 'quotes') {
+    s.blockquote = `margin:20px 0;padding:12px 16px 12px 20px;border-left:4px solid ${c};border-top-right-radius:8px;border-bottom-right-radius:8px;background:${quoteTint};color:${quoteColor};font-size:15px;line-height:${lh};`
+    s.quoteMark = `font-size:28px;line-height:1;color:${c};margin:0 0 2px;`
+  } else {
+    s.blockquote = `margin:20px 0;padding:8px 12px 8px 16px;border-left:4px solid ${c};border-top-right-radius:8px;border-bottom-right-radius:8px;background:${quoteBg};color:${quoteColor};font-size:15px;line-height:${lh};`
+  }
+
+  // 分隔线：line 居中短横 / dot 圆点列 / long 通栏细线
+  const hrStyle = t.hrStyle ?? 'line'
+  if (hrStyle === 'long') {
+    s.hr = `margin:44px 0;border:0 none;border-top:1px solid ${dark ? 'rgba(255,255,255,0.15)' : '#e5e5e5'};width:100%;`
+  } else if (hrStyle === 'dot') {
+    s.hr = `margin:40px auto;border:0 none;border-top:4px dotted ${c};width:72px;`
+  } else {
+    s.hr = `margin:40px auto;border:0 none;border-top:2px solid ${dark ? 'rgba(255,255,255,0.2)' : '#e8e8e8'};width:64px;`
+  }
+
   return s
+}
+
+/** 加粗强调：color 着色 / highlight 底色高亮 / plain 纯黑加粗 */
+function strongStyle(t: ArticleTheme, dark: boolean, accent: string): string {
+  const style = t.strongStyle ?? 'color'
+  if (style === 'plain') return 'font-weight:bold;'
+  if (style === 'highlight') {
+    const bg = t.strongBg && isHexColor(t.strongBg) ? t.strongBg : '#fef3c7'
+    return `font-weight:bold;color:${dark ? '#f5f5f4' : '#333'};background:${bg};padding:1px 6px;border-radius:4px;`
+  }
+  return `font-weight:bold;color:${accent};`
 }
 
 function escapeHtml(s: string): string {
@@ -88,10 +183,10 @@ function frameStyle(frame: string): string {
   return frame ? `aspect-ratio:${frame.replace(':', ' / ')};object-fit:cover;` : ''
 }
 
-function galleryToHtml(attrs: FigureGalleryAttrs, resolveImg: (src: string) => string): string {
+function galleryToHtml(attrs: FigureGalleryAttrs, resolveImg: (src: string) => string, s: Styles): string {
   const { images, layout, frame, caption } = attrs
   if (!images.length) return ''
-  const cap = caption ? `<p style="${S.caption}">${escapeHtml(caption)}</p>` : ''
+  const cap = caption ? `<p style="${s.caption}">${escapeHtml(caption)}</p>` : ''
 
   if (layout === 'grid' || layout === 'stack-v') {
     // 拼图：inline-block 网格（列数与编辑器 grid 一致）；旧文档遗留的 stack-v 同样按拼图导出
@@ -101,7 +196,7 @@ function galleryToHtml(attrs: FigureGalleryAttrs, resolveImg: (src: string) => s
     const cells = images
       .map((im, k) => {
         const mr = k % cols === cols - 1 ? '0' : '2%'
-        return `<img src="${escapeHtml(resolveImg(im.src))}" alt="${escapeHtml(im.alt)}" style="display:inline-block;width:${width}%;margin:0 ${mr} 6px 0;border-radius:6px;vertical-align:top;${frameStyle(frame || defFrame)}">`
+        return `<img src="${escapeHtml(resolveImg(im.src))}" alt="${escapeHtml(im.alt)}" style="display:inline-block;width:${width}%;margin:0 ${mr} 6px 0;border-radius:${s.imgR};vertical-align:top;${frameStyle(frame || defFrame)}">`
       })
       .join('')
     return `<section style="${S.figure}"><section style="font-size:0;line-height:0;">${cells}</section>${cap}</section>`
@@ -111,10 +206,10 @@ function galleryToHtml(attrs: FigureGalleryAttrs, resolveImg: (src: string) => s
   const items = images
     .map(
       (im) =>
-        `<img src="${escapeHtml(resolveImg(im.src))}" alt="${escapeHtml(im.alt)}" style="${S.swipeImg}${frameStyle(frame)}">`
+        `<img src="${escapeHtml(resolveImg(im.src))}" alt="${escapeHtml(im.alt)}" style="${s.swipeImg}${frameStyle(frame)}">`
     )
     .join('')
-  return `<section style="${S.figure}"><section style="${S.swipeBox}">${items}</section><p style="${S.hint}">← 左右滑动查看 ${images.length} 张 →</p>${cap}</section>`
+  return `<section style="${S.figure}"><section style="${S.swipeBox}">${items}</section><p style="${s.hint}">← 左右滑动查看 ${images.length} 张 →</p>${cap}</section>`
 }
 
 function blockToHtml(block: BlockNode, resolveImg: (src: string) => string, s: Styles): string {
@@ -123,11 +218,11 @@ function blockToHtml(block: BlockNode, resolveImg: (src: string) => string, s: S
       const level = Math.min(Math.max(block.attrs.level, 1), 3)
       const inner = inlineToHtml(block.content, s)
       if (level === 1) {
-        // 居中大标题 + 强调色短横收尾（复刻编辑器 h1::after，公众号剥伪元素故用真实块）
+        // 大标题：bar 短横收尾 / pill 胶囊 / underline 下划线（公众号剥伪元素故用真实 DOM 还原）
         return `<section style="${s.h1Wrap}"><h1 style="${s.h1}">${inner}</h1><div style="${s.h1Bar}"></div></section>`
       }
       if (level === 3) {
-        // 强调色菱形前缀（复刻编辑器 h3::before）
+        // 前缀标记：菱形 / 圆点 / 无
         return `<h3 style="${s.h3}"><span style="${s.h3Diamond}"></span>${inner}</h3>`
       }
       return `<h2 style="${s.h2}">${inner}</h2>`
@@ -137,23 +232,27 @@ function blockToHtml(block: BlockNode, resolveImg: (src: string) => string, s: S
       return inner.trim() ? `<p style="${s.p}">${inner}</p>` : ''
     }
     case 'blockquote': {
+      // quotes 风格：首行前加大引号（公众号无伪元素，用真实字符还原）
       const paras = block.content
         .map(
           (p: ParagraphNode, i: number) =>
             `<p style="${i === block.content.length - 1 ? s.quotePLast : s.quoteP}">${inlineToHtml(p.content, s)}</p>`
         )
         .join('')
-      return `<blockquote style="${s.blockquote}">${paras}</blockquote>`
+      const mark = s.quoteMark
+        ? `<p style="${s.quoteMark}">❝</p>`
+        : ''
+      return `<blockquote style="${s.blockquote}">${mark}${paras}</blockquote>`
     }
     case 'horizontalRule':
       return `<hr style="${s.hr}">`
     case 'figureImage': {
       const { src, alt, caption } = block.attrs
-      const cap = caption ? `<p style="${S.caption}">${escapeHtml(caption)}</p>` : ''
-      return `<section style="${S.figure}"><img src="${escapeHtml(resolveImg(src))}" alt="${escapeHtml(alt)}" style="${S.img}">${cap}</section>`
+      const cap = caption ? `<p style="${s.caption}">${escapeHtml(caption)}</p>` : ''
+      return `<section style="${S.figure}"><img src="${escapeHtml(resolveImg(src))}" alt="${escapeHtml(alt)}" style="${s.img}">${cap}</section>`
     }
     case 'figureGallery':
-      return galleryToHtml(block.attrs, resolveImg)
+      return galleryToHtml(block.attrs, resolveImg, s)
     case 'figSuggest':
       return '' // 占位卡是工作过程产物，不导出
   }

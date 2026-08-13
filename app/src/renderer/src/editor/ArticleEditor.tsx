@@ -368,17 +368,91 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
         <EditorContent
           editor={editor}
           className="article-editor selectable h-full"
-          // 分类调性变量注入：缺省回 CSS 内置默认值（默认调性）
+          // 分类调性变量注入：缺省回 CSS 内置默认值（默认调性），结构级风格与导出 HTML 同源
           style={(() => {
             const t = theme ?? DEFAULT_THEME
+            const accent = isHexColor(t.accent) ? t.accent : DEFAULT_THEME.accent
+            const headingColor = t.headingColor ?? (t.bodyBg ? '#eef2f7' : '')
             const vars: Record<string, string> = {
-              '--article-accent': isHexColor(t.accent) ? t.accent : DEFAULT_THEME.accent,
+              '--article-accent': accent,
               '--article-font': t.fontFamily,
               '--article-lh': String(t.lineHeight),
               '--article-ls': t.letterSpacing,
-              '--article-h-align': t.headingAlign
+              '--article-h-align': t.headingAlign,
+              // 结构级：背景卡片 / 段距 / 图片圆角 / 标题色
+              '--article-body-bg': t.bodyBg ?? 'transparent',
+              '--article-body-text': t.bodyText ?? '',
+              '--article-body-radius': `${t.bodyRadius ?? 0}px`,
+              '--article-body-pad': t.bodyPadding ?? '',
+              '--article-p-gap': `${t.pGap ?? 16}px`,
+              '--article-img-radius': `${t.imgRadius ?? 4}px`,
+              '--article-heading-color': headingColor
             }
             if (t.headingAlign === 'left') vars['--article-bar-left'] = '0'
+            // H1 装饰：pill 胶囊色块 / underline 下划线（bar 用 CSS 默认短横）
+            const h1 = t.h1Style ?? 'bar'
+            if (h1 === 'pill') {
+              vars['--article-h1-bg'] = accent
+              vars['--article-h1-color'] = '#fff'
+              vars['--article-h1-display'] = 'inline-block'
+              vars['--article-h1-pad'] = '6px 22px'
+              vars['--article-h1-radius'] = '9999px'
+              vars['--article-h1-bar'] = 'none'
+            } else if (h1 === 'underline') {
+              vars['--article-h1-border'] = `3px solid ${accent}`
+              vars['--article-h1-pad'] = '0 0 10px'
+              vars['--article-h1-bar'] = 'none'
+              if (t.headingAlign === 'left') vars['--article-h1-display'] = 'inline-block'
+            }
+            // H2 装饰：block 色块标签 / underline 下划线 / plain 纯文字（leftbar 用 CSS 默认竖条）
+            const h2 = t.h2Style ?? 'leftbar'
+            if (h2 === 'block') {
+              vars['--article-h2-bg'] = accent
+              vars['--article-h2-color'] = '#fff'
+              vars['--article-h2-left'] = 'none'
+              vars['--article-h2-pad'] = '3px 14px'
+              vars['--article-h2-radius'] = '6px'
+              vars['--article-h2-display'] = 'inline-block'
+            } else if (h2 === 'underline') {
+              vars['--article-h2-border'] = `2px solid ${accent}`
+              vars['--article-h2-left'] = 'none'
+              vars['--article-h2-pad'] = '0 0 8px'
+            } else if (h2 === 'plain') {
+              vars['--article-h2-left'] = 'none'
+              vars['--article-h2-pl'] = '0'
+            }
+            // H3 前缀：dot 圆点 / none 无（diamond 用 CSS 默认菱形）
+            const mark = t.h3Mark ?? 'diamond'
+            if (mark === 'dot') vars['--article-mark-radius'] = '50%'
+            else if (mark === 'none') vars['--article-mark-display'] = 'none'
+            // 引用：card 圆角卡片 / quotes 引号（leftbar 用 CSS 默认左条）
+            const quote = t.quoteStyle ?? 'leftbar'
+            if (quote === 'card') {
+              vars['--article-quote-left'] = 'none'
+              vars['--article-quote-radius'] = '12px'
+              vars['--article-quote-pad'] = '14px 16px'
+              vars['--article-quote-bg'] = `color-mix(in srgb, ${accent} 12%, transparent)`
+            } else if (quote === 'quotes') {
+              vars['--article-quote-mark'] = '❝'
+            }
+            // 分隔线：dot 圆点列 / long 通栏细线（line 用 CSS 默认短横）
+            const hr = t.hrStyle ?? 'line'
+            if (hr === 'dot') {
+              vars['--article-hr-border'] = `4px dotted ${accent}`
+              vars['--article-hr-w'] = '72px'
+            } else if (hr === 'long') {
+              vars['--article-hr-w'] = '100%'
+            }
+            // 加粗：highlight 底色高亮 / plain 纯加粗（color 用 CSS 默认着色）
+            const strong = t.strongStyle ?? 'color'
+            if (strong === 'highlight') {
+              vars['--article-strong-bg'] = t.strongBg && isHexColor(t.strongBg) ? t.strongBg : '#fef3c7'
+              vars['--article-strong-color'] = t.bodyBg ? '#f5f5f4' : '#333'
+              vars['--article-strong-pad'] = '1px 6px'
+              vars['--article-strong-radius'] = '4px'
+            } else if (strong === 'plain') {
+              vars['--article-strong-color'] = 'inherit'
+            }
             return vars as CSSProperties
           })()}
         />
