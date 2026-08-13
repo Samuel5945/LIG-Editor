@@ -2,6 +2,63 @@ import type { CardDeck, CardFormat } from './cards'
 
 /** 全局共享类型：领域模型 + IPC 契约（主/渲染进程共用） */
 
+// ---------- 排版调性（分类排版，见 categoryThemes.ts 的预设与解析） ----------
+
+/** H1 大标题装饰 */
+export type H1Style = 'bar' | 'pill' | 'underline'
+/** H2 小节标题装饰 */
+export type H2Style = 'leftbar' | 'block' | 'underline' | 'plain'
+/** H3 子标题前缀标记 */
+export type H3Mark = 'diamond' | 'dot' | 'none'
+/** 引用形态 */
+export type QuoteStyle = 'leftbar' | 'card' | 'quotes'
+/** 分隔线形态 */
+export type HrStyle = 'line' | 'dot' | 'long'
+/** 加粗强调方式 */
+export type StrongStyle = 'color' | 'highlight' | 'plain'
+
+export interface ArticleTheme {
+  /** 强调色：H1 短横 / H2 竖条 / H3 菱形 / 引用边线 / 加粗词 */
+  accent: string
+  /** 正文字体族 */
+  fontFamily: string
+  /** 正文行高 */
+  lineHeight: number
+  /** 字距 */
+  letterSpacing: string
+  /** H1 对齐：center 仪式感居中 / left 干练左对齐 */
+  headingAlign: 'center' | 'left'
+  // ---- 结构级排版风格（爆款范式），缺省回退经典排版 ----
+  /** 正文容器背景色（如深色卡片 / 暖白卡片）；不设则透明白底 */
+  bodyBg?: string
+  /** 正文文字色（深底卡片需浅色文字） */
+  bodyText?: string
+  /** 标题文字色（卡片底色不同需显式指定，缺省按 bodyBg 深/浅自适应） */
+  headingColor?: string
+  /** 正文容器圆角 */
+  bodyRadius?: number
+  /** 正文容器内边距 */
+  bodyPadding?: string
+  /** H1 装饰：bar 经典短横 / pill 胶囊色块字底 / underline 下划线 */
+  h1Style?: H1Style
+  /** H2 装饰：leftbar 左竖条 / block 色块标签 / underline 下划线 / plain 纯文字 */
+  h2Style?: H2Style
+  /** H3 前缀：diamond 菱形 / dot 圆点 / none 无 */
+  h3Mark?: H3Mark
+  /** 引用形态：leftbar 左条浅底 / card 圆角卡片 / quotes 引号 */
+  quoteStyle?: QuoteStyle
+  /** 分隔线：line 居中短横 / dot 圆点列 / long 通栏细线 */
+  hrStyle?: HrStyle
+  /** 加粗强调：color 着色 / highlight 底色高亮 / plain 纯黑加粗 */
+  strongStyle?: StrongStyle
+  /** highlight 加粗的底色（配 strongStyle: 'highlight'） */
+  strongBg?: string
+  /** 图片圆角 px */
+  imgRadius?: number
+  /** 段落间距 px */
+  pGap?: number
+}
+
 // ---------- 领域模型（PRD §4） ----------
 
 export type ProjectStatus = 'ideating' | 'drafting' | 'reviewing' | 'ready'
@@ -326,6 +383,12 @@ export interface IpcApi {
   'cards:archiveRead': (project: string, format: CardFormat) => CardDeck | null
   /** 把一份 deck 存档（转风格/互切前保留原版） */
   'cards:archiveWrite': (project: string, deck: CardDeck) => void
+  // ---- 自定义排版主题库（导入 HTML/公众号链接复用排版）----
+  'customTheme:list': () => Record<string, ArticleTheme>
+  'customTheme:save': (name: string, theme: ArticleTheme) => void
+  'customTheme:delete': (name: string) => void
+  /** 抓取链接 HTML（导入公众号文章排版） */
+  'customTheme:fetchUrl': (url: string) => string
 }
 
 export type IpcChannel = keyof IpcApi

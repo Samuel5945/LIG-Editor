@@ -1,6 +1,6 @@
 import type { ArticleDoc, BlockNode, FigureGalleryAttrs, InlineNode, ParagraphNode } from './markdown'
 import { isHexColor } from './cards'
-import { DEFAULT_THEME, type ArticleTheme } from './categoryThemes'
+import { DEFAULT_THEME, contrastText, type ArticleTheme } from './categoryThemes'
 
 /**
  * article.md → 公众号可粘贴 HTML（M7 导出）
@@ -66,7 +66,7 @@ function buildStyles(theme?: ArticleTheme): Styles {
   const textColor = dark ? t.bodyText ?? '#cbd5e1' : '#333'
   const headingColor = t.headingColor ?? (dark ? '#eef2f7' : '#1a1a1a')
   const subColor = dark ? t.headingColor ?? '#c7d2e0' : '#1a1a1a'
-  const quoteColor = dark ? '#9fb0c3' : '#777'
+  const quoteColor = dark ? '#9fb0c3' : '#6b7280'
   const quoteBg = dark ? 'rgba(255,255,255,0.07)' : '#f7f7f7'
   const captionColor = dark ? '#8fa0b3' : '#888'
   const pGap = t.pGap ?? 16
@@ -92,7 +92,7 @@ function buildStyles(theme?: ArticleTheme): Styles {
   // H1 装饰：bar 经典短横 / pill 胶囊色块字底 / underline 下划线
   const h1Style = t.h1Style ?? 'bar'
   if (h1Style === 'pill') {
-    s.h1 = `font-size:26px;font-weight:bold;color:#fff;line-height:1.375;letter-spacing:0.025em;margin:32px 0 0;display:inline-block;background:${c};border-radius:9999px;padding:6px 22px;`
+    s.h1 = `font-size:26px;font-weight:bold;color:${contrastText(c)};line-height:1.375;letter-spacing:0.025em;margin:32px 0 0;display:inline-block;background:${c};border-radius:9999px;padding:6px 22px;`
     s.h1Bar = 'display:none;'
   } else if (h1Style === 'underline') {
     s.h1 = `font-size:26px;font-weight:bold;color:${headingColor};line-height:1.375;letter-spacing:0.025em;margin:32px 0 0;border-bottom:3px solid ${c};padding-bottom:10px;`
@@ -107,7 +107,7 @@ function buildStyles(theme?: ArticleTheme): Styles {
   // H2 装饰：leftbar 左竖条 / block 色块标签 / underline 下划线 / plain 纯文字
   const h2Style = t.h2Style ?? 'leftbar'
   if (h2Style === 'block') {
-    s.h2 = `font-size:20px;font-weight:bold;color:#fff;line-height:1.375;margin:40px 0 16px;display:inline-block;background:${c};border-radius:6px;padding:3px 14px;`
+    s.h2 = `font-size:20px;font-weight:bold;color:${contrastText(c)};line-height:1.375;margin:40px 0 16px;display:inline-block;background:${c};border-radius:6px;padding:3px 14px;`
   } else if (h2Style === 'underline') {
     s.h2 = `font-size:20px;font-weight:bold;color:${subColor};line-height:1.375;margin:40px 0 16px;border-bottom:2px solid ${c};padding-bottom:8px;`
   } else if (h2Style === 'plain') {

@@ -16,6 +16,7 @@ import { readCards, writeCards, renderCard, readArchivedCards, writeArchivedCard
 import { exportArticleHtml, copyArticleRich } from './exporter'
 import { getWechatSettings, setWechatSettings } from './wechatStore'
 import { pushDraft, pushCards, invalidateToken, getPublicIp } from './wechatPublish'
+import { listCustomThemes, saveCustomTheme, deleteCustomTheme, fetchUrlHtml } from './themeStore'
 
 /** 类型安全的 handle 注册：通道名与出入参由 IpcApi 单一来源约束 */
 function handle<C extends keyof IpcApi>(
@@ -157,6 +158,12 @@ export function registerIpc(): void {
   handle('wechat:push-draft', ({ project }) => pushDraft(project))
   handle('wechat:push-cards', ({ project }) => pushCards(project))
   handle('wechat:public-ip', () => getPublicIp())
+
+  // ---- 自定义排版主题库（导入 HTML/公众号链接复用排版）----
+  handle('customTheme:list', () => listCustomThemes())
+  handle('customTheme:save', (name, theme) => saveCustomTheme(name, theme))
+  handle('customTheme:delete', (name) => deleteCustomTheme(name))
+  handle('customTheme:fetchUrl', async (url) => fetchUrlHtml(url))
 }
 
 /** 生成一键接入卡片：MCP stdio 由纯 Node 代理脚本承接（Windows 下 Electron 主进程无管道 stdio） */

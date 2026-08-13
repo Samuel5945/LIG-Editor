@@ -13,7 +13,7 @@ import StarterKit from '@tiptap/starter-kit'
 import type { JSONContent } from '@tiptap/react'
 import { mdToDoc, docToMd, type ArticleDoc } from '@shared/markdown'
 import { isHexColor } from '@shared/cards'
-import { DEFAULT_THEME, type ArticleTheme } from '@shared/categoryThemes'
+import { DEFAULT_THEME, contrastText, type ArticleTheme } from '@shared/categoryThemes'
 import { FigureImage, type FigureImageStorage } from './FigureImage'
 import { FigSuggest, type FigSuggestStorage } from './FigSuggest'
 import { FigureGallery } from './FigureGallery'
@@ -393,7 +393,7 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
             const h1 = t.h1Style ?? 'bar'
             if (h1 === 'pill') {
               vars['--article-h1-bg'] = accent
-              vars['--article-h1-color'] = '#fff'
+              vars['--article-h1-color'] = contrastText(accent)
               vars['--article-h1-display'] = 'inline-block'
               vars['--article-h1-pad'] = '6px 22px'
               vars['--article-h1-radius'] = '9999px'
@@ -408,7 +408,7 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
             const h2 = t.h2Style ?? 'leftbar'
             if (h2 === 'block') {
               vars['--article-h2-bg'] = accent
-              vars['--article-h2-color'] = '#fff'
+              vars['--article-h2-color'] = contrastText(accent)
               vars['--article-h2-left'] = 'none'
               vars['--article-h2-pad'] = '3px 14px'
               vars['--article-h2-radius'] = '6px'
@@ -427,6 +427,7 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
             else if (mark === 'none') vars['--article-mark-display'] = 'none'
             // 引用：card 圆角卡片 / quotes 引号（leftbar 用 CSS 默认左条）
             const quote = t.quoteStyle ?? 'leftbar'
+            vars['--article-quote-color'] = t.bodyBg ? '#9fb0c3' : '#6b7280'
             if (quote === 'card') {
               vars['--article-quote-left'] = 'none'
               vars['--article-quote-radius'] = '12px'

@@ -172,11 +172,12 @@ body {
 }
 /* 引用：左条浅底 / 圆角卡片 / 引号，从正文里浮出来 */
 .article-editor .ProseMirror blockquote {
-  @apply my-5 py-2 pr-3 text-slate-400;
+  @apply my-5 py-2 pr-3;
   padding: var(--article-quote-pad, 0.5rem 0.75rem 0.5rem 1rem);
   border-radius: var(--article-quote-radius, 0 8px 8px 0);
   border-left: var(--article-quote-left, 4px solid color-mix(in srgb, var(--article-accent, #4f8cff) 60%, transparent));
   background: var(--article-quote-bg, rgb(30 41 59 / 0.6));
+  color: var(--article-quote-color, #94a3b8);
 }
 .article-editor .ProseMirror blockquote::before {
   content: var(--article-quote-mark, '');

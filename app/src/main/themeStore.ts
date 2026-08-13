@@ -1,0 +1,68 @@
+import { net } from 'electron'
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs'
+import { join } from 'path'
+import type { ArticleTheme } from '@shared/types'
+import { getAppPaths } from './paths'
+
+/**
+ * 自定义排版主题库：settings/customThemes.json（随根目录迁移，与 wechat.json 同级）。
+ * 保存主题时自动在 workspace 下建同名分类目录，工程即可在分类下拉里选它、套用该排版。
+ */
+
+function themesFile(): string {
+  return join(getAppPaths().settings, 'customThemes.json')
+}
+
+export function listCustomThemes(): Record<string, ArticleTheme> {
+  try {
+    const raw = JSON.parse(readFileSync(themesFile(), 'utf8'))
+    return raw && typeof raw === 'object' ? raw : {}
+  } catch {
+    return {}
+  }
+}
+
+function writeThemes(themes: Record<string, ArticleTheme>): void {
+  writeFileSync(themesFile(), JSON.stringify(themes, null, 2), 'utf8')
+}
+
+/** 校验分类名（与 projectStore.assertCategoryName 同规则，避免目录穿越） */
+export function validateThemeName(name: string): void {
+  if (
+    !name ||
+    name !== name.trim() ||
+    /[\\/:*?"<>|]/.test(name) ||
+    name.includes('..') ||
+    name.endsWith('.')
+  ) {
+    throw new Error(`非法分类名：${name}`)
+  }
+}
+
+export function saveCustomTheme(name: string, theme: ArticleTheme): void {
+  validateThemeName(name)
+  const themes = listCustomThemes()
+  themes[name] = theme
+  writeThemes(themes)
+  // 自动建同名分类目录：分类下拉即可选到，选中即套用该排版
+  const catDir = join(getAppPaths().workspace, name)
+  if (!existsSync(catDir)) mkdirSync(catDir, { recursive: true })
+}
+
+export function deleteCustomTheme(name: string): void {
+  const themes = listCustomThemes()
+  if (name in themes) {
+    delete themes[name]
+    writeThemes(themes)
+  }
+}
+
+/** 抓取公众号文章/网页 HTML（导入排版的链接入口） */
+export async function fetchUrlHtml(url: string): Promise<string> {
+  if (!/^https?:\/\//i.test(url)) throw new Error('仅支持 http/https 链接')
+  const res = await net.fetch(url, { redirect: 'follow' })
+  if (!res.ok) throw new Error(`抓取失败：HTTP ${res.status}`)
+  const text = await res.text()
+  if (text.length > 3_000_000) throw new Error('页面过大（>3MB），请改用复制正文 HTML')
+  return text
+}

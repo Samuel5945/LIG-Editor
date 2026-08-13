@@ -1,6 +1,7 @@
-import type { ProjectMeta } from './types'
+import type { ProjectMeta, ArticleTheme } from './types'
 import { isHexColor } from './cards'
 import { UNCATEGORIZED } from './categories'
+export type { ArticleTheme, H1Style, H2Style, H3Mark, QuoteStyle, HrStyle, StrongStyle } from './types'
 
 /**
  * 分类调性：不同分类套用不同排版气质（强调色 / 字体 / 行高 / 字距 / 标题对齐 /
@@ -8,66 +9,29 @@ import { UNCATEGORIZED } from './categories'
  * 解析链：项目显式强调色（meta.accent，用户手动选色） > 分类调性 > 默认调性。
  * 自定义分类无预设调性 → 回落默认。编辑器与导出 HTML 共用同一主题对象，所见即所得。
  * 新增结构级风格字段全部可选：缺省回退「默认调性」的经典排版，向后兼容。
+ * ArticleTheme 类型定义在 shared/types.ts（IPC 契约也要引用，避免循环依赖）。
  */
-
-/** H1 大标题装饰 */
-export type H1Style = 'bar' | 'pill' | 'underline'
-/** H2 小节标题装饰 */
-export type H2Style = 'leftbar' | 'block' | 'underline' | 'plain'
-/** H3 子标题前缀标记 */
-export type H3Mark = 'diamond' | 'dot' | 'none'
-/** 引用形态 */
-export type QuoteStyle = 'leftbar' | 'card' | 'quotes'
-/** 分隔线形态 */
-export type HrStyle = 'line' | 'dot' | 'long'
-/** 加粗强调方式 */
-export type StrongStyle = 'color' | 'highlight' | 'plain'
-
-export interface ArticleTheme {
-  /** 强调色：H1 短横 / H2 竖条 / H3 菱形 / 引用边线 / 加粗词 */
-  accent: string
-  /** 正文字体族 */
-  fontFamily: string
-  /** 正文行高 */
-  lineHeight: number
-  /** 字距 */
-  letterSpacing: string
-  /** H1 对齐：center 仪式感居中 / left 干练左对齐 */
-  headingAlign: 'center' | 'left'
-  // ---- 结构级排版风格（爆款范式），缺省回退经典排版 ----
-  /** 正文容器背景色（如深色卡片 / 暖白卡片）；不设则透明白底 */
-  bodyBg?: string
-  /** 正文文字色（深底卡片需浅色文字） */
-  bodyText?: string
-  /** 标题文字色（卡片底色不同需显式指定，缺省按 bodyBg 深/浅自适应） */
-  headingColor?: string
-  /** 正文容器圆角 */
-  bodyRadius?: number
-  /** 正文容器内边距 */
-  bodyPadding?: string
-  /** H1 装饰：bar 经典短横 / pill 胶囊色块字底 / underline 下划线 */
-  h1Style?: H1Style
-  /** H2 装饰：leftbar 左竖条 / block 色块标签 / underline 下划线 / plain 纯文字 */
-  h2Style?: H2Style
-  /** H3 前缀：diamond 菱形 / dot 圆点 / none 无 */
-  h3Mark?: H3Mark
-  /** 引用形态：leftbar 左条浅底 / card 圆角卡片 / quotes 引号 */
-  quoteStyle?: QuoteStyle
-  /** 分隔线：line 居中短横 / dot 圆点列 / long 通栏细线 */
-  hrStyle?: HrStyle
-  /** 加粗强调：color 着色 / highlight 底色高亮 / plain 纯黑加粗 */
-  strongStyle?: StrongStyle
-  /** highlight 加粗的底色（配 strongStyle: 'highlight'） */
-  strongBg?: string
-  /** 图片圆角 px */
-  imgRadius?: number
-  /** 段落间距 px */
-  pGap?: number
-}
 
 const SANS = '"Microsoft YaHei", "PingFang SC", system-ui, sans-serif'
 const SERIF = '"Source Han Serif SC", "Noto Serif SC", "STSong", "SimSun", serif'
 const MONO = '"Cascadia Code", "JetBrains Mono", Consolas, monospace'
+
+/**
+ * 按背景色亮度自动选前景色：亮底深字 / 暗底白字（保证 WCAG AA 级对比度）。
+ * 阈值 0.35：橙色(#f59e0b)/荧光青(#22d3ee) 等中亮色用深字（对比 6:1+），
+ * 深蓝/紫/红等低亮度用白字。用于 pill 胶囊 / block 色块标题等色块场景。
+ */
+export function contrastText(bg: string): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec(bg.trim())
+  if (!m) return '#ffffff'
+  const n = parseInt(m[1], 16)
+  const r = ((n >> 16) & 0xff) / 255
+  const g = ((n >> 8) & 0xff) / 255
+  const b = (n & 0xff) / 255
+  const lin = (v: number) => (v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4))
+  const L = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
+  return L > 0.35 ? '#2b2b2b' : '#ffffff'
+}
 
 /** 默认调性：与编辑器/导出历史排版完全一致（蓝强调色、黑体、2.13 行高、居中大标题） */
 export const DEFAULT_THEME: ArticleTheme = {
@@ -177,9 +141,16 @@ export const CATEGORY_THEMES: Record<string, ArticleTheme> = {
   [UNCATEGORIZED]: DEFAULT_THEME
 }
 
-/** 解析工程最终排版调性：分类调性打底，项目显式强调色覆盖颜色 */
-export function resolveArticleTheme(meta: Pick<ProjectMeta, 'accent' | 'category'> | null | undefined): ArticleTheme {
-  const base = (meta?.category && CATEGORY_THEMES[meta.category]) || DEFAULT_THEME
+/**
+ * 解析工程最终排版调性：分类调性打底，项目显式强调色覆盖颜色。
+ * custom 为运行时加载的自定义主题库（settings/customThemes.json，优先级高于预设分类）。
+ */
+export function resolveArticleTheme(
+  meta: Pick<ProjectMeta, 'accent' | 'category'> | null | undefined,
+  custom?: Record<string, ArticleTheme>
+): ArticleTheme {
+  const cat = meta?.category
+  const base = (cat && (custom?.[cat] ?? CATEGORY_THEMES[cat])) || DEFAULT_THEME
   const accent = meta?.accent && isHexColor(meta.accent) ? meta.accent.trim() : base.accent
   return { ...base, accent }
 }

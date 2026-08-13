@@ -12,6 +12,21 @@ import { migrateWorkspaceLayout } from './projectStore'
 // Windows 下 Electron 主进程拿不到管道 stdin/stdout（electron#4218），MCP stdio 由纯 Node 代理承接后转 HTTP 进来
 const MCP_MODE = process.argv.includes('--mcp')
 
+// 单实例锁：双击快捷方式重复启动时不新建主程序，把已打开的窗口置顶聚焦
+// （MCP 无头模式可多开，不抢锁）
+const gotSingleInstanceLock = MCP_MODE || app.requestSingleInstanceLock()
+if (!gotSingleInstanceLock) {
+  app.quit()
+} else {
+  app.on('second-instance', () => {
+    const win = BrowserWindow.getAllWindows()[0]
+    if (win) {
+      if (win.isMinimized()) win.restore()
+      win.show()
+      win.focus()
+    }
+  })
+
 // asset://file/<encodeURIComponent(绝对路径)> —— 渲染进程加载本地图片用（http 源不能直接读 file://）
 protocol.registerSchemesAsPrivileged([
   { scheme: 'asset', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }
@@ -102,3 +117,4 @@ app.on('will-quit', () => stopBridge())
 app.on('window-all-closed', () => {
   if (!MCP_MODE && process.platform !== 'darwin') app.quit()
 })
+}

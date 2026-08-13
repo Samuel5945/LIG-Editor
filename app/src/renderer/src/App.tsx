@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { AppPaths, IdeaCard, ProjectData, ProjectMeta, ProjectSummary, SkillInfo } from '@shared/types'
+import type { AppPaths, ArticleTheme, IdeaCard, ProjectData, ProjectMeta, ProjectSummary, SkillInfo } from '@shared/types'
 import { PROJECT_CATEGORIES, UNCATEGORIZED } from '@shared/categories'
 import { resolveArticleTheme } from '@shared/categoryThemes'
 import { CARD_FORMAT_LABEL, parseCardItems, type CardFormat } from '@shared/cards'
@@ -15,6 +15,7 @@ import ModifyDialog from './components/ModifyDialog'
 import PolishDialog from './components/PolishDialog'
 import FigureDialog, { type FigureRequest } from './components/FigureDialog'
 import ExportDialog from './components/ExportDialog'
+import ThemeImportDialog from './components/ThemeImportDialog'
 import ReviewPanel from './components/ReviewPanel'
 import CardsReviewPanel from './components/CardsReviewPanel'
 import TitleCoverPanel from './components/TitleCoverPanel'
@@ -86,6 +87,10 @@ export default function App(): JSX.Element {
   // 新建分类内联输入（Electron 不支持 window.prompt，用行内输入框代替）
   const [newCatFor, setNewCatFor] = useState<string | null>(null)
   const [newCatName, setNewCatName] = useState('')
+  // 自定义排版主题库（settings/customThemes.json）：分类调性打底时的最高优先覆盖
+  const [customThemes, setCustomThemes] = useState<Record<string, ArticleTheme>>({})
+  // 导入排版弹窗（粘贴 HTML / 公众号链接复用排版）
+  const [showThemeImport, setShowThemeImport] = useState(false)
   const editorRef = useRef<ArticleEditorHandle>(null)
   // 贴图面板句柄：右栏贴图审阅的落盘/优化/定位经这里转发
   const cardsRef = useRef<CardsPanelHandle>(null)
@@ -102,8 +107,8 @@ export default function App(): JSX.Element {
 
   const dirty = article !== saved
 
-  /** 排版调性：分类调性打底、项目显式强调色覆盖（meta 变化即时跟换） */
-  const articleTheme = useMemo(() => resolveArticleTheme(meta), [meta])
+  /** 排版调性：自定义主题 > 分类调性 > 默认（meta 变化即时跟换） */
+  const articleTheme = useMemo(() => resolveArticleTheme(meta, customThemes), [meta, customThemes])
 
   /** 当前工程真实目录（分类布局后在 workspace/<分类>/<工程名>/，不能再用 workspace 根拼接） */
   const currentDir = useMemo(() => projects.find((p) => p.name === current)?.dir ?? '', [projects, current])
@@ -140,6 +145,7 @@ export default function App(): JSX.Element {
     window.api.invoke('app:getPaths').then(setPaths)
     refreshSkills()
     refreshProjects()
+    window.api.invoke('customTheme:list').then(setCustomThemes)
   }, [refreshProjects, refreshSkills])
 
   // ---- Skill 挂载：读 SKILL.md 全文注入系统提示；随工程持久化到 meta.style_skill ----
@@ -771,6 +777,13 @@ export default function App(): JSX.Element {
                   ✦ 排版优化
                 </button>
                 <button
+                  onClick={() => setShowThemeImport(true)}
+                  title="粘贴公众号 HTML 或链接，复用它的排版"
+                  className="rounded px-2 py-0.5 hover:bg-panel-3"
+                >
+                  🎨 排版
+                </button>
+                <button
                   onClick={handleOpenExport}
                   disabled={!article.trim()}
                   className="rounded px-2 py-0.5 hover:bg-panel-3 disabled:opacity-40"
@@ -1097,6 +1110,19 @@ export default function App(): JSX.Element {
           theme={articleTheme}
           onToast={setToast}
           onClose={() => setShowExport(false)}
+        />
+      )}
+
+      {/* 导入排版弹窗（复用公众号/网页排版） */}
+      {showThemeImport && (
+        <ThemeImportDialog
+          onClose={() => setShowThemeImport(false)}
+          onToast={setToast}
+          onSaved={async (name) => {
+            setCustomThemes(await window.api.invoke('customTheme:list'))
+            refreshProjects()
+            setFilterCat(name)
+          }}
         />
       )}
 
