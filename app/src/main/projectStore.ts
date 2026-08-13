@@ -20,7 +20,7 @@ import type {
   ProjectSummary,
   ProjectTextFile
 } from '@shared/types'
-import { UNCATEGORIZED, isKnownCategory } from '@shared/categories'
+import { UNCATEGORIZED, PROJECT_CATEGORIES, isKnownCategory } from '@shared/categories'
 import { getAppPaths } from './paths'
 
 /** 工程目录约定（PRD §4）：article.md 为唯一事实源 */
@@ -122,6 +122,37 @@ export function projectDir(name: string): string {
   return join(getAppPaths().workspace, name)
 }
 
+// ---------- 分类（预设 + 自定义：workspace 顶层目录即分类文件夹） ----------
+
+/** 分类名校验：预设分类直接可用；自定义需为安全目录名且不与现有工程名冲突 */
+function assertCategoryName(category: string): void {
+  if (
+    !category ||
+    /[\\/:*?"<>|]/.test(category) ||
+    category.includes('..') ||
+    category !== category.trim() ||
+    category.endsWith('.')
+  ) {
+    throw new Error(`非法分类名：${category}`)
+  }
+  if (category === UNCATEGORIZED || (PROJECT_CATEGORIES as readonly string[]).includes(category)) return
+  if (resolveDir(category)) throw new Error(`不能以工程名作为分类名：${category}`)
+}
+
+/** 全部可用分类：预设 + 未分类 + workspace 顶层自定义分类文件夹（按文件夹发现） */
+export function listCategories(): string[] {
+  const { workspace } = getAppPaths()
+  const cats = new Set<string>([...PROJECT_CATEGORIES, UNCATEGORIZED])
+  if (existsSync(workspace)) {
+    for (const entry of readdirSync(workspace, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue
+      // 顶层目录：含 project.json 的是工程目录，其余都是分类文件夹
+      if (!existsSync(join(workspace, entry.name, 'project.json'))) cats.add(entry.name)
+    }
+  }
+  return [...cats]
+}
+
 function metaPath(name: string): string {
   return join(projectDir(name), 'project.json')
 }
@@ -177,7 +208,11 @@ export function createProject(name: string, category?: string): ProjectSummary {
   name = sanitizeProjectName(name)
   assertSafeName(name)
   if (resolveDir(name)) throw new Error(`工程已存在：${name}`)
-  const cat = category && isKnownCategory(category) ? category : UNCATEGORIZED
+  let cat = UNCATEGORIZED
+  if (category?.trim()) {
+    assertCategoryName(category.trim())
+    cat = category.trim()
+  }
   const dir = join(getAppPaths().workspace, cat, name)
   mkdirSync(dir, { recursive: true })
   for (const sub of SUB_DIRS) mkdirSync(join(dir, sub), { recursive: true })
@@ -201,9 +236,9 @@ export function deleteProject(name: string): void {
 }
 
 /** 切换分类：工程目录迁移到 workspace/<分类>/<工程名>/，并更新 meta.category。
- * 目标已有同名工程则拒绝；目录已在正确分类下只更新 meta。 */
+ * 预设与自定义分类均可；目标已有同名工程则拒绝；目录已在正确分类下只更新 meta。 */
 export function setProjectCategory(name: string, category: string): ProjectMeta {
-  if (!isKnownCategory(category)) throw new Error(`未知分类：${category}`)
+  assertCategoryName(category)
   const dir = resolveDir(name)
   if (!dir) throw new Error(`工程不存在：${name}`)
   const { workspace } = getAppPaths()
