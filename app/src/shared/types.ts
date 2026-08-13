@@ -31,6 +31,8 @@ export interface ProjectMeta {
   cover?: CoverInfo
   /** 工程形态：article 文章（默认）/ cards 贴图（中央区显示贴图面板，风格存 cards.json） */
   format?: 'article' | 'cards'
+  /** 所属分类（workspace 按分类分子文件夹存放；缺省 = 未分类） */
+  category?: string
   /** 文章强调色（十六进制）：编辑器排版装饰与导出 HTML 同步跟随；缺省 = 默认蓝 */
   accent?: string
   style_skill?: string
@@ -42,6 +44,8 @@ export interface ProjectSummary {
   name: string
   dir: string
   status: ProjectStatus
+  /** 所属分类（缺省 = 未分类） */
+  category?: string
   updated_at: string
 }
 
@@ -238,11 +242,13 @@ export interface IpcApi {
   'win:minimize': () => void
   'win:toggleMaximize': () => void
   'win:close': () => void
-  /** 扫描 workspace 下所有含 project.json 的工程 */
+  /** 扫描 workspace 全部含 project.json 的工程（含各分类子目录） */
   'project:list': () => ProjectSummary[]
-  'project:create': (name: string) => ProjectSummary
+  'project:create': (name: string, category?: string) => ProjectSummary
   /** 删除整个工程目录（渲染层需先确认；删当前工程前先 project:close） */
   'project:delete': (name: string) => void
+  /** 切换分类：工程目录迁移到 workspace/<分类>/ 下并更新 meta，返回新 meta */
+  'project:setCategory': (project: string, category: string) => ProjectMeta
   /** 打开工程：返回 meta+正文，并让主进程开始监听该工程目录 */
   'project:open': (name: string) => ProjectData
   'project:close': () => void

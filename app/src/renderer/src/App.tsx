@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { AppPaths, IdeaCard, ProjectData, ProjectMeta, ProjectSummary, SkillInfo } from '@shared/types'
+import { ALL_CATEGORIES, UNCATEGORIZED } from '@shared/categories'
 import { CARD_FORMAT_LABEL, parseCardItems, type CardFormat } from '@shared/cards'
 import { chatOnce } from './copilot/llm'
-import { cardsMessages } from './copilot/prompts'
+import { cardsMessages, categoryMessages } from './copilot/prompts'
 import ConflictDialog from './components/ConflictDialog'
 import SettingsDialog from './components/SettingsDialog'
 import IntegrationDialog from './components/IntegrationDialog'
@@ -77,6 +78,9 @@ export default function App(): JSX.Element {
   const [hasCards, setHasCards] = useState(false)
   // 脑暴入库后自增，驱动选题库自动刷新
   const [ideasVersion, setIdeasVersion] = useState(0)
+  // 项目分类：筛选条件（all = 全部）与 AI 分类进行中
+  const [filterCat, setFilterCat] = useState<string>('all')
+  const [categorizing, setCategorizing] = useState(false)
   const editorRef = useRef<ArticleEditorHandle>(null)
   // 贴图面板句柄：右栏贴图审阅的落盘/优化/定位经这里转发
   const cardsRef = useRef<CardsPanelHandle>(null)
@@ -210,6 +214,46 @@ export default function App(): JSX.Element {
     },
     [refreshProjects]
   )
+
+  // ---- 项目分类：手动切换 + AI 推荐；文件夹随分类迁移 workspace/<分类>/<工程名>/ ----
+
+  const shownProjects = useMemo(
+    () => projects.filter((p) => filterCat === 'all' || (p.category ?? UNCATEGORIZED) === filterCat),
+    [projects, filterCat]
+  )
+
+  const applyCategory = useCallback(
+    async (name: string, category: string) => {
+      try {
+        const m = await window.api.invoke('project:setCategory', name, category)
+        if (currentRef.current === name) setMeta(m)
+        refreshProjects()
+        setToast(`「${name}」已归入「${category}」，文件夹已同步移动`)
+      } catch (err) {
+        setToast(`分类失败：${err instanceof Error ? err.message : err}`)
+      }
+    },
+    [refreshProjects]
+  )
+
+  const aiCategorize = useCallback(async () => {
+    const name = currentRef.current
+    if (!name || categorizing) return
+    // 优先用正文判断；正文为空退回工程名
+    const source = articleRef.current.trim() || name
+    setCategorizing(true)
+    try {
+      const { promise } = chatOnce(categoryMessages(source, skillContent))
+      const full = await promise
+      const guess = full.trim()
+      const cat = ALL_CATEGORIES.find((c) => guess.includes(c)) ?? UNCATEGORIZED
+      await applyCategory(name, cat)
+    } catch (err) {
+      setToast(`AI 分类失败：${err instanceof Error ? err.message : err}`)
+    } finally {
+      setCategorizing(false)
+    }
+  }, [categorizing, skillContent, applyCategory])
 
   // ---- 自动保存（2s 防抖；太短会让外部冲突窗口过窄）----
 
@@ -500,33 +544,90 @@ export default function App(): JSX.Element {
           {leftTab === 'ideas' ? (
             <IdeaLibrary version={ideasVersion} onMakeOutline={handleMakeOutline} onToast={setToast} />
           ) : (
-            <div className="flex-1 overflow-auto p-2 text-xs">
-              {projects.length === 0 && <p className="mb-2 px-1 text-ink-dim">暂无项目</p>}
-              {projects.map((p) => (
-                <div
-                  key={p.name}
-                  onClick={() => openProject(p.name)}
-                  className={`group mb-1 flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left ${
-                    p.name === current ? 'bg-panel-3 text-ink' : 'text-ink-dim hover:bg-panel-3'
-                  }`}
-                >
-                  <span className="min-w-0 flex-1 truncate">{p.name}</span>
-                  <span className="shrink-0 rounded bg-panel px-1.5 py-0.5 text-[10px] group-hover:hidden">
-                    {STATUS_LABEL[p.status] ?? p.status}
-                  </span>
+            <>
+              <div className="flex flex-wrap gap-1 border-b border-panel-3 p-2">
+                {['all', ...ALL_CATEGORIES].map((c) => (
                   <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      deleteProject(p.name)
-                    }}
-                    title="删除工程"
-                    className="hidden shrink-0 rounded px-1 text-ink-dim hover:text-red-400 group-hover:block"
+                    key={c}
+                    onClick={() => setFilterCat(c)}
+                    title={c === 'all' ? '显示全部项目' : `只看「${c}」`}
+                    className={`rounded px-1.5 py-0.5 text-[10px] ${
+                      filterCat === c ? 'bg-accent text-white' : 'text-ink-dim hover:bg-panel-3'
+                    }`}
                   >
-                    🗑
+                    {c === 'all' ? '全部' : c}
                   </button>
-                </div>
-              ))}
-              {creating ? (
+                ))}
+              </div>
+              <div className="flex-1 overflow-auto p-2 text-xs">
+                {shownProjects.length === 0 && (
+                  <p className="mb-2 px-1 text-ink-dim">
+                    {projects.length === 0 ? '暂无项目' : '该分类下暂无项目'}
+                  </p>
+                )}
+                {shownProjects.map((p) => {
+                  const cat = p.category ?? UNCATEGORIZED
+                  const isCurrent = p.name === current
+                  return (
+                    <div
+                      key={p.name}
+                      onClick={() => openProject(p.name)}
+                      className={`group mb-1 cursor-pointer rounded px-2 py-1.5 text-left ${
+                        isCurrent ? 'bg-panel-3 text-ink' : 'text-ink-dim hover:bg-panel-3'
+                      }`}
+                    >
+                      <div className="flex w-full items-center gap-2">
+                        <span className="min-w-0 flex-1 truncate">{p.name}</span>
+                        {cat !== UNCATEGORIZED && (
+                          <span
+                            className="shrink-0 rounded bg-panel px-1 py-0.5 text-[10px] text-accent"
+                            title={`分类：${cat}`}
+                          >
+                            {cat}
+                          </span>
+                        )}
+                        <span className="shrink-0 rounded bg-panel px-1.5 py-0.5 text-[10px] group-hover:hidden">
+                          {STATUS_LABEL[p.status] ?? p.status}
+                        </span>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            deleteProject(p.name)
+                          }}
+                          title="删除工程"
+                          className="hidden shrink-0 rounded px-1 text-ink-dim hover:text-red-400 group-hover:block"
+                        >
+                          🗑
+                        </button>
+                      </div>
+                      {isCurrent && (
+                        <div className="mt-1.5 flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                          <select
+                            value={cat}
+                            onChange={(e) => void applyCategory(p.name, e.target.value)}
+                            title="切换分类（工程文件夹随之移动到对应分类目录）"
+                            className="min-w-0 flex-1 rounded bg-panel px-1.5 py-1 text-[11px] text-ink outline-none"
+                          >
+                            {ALL_CATEGORIES.map((c) => (
+                              <option key={c} value={c}>
+                                {c}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            onClick={() => void aiCategorize()}
+                            disabled={categorizing}
+                            title="AI 通读正文推荐分类"
+                            className="shrink-0 rounded bg-panel px-1.5 py-1 text-[11px] text-accent hover:bg-panel-2 disabled:opacity-40"
+                          >
+                            {categorizing ? '判断中…' : '✦ AI'}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+                {creating ? (
                 <div className="mt-2 flex gap-1">
                   <input
                     autoFocus
@@ -560,7 +661,8 @@ export default function App(): JSX.Element {
                   + 新建图文工程
                 </button>
               )}
-            </div>
+              </div>
+            </>
           )}
           {paths && (
             <footer

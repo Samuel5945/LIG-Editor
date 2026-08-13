@@ -1,6 +1,7 @@
 import { basename, isAbsolute, join } from 'path'
 import { existsSync, readFileSync } from 'fs'
 import type { IdeaCard, TitleCandidate } from '@shared/types'
+import { ALL_CATEGORIES } from '@shared/categories'
 import {
   brainstormMessages,
   fullArticleMessages,
@@ -71,19 +72,38 @@ const P = {
 export const TOOLS: ToolDef[] = [
   {
     name: 'list_projects',
-    description: '列出 workspace 下的全部图文工程（名称/状态/更新时间）',
+    description: '列出 workspace 下的全部图文工程（名称/状态/分类/更新时间）',
     inputSchema: { type: 'object', properties: {} },
     handler: () => store.listProjects()
   },
   {
     name: 'create_project',
-    description: '新建图文工程（自动生成 project.json 与 article.md 等骨架文件）',
+    description: '新建图文工程（自动生成 project.json 与 article.md 等骨架文件），可指定分类目录',
     inputSchema: {
       type: 'object',
-      properties: { name: { type: 'string', description: '工程名，将作为目录名' } },
+      properties: {
+        name: { type: 'string', description: '工程名，将作为目录名' },
+        category: {
+          type: 'string',
+          description: `所属分类（可选，缺省「未分类」）：${ALL_CATEGORIES.join(' / ')}`
+        }
+      },
       required: ['name']
     },
-    handler: (a) => store.createProject(str(a, 'name'))
+    handler: (a) => store.createProject(str(a, 'name'), str(a, 'category', false) || undefined)
+  },
+  {
+    name: 'set_project_category',
+    description: '调整工程分类：工程目录迁移到 workspace/<分类>/ 下并更新元数据',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project: P.project,
+        category: { type: 'string', description: `目标分类：${ALL_CATEGORIES.join(' / ')}` }
+      },
+      required: ['project', 'category']
+    },
+    handler: (a) => store.setProjectCategory(str(a, 'project'), str(a, 'category'))
   },
   {
     name: 'get_project',

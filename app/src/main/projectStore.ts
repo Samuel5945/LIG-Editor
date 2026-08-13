@@ -6,6 +6,7 @@ import {
   readFileSync,
   writeFileSync,
   appendFileSync,
+  renameSync,
   rmSync
 } from 'fs'
 import { createHash } from 'crypto'
@@ -19,6 +20,7 @@ import type {
   ProjectSummary,
   ProjectTextFile
 } from '@shared/types'
+import { UNCATEGORIZED, isKnownCategory } from '@shared/categories'
 import { getAppPaths } from './paths'
 
 /** 工程目录约定（PRD §4）：article.md 为唯一事实源 */
@@ -71,8 +73,52 @@ export function sanitizeProjectName(s: string): string {
     .replace(/[. ]+$/, '')
 }
 
-export function projectDir(name: string): string {
+// 目录布局：workspace/<分类>/<工程名>/（分类子文件夹）；兼容历史平铺 workspace/<工程名>/。
+// 工程名全局唯一，按名字解析实际目录；缓存随增删/迁移失效。
+const dirCache = new Map<string, string>()
+
+/** 全量扫描 workspace（根目录遗留工程 + 分类子目录一层），返回 工程名 → 目录 */
+function scanProjectDirs(): Map<string, string> {
+  const { workspace } = getAppPaths()
+  const found = new Map<string, string>()
+  if (!existsSync(workspace)) return found
+  for (const entry of readdirSync(workspace, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue
+    const top = join(workspace, entry.name)
+    if (existsSync(join(top, 'project.json'))) {
+      found.set(entry.name, top)
+      continue
+    }
+    // 分类目录：再向下扫一层
+    for (const sub of readdirSync(top, { withFileTypes: true })) {
+      if (!sub.isDirectory()) continue
+      const dir = join(top, sub.name)
+      if (existsSync(join(dir, 'project.json'))) found.set(sub.name, dir)
+    }
+  }
+  return found
+}
+
+function refreshDirCache(): Map<string, string> {
+  const all = scanProjectDirs()
+  dirCache.clear()
+  for (const [k, v] of all) dirCache.set(k, v)
+  return all
+}
+
+/** 按工程名解析实际目录；不存在返回 null */
+function resolveDir(name: string): string | null {
   assertSafeName(name)
+  const cached = dirCache.get(name)
+  if (cached && existsSync(join(cached, 'project.json'))) return cached
+  return refreshDirCache().get(name) ?? null
+}
+
+export function projectDir(name: string): string {
+  const dir = resolveDir(name)
+  if (dir) return dir
+  assertSafeName(name)
+  // 兜底：尚未落盘的场景（如创建前拼路径），按平铺惯例给 workspace/<名>
   return join(getAppPaths().workspace, name)
 }
 
@@ -92,6 +138,7 @@ export function readMeta(name: string): ProjectMeta {
     titles: raw.titles ?? [],
     cover: raw.cover,
     format: raw.format ?? 'article',
+    category: raw.category ?? UNCATEGORIZED,
     accent: raw.accent,
     style_skill: raw.style_skill,
     created_at: raw.created_at ?? new Date().toISOString(),
@@ -107,18 +154,16 @@ export function writeMeta(name: string, meta: ProjectMeta): void {
 // ---------- 工程 CRUD ----------
 
 export function listProjects(): ProjectSummary[] {
-  const { workspace } = getAppPaths()
-  if (!existsSync(workspace)) return []
+  const all = refreshDirCache()
   const out: ProjectSummary[] = []
-  for (const entry of readdirSync(workspace, { withFileTypes: true })) {
-    if (!entry.isDirectory()) continue
-    if (!existsSync(join(workspace, entry.name, 'project.json'))) continue
+  for (const [name, dir] of all) {
     try {
-      const meta = readMeta(entry.name)
+      const meta = readMeta(name)
       out.push({
-        name: entry.name,
-        dir: join(workspace, entry.name),
+        name,
+        dir,
         status: meta.status,
+        category: meta.category ?? UNCATEGORIZED,
         updated_at: meta.updated_at
       })
     } catch {
@@ -128,27 +173,92 @@ export function listProjects(): ProjectSummary[] {
   return out.sort((a, b) => b.updated_at.localeCompare(a.updated_at))
 }
 
-export function createProject(name: string): ProjectSummary {
+export function createProject(name: string, category?: string): ProjectSummary {
   name = sanitizeProjectName(name)
-  const dir = projectDir(name)
-  if (existsSync(join(dir, 'project.json'))) throw new Error(`工程已存在：${name}`)
+  assertSafeName(name)
+  if (resolveDir(name)) throw new Error(`工程已存在：${name}`)
+  const cat = category && isKnownCategory(category) ? category : UNCATEGORIZED
+  const dir = join(getAppPaths().workspace, cat, name)
   mkdirSync(dir, { recursive: true })
   for (const sub of SUB_DIRS) mkdirSync(join(dir, sub), { recursive: true })
 
   const now = new Date().toISOString()
-  const meta: ProjectMeta = { name, status: 'ideating', titles: [], created_at: now, updated_at: now }
+  const meta: ProjectMeta = { name, status: 'ideating', titles: [], category: cat, created_at: now, updated_at: now }
   writeTracked(join(dir, 'project.json'), JSON.stringify(meta, null, 2) + '\n')
   writeTracked(join(dir, 'article.md'), `# ${name}\n\n`)
   writeTracked(join(dir, 'ideas.md'), `# 选题脑暴：${name}\n\n`)
   writeTracked(join(dir, 'review.md'), `# 审阅报告：${name}\n\n（尚未审阅）\n`)
-  return { name, dir, status: meta.status, updated_at: now }
+  dirCache.set(name, dir)
+  return { name, dir, status: meta.status, category: cat, updated_at: now }
 }
 
 /** 删除整个工程目录（渲染层已确认；删当前工程前应先停 watcher） */
 export function deleteProject(name: string): void {
-  const dir = projectDir(name)
-  if (!existsSync(dir)) return
+  const dir = resolveDir(name)
+  dirCache.delete(name)
+  if (!dir || !existsSync(dir)) return
   rmSync(dir, { recursive: true, force: true })
+}
+
+/** 切换分类：工程目录迁移到 workspace/<分类>/<工程名>/，并更新 meta.category。
+ * 目标已有同名工程则拒绝；目录已在正确分类下只更新 meta。 */
+export function setProjectCategory(name: string, category: string): ProjectMeta {
+  if (!isKnownCategory(category)) throw new Error(`未知分类：${category}`)
+  const dir = resolveDir(name)
+  if (!dir) throw new Error(`工程不存在：${name}`)
+  const { workspace } = getAppPaths()
+  const target = join(workspace, category, name)
+  if (normalize(dir).toLowerCase() !== normalize(target).toLowerCase()) {
+    if (existsSync(target)) throw new Error(`分类「${category}」下已有同名工程：${name}`)
+    mkdirSync(join(workspace, category), { recursive: true })
+    renameSync(dir, target)
+    // 旧分类目录空了就顺手清掉
+    try {
+      const parent = normalize(join(dir, '..'))
+      if (parent.toLowerCase() !== normalize(workspace).toLowerCase() && readdirSync(parent).length === 0) {
+        rmSync(parent, { recursive: true, force: true })
+      }
+    } catch {
+      // 清理失败不影响迁移结果
+    }
+    dirCache.set(name, target)
+  }
+  const next: ProjectMeta = { ...readMeta(name), category }
+  writeMeta(name, next)
+  return next
+}
+
+/** 启动时一次性布局迁移：
+ * - 历史平铺在 workspace 根的工程挪进「未分类」目录
+ * - 已在分类目录里但 meta 没写 category 的工程按所在目录补齐 */
+export function migrateWorkspaceLayout(): void {
+  const { workspace } = getAppPaths()
+  if (!existsSync(workspace)) return
+  // 1) 根目录遗留工程 → 未分类/
+  for (const entry of readdirSync(workspace, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue
+    if (isKnownCategory(entry.name)) continue // 分类目录本身不动
+    const top = join(workspace, entry.name)
+    if (!existsSync(join(top, 'project.json'))) continue
+    const target = join(workspace, UNCATEGORIZED, entry.name)
+    if (existsSync(target)) continue // 同名冲突保持现状，人工处理
+    mkdirSync(join(workspace, UNCATEGORIZED), { recursive: true })
+    renameSync(top, target)
+  }
+  dirCache.clear()
+  // 2) 分类目录里的工程补齐 meta.category
+  for (const [name, dir] of refreshDirCache()) {
+    const folder = dir.slice(normalize(workspace).length).split(/[\\/]/).filter(Boolean)
+    if (folder.length < 2) continue
+    const cat = folder[0]
+    if (!isKnownCategory(cat)) continue
+    try {
+      const raw = JSON.parse(readFileSync(join(dir, 'project.json'), 'utf-8')) as Partial<ProjectMeta>
+      if (raw.category !== cat) writeMeta(name, { ...readMeta(name), category: cat })
+    } catch {
+      // 损坏的 meta 跳过
+    }
+  }
 }
 
 export function openProject(name: string): ProjectData {
