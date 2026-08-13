@@ -48,6 +48,22 @@ export function registerIpc(): void {
   // ---- 工程管理（M2）----
   handle('project:list', () => store.listProjects())
   handle('project:listCategories', () => store.listCategories())
+  handle('project:listHiddenCategories', () => store.listDisabledCategories())
+  handle('project:deleteCategory', (name) => store.deleteCategory(name))
+  handle('project:restoreCategory', (name) => store.restoreCategory(name))
+  handle('project:renameCategory', async (oldName, newName) => {
+    // 当前打开的工程若在被改名分类下，目录会迁移：先停监听，改名后按新路径重挂
+    const p = watchedProject
+    if (p) {
+      await stopProjectWatch()
+      watchedProject = null
+    }
+    store.renameCategory(oldName, newName)
+    if (p) {
+      watchProject(p, store.projectDir(p))
+      watchedProject = p
+    }
+  })
   handle('project:create', (name, category) => store.createProject(name, category))
   handle('project:setCategory', async (project, category) => {
     // 正在监听的工程目录被迁移：先停监听，迁移后按新路径重新挂上

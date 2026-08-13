@@ -1,6 +1,6 @@
 import type { ArticleDoc, BlockNode, FigureGalleryAttrs, InlineNode, ParagraphNode } from './markdown'
 import { isHexColor } from './cards'
-import { DEFAULT_THEME, contrastText, type ArticleTheme } from './categoryThemes'
+import { DEFAULT_THEME, contrastText, isDarkColor, type ArticleTheme } from './categoryThemes'
 
 /**
  * article.md → 公众号可粘贴 HTML（M7 导出）
@@ -62,13 +62,16 @@ function buildStyles(theme?: ArticleTheme): Styles {
   const s: Styles = { ...S, quoteMark: '', imgR: '4px' }
   const c = t.accent && isHexColor(t.accent) ? t.accent.trim() : DEFAULT_ACCENT
   const lh = t.lineHeight || 2.13
-  const dark = !!t.bodyBg // 深色卡片：标题/引用/图注整体换浅色系
-  const textColor = dark ? t.bodyText ?? '#cbd5e1' : '#333'
+  // 按背景卡片实际亮度判断深/浅（不能用「有无卡片」——暖白卡也是浅色）
+  const dark = !!t.bodyBg && isDarkColor(t.bodyBg)
+  // 正文色：有卡片用主题 bodyText（缺省按深浅兜底），无卡片白底深字
+  const textColor = t.bodyBg ? t.bodyText ?? (dark ? '#cbd5e1' : '#333') : '#333'
   const headingColor = t.headingColor ?? (dark ? '#eef2f7' : '#1a1a1a')
-  const subColor = dark ? t.headingColor ?? '#c7d2e0' : '#1a1a1a'
-  const quoteColor = dark ? '#9fb0c3' : '#6b7280'
+  const subColor = t.headingColor ?? (dark ? '#c7d2e0' : '#1a1a1a')
+  // 引用/图注/提示不再用灰字：浅底深字、深底亮字，与正文同系靠背景块区分层次
+  const quoteColor = dark ? '#cbd5e1' : '#333'
   const quoteBg = dark ? 'rgba(255,255,255,0.07)' : '#f7f7f7'
-  const captionColor = dark ? '#8fa0b3' : '#888'
+  const captionColor = dark ? '#b6c4d4' : '#555'
   const pGap = t.pGap ?? 16
   const imgR = t.imgRadius ?? 4
 

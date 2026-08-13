@@ -16,6 +16,7 @@ import PolishDialog from './components/PolishDialog'
 import FigureDialog, { type FigureRequest } from './components/FigureDialog'
 import ExportDialog from './components/ExportDialog'
 import ThemeImportDialog from './components/ThemeImportDialog'
+import CategoryManageDialog from './components/CategoryManageDialog'
 import ReviewPanel from './components/ReviewPanel'
 import CardsReviewPanel from './components/CardsReviewPanel'
 import TitleCoverPanel from './components/TitleCoverPanel'
@@ -91,6 +92,9 @@ export default function App(): JSX.Element {
   const [customThemes, setCustomThemes] = useState<Record<string, ArticleTheme>>({})
   // 导入排版弹窗（粘贴 HTML / 公众号链接复用排版）
   const [showThemeImport, setShowThemeImport] = useState(false)
+  // 分类管理弹窗 + 已删除（隐藏）分类列表
+  const [showCatManage, setShowCatManage] = useState(false)
+  const [hiddenCats, setHiddenCats] = useState<string[]>([])
   const editorRef = useRef<ArticleEditorHandle>(null)
   // 贴图面板句柄：右栏贴图审阅的落盘/优化/定位经这里转发
   const cardsRef = useRef<CardsPanelHandle>(null)
@@ -129,6 +133,7 @@ export default function App(): JSX.Element {
   const refreshProjects = useCallback(() => {
     window.api.invoke('project:list').then(setProjects)
     window.api.invoke('project:listCategories').then(setCategories)
+    window.api.invoke('project:listHiddenCategories').then(setHiddenCats)
   }, [])
 
   const refreshMeta = useCallback(async () => {
@@ -136,6 +141,18 @@ export default function App(): JSX.Element {
     if (!name) return
     setMeta(await window.api.invoke('project:readMeta', name))
   }, [])
+
+  /** 分类管理变更后的统一刷新：分类/隐藏列表/工程/主题全量重拉，失效的筛选回落「全部」 */
+  const refreshAfterCategoryChange = useCallback(() => {
+    void window.api.invoke('project:listCategories').then((cats) => {
+      setCategories(cats)
+      setFilterCat((f) => (f === 'all' || cats.includes(f) ? f : 'all'))
+    })
+    void window.api.invoke('project:listHiddenCategories').then(setHiddenCats)
+    window.api.invoke('project:list').then(setProjects)
+    window.api.invoke('customTheme:list').then(setCustomThemes)
+    void refreshMeta()
+  }, [refreshMeta])
 
   const refreshSkills = useCallback(() => {
     window.api.invoke('skill:list').then(setSkills)
@@ -576,6 +593,13 @@ export default function App(): JSX.Element {
                     {c === 'all' ? '全部' : c}
                   </button>
                 ))}
+                <button
+                  onClick={() => setShowCatManage(true)}
+                  title="分类管理：删除（隐藏）/ 恢复 / 重命名"
+                  className="ml-auto rounded px-1.5 py-0.5 text-[10px] text-ink-dim hover:bg-panel-3"
+                >
+                  ⚙️ 管理
+                </button>
               </div>
               <div className="flex-1 overflow-auto p-2 text-xs">
                 {shownProjects.length === 0 && (
@@ -635,7 +659,7 @@ export default function App(): JSX.Element {
                             title="切换分类（工程文件夹随之移动到对应分类目录）；底部可新建自定义分类"
                             className="min-w-0 flex-1 rounded bg-panel px-1.5 py-1 text-[11px] text-ink outline-none"
                           >
-                            {categories.map((c) => (
+                            {[...new Set([cat, ...categories])].map((c) => (
                               <option key={c} value={c}>
                                 {c}
                               </option>
@@ -1123,6 +1147,17 @@ export default function App(): JSX.Element {
             refreshProjects()
             setFilterCat(name)
           }}
+        />
+      )}
+
+      {/* 分类管理弹窗（删除/恢复/重命名） */}
+      {showCatManage && (
+        <CategoryManageDialog
+          categories={categories}
+          hidden={hiddenCats}
+          onClose={() => setShowCatManage(false)}
+          onToast={setToast}
+          onChanged={refreshAfterCategoryChange}
         />
       )}
 

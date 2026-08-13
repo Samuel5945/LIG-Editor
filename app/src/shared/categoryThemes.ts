@@ -17,20 +17,29 @@ const SERIF = '"Source Han Serif SC", "Noto Serif SC", "STSong", "SimSun", serif
 const MONO = '"Cascadia Code", "JetBrains Mono", Consolas, monospace'
 
 /**
- * 按背景色亮度自动选前景色：亮底深字 / 暗底白字（保证 WCAG AA 级对比度）。
- * 阈值 0.35：橙色(#f59e0b)/荧光青(#22d3ee) 等中亮色用深字（对比 6:1+），
- * 深蓝/紫/红等低亮度用白字。用于 pill 胶囊 / block 色块标题等色块场景。
+ * 背景色是否偏深（用于选前景色/引用文字色）。WCAG 相对亮度 < 0.35 视为深色。
+ * 非法输入按浅色处理（导出默认白底、编辑器默认深底由调用方按场景兜底）。
  */
-export function contrastText(bg: string): string {
+export function isDarkColor(bg: string): boolean {
   const m = /^#?([0-9a-f]{6})$/i.exec(bg.trim())
-  if (!m) return '#ffffff'
+  if (!m) return false
   const n = parseInt(m[1], 16)
   const r = ((n >> 16) & 0xff) / 255
   const g = ((n >> 8) & 0xff) / 255
   const b = (n & 0xff) / 255
   const lin = (v: number) => (v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4))
-  const L = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
-  return L > 0.35 ? '#2b2b2b' : '#ffffff'
+  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b) < 0.35
+}
+
+/**
+ * 按背景色亮度自动选前景色：亮底深字 / 暗底白字（保证 WCAG AA 级对比度）。
+ * 阈值 0.35：橙色(#f59e0b)/荧光青(#22d3ee) 等中亮色用深字（对比 6:1+），
+ * 深蓝/紫/红等低亮度用白字。用于 pill 胶囊 / block 色块标题等色块场景。
+ */
+export function contrastText(bg: string): string {
+  // 非法输入回白（向后兼容）；合法色按亮度选深/浅字
+  if (!/^#?[0-9a-f]{6}$/i.test(bg.trim())) return '#ffffff'
+  return isDarkColor(bg) ? '#ffffff' : '#2b2b2b'
 }
 
 /** 默认调性：与编辑器/导出历史排版完全一致（蓝强调色、黑体、2.13 行高、居中大标题） */

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { parseThemeFromHtml, trimHtmlForTheme } from '../themeParse'
-import { contrastText, CATEGORY_THEMES } from '../categoryThemes'
+import { contrastText, isDarkColor, CATEGORY_THEMES } from '../categoryThemes'
 
 describe('parseThemeFromHtml（公众号 HTML → 排版调性）', () => {
   const HTML = `<!DOCTYPE html><html><head><title>科技美学：深空黑</title></head>
@@ -70,6 +70,22 @@ describe('contrastText（色块前景自适应）', () => {
   it('生活常识色块标题不再白字压橙底（对比度修复）', () => {
     const life = CATEGORY_THEMES['生活常识']
     expect(contrastText(life.accent)).toBe('#2b2b2b')
+  })
+})
+
+describe('isDarkColor（背景亮度判断：暖白浅卡 ≠ 深色卡）', () => {
+  it('深色卡判深、暖白/白底判浅', () => {
+    expect(isDarkColor('#0d1526')).toBe(true) // 科技深藏蓝
+    expect(isDarkColor('#fffaf2')).toBe(false) // 生活暖白
+    expect(isDarkColor('#fff0f0')).toBe(false) // 导入的 Cherry Studio 浅红卡
+    expect(isDarkColor('#f59e0b')).toBe(false) // 橙
+    expect(isDarkColor('')).toBe(false) // 非法回浅
+  })
+
+  it('生活常识浅卡引用不再用浅灰字（dark 判断修复）', () => {
+    // 导出端：生活常识卡片是暖白 → dark=false → 引用深字
+    expect(CATEGORY_THEMES['生活常识'].bodyBg).toBeTruthy()
+    expect(isDarkColor(CATEGORY_THEMES['生活常识'].bodyBg as string)).toBe(false)
   })
 })
 

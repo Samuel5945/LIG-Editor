@@ -22,6 +22,7 @@ import type {
 } from '@shared/types'
 import { UNCATEGORIZED, PROJECT_CATEGORIES, isKnownCategory } from '@shared/categories'
 import { getAppPaths } from './paths'
+import { listCustomThemes, saveCustomThemes } from './themeStore'
 
 /** 工程目录约定（PRD §4）：article.md 为唯一事实源 */
 const TEXT_FILES: ProjectTextFile[] = ['article.md', 'ideas.md', 'review.md']
@@ -124,6 +125,25 @@ export function projectDir(name: string): string {
 
 // ---------- 分类（预设 + 自定义：workspace 顶层目录即分类文件夹） ----------
 
+/** 被隐藏（删除）的分类：settings/disabledCategories.json，预设与自定义分类共用同一机制 */
+function disabledFile(): string {
+  return join(getAppPaths().settings, 'disabledCategories.json')
+}
+
+/** 被隐藏的分类列表（「删除」= 隐藏：目录与工程保留，恢复后原样归位） */
+export function listDisabledCategories(): string[] {
+  try {
+    const raw = JSON.parse(readFileSync(disabledFile(), 'utf-8'))
+    return Array.isArray(raw) ? raw.filter((x): x is string => typeof x === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+function writeDisabledCategories(list: string[]): void {
+  writeFileSync(disabledFile(), JSON.stringify(list, null, 2) + '\n', 'utf-8')
+}
+
 /** 分类名校验：预设分类直接可用；自定义需为安全目录名且不与现有工程名冲突 */
 function assertCategoryName(category: string): void {
   if (
@@ -139,18 +159,80 @@ function assertCategoryName(category: string): void {
   if (resolveDir(category)) throw new Error(`不能以工程名作为分类名：${category}`)
 }
 
-/** 全部可用分类：预设 + 未分类 + workspace 顶层自定义分类文件夹（按文件夹发现） */
+/** 全部可用分类：预设 + 未分类 + workspace 顶层自定义分类文件夹（按文件夹发现），隐藏分类不显示 */
 export function listCategories(): string[] {
   const { workspace } = getAppPaths()
-  const cats = new Set<string>([...PROJECT_CATEGORIES, UNCATEGORIZED])
+  const disabled = new Set(listDisabledCategories())
+  const cats = new Set<string>()
+  for (const c of [...PROJECT_CATEGORIES, UNCATEGORIZED]) {
+    if (!disabled.has(c)) cats.add(c)
+  }
   if (existsSync(workspace)) {
     for (const entry of readdirSync(workspace, { withFileTypes: true })) {
       if (!entry.isDirectory()) continue
       // 顶层目录：含 project.json 的是工程目录，其余都是分类文件夹
-      if (!existsSync(join(workspace, entry.name, 'project.json'))) cats.add(entry.name)
+      if (!existsSync(join(workspace, entry.name, 'project.json')) && !disabled.has(entry.name)) {
+        cats.add(entry.name)
+      }
     }
   }
   return [...cats]
+}
+
+/** 删除分类（= 隐藏）：分类从列表消失，目录与工程原样保留，恢复后归位。未分类兜底不可删。 */
+export function deleteCategory(name: string): void {
+  assertCategoryName(name)
+  if (name === UNCATEGORIZED) throw new Error('「未分类」是兜底分类，不能删除')
+  const disabled = listDisabledCategories()
+  if (!disabled.includes(name)) writeDisabledCategories([...disabled, name])
+}
+
+/** 恢复被删除（隐藏）的分类 */
+export function restoreCategory(name: string): void {
+  writeDisabledCategories(listDisabledCategories().filter((x) => x !== name))
+}
+
+/** 重命名分类：分类目录改名 + 目录内工程 meta.category 同步 + 隐藏列表/自定义主题同步。
+ * 预设分类重命名后即成为自定义分类（新名不再被预设覆盖）。 */
+export function renameCategory(oldName: string, newName: string): void {
+  if (oldName === newName) return
+  assertCategoryName(oldName)
+  assertCategoryName(newName)
+  if (newName === UNCATEGORIZED) throw new Error('「未分类」是兜底分类，不能作为新分类名')
+  if ((PROJECT_CATEGORIES as readonly string[]).includes(newName)) {
+    throw new Error(`分类名冲突：「${newName}」是预设分类`)
+  }
+  if (resolveDir(newName)) throw new Error(`不能以工程名作为分类名：${newName}`)
+  // 自定义主题同名冲突（重名会把新分类名的主题覆盖掉）
+  const themes = listCustomThemes()
+  if (themes[newName]) throw new Error(`分类名冲突：已有自定义主题「${newName}」`)
+
+  const { workspace } = getAppPaths()
+  const oldDir = join(workspace, oldName)
+  const newDir = join(workspace, newName)
+  if (existsSync(oldDir)) {
+    if (existsSync(newDir)) throw new Error(`分类「${newName}」已存在`)
+    renameSync(oldDir, newDir)
+    dirCache.clear()
+  }
+  // 目录内工程 meta.category 同步（按实际所在目录判定，兼容 meta 缺失的工程）
+  for (const [name, dir] of refreshDirCache()) {
+    const folder = dir.slice(normalize(workspace).length).split(/[\\/]/).filter(Boolean)
+    if (folder[0] !== oldName) continue
+    const meta = readMeta(name)
+    if (meta.category === oldName) writeMeta(name, { ...meta, category: newName })
+  }
+  // 隐藏列表同步
+  const disabled = listDisabledCategories()
+  if (disabled.includes(oldName)) {
+    writeDisabledCategories(disabled.map((x) => (x === oldName ? newName : x)))
+  }
+  // 自定义主题同步
+  if (themes[oldName]) {
+    themes[newName] = themes[oldName]
+    delete themes[oldName]
+    saveCustomThemes(themes)
+  }
 }
 
 function metaPath(name: string): string {

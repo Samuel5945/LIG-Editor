@@ -27,6 +27,20 @@ function writeThemes(themes: Record<string, ArticleTheme>): void {
   writeFileSync(themesFile(), JSON.stringify(themes, null, 2), 'utf8')
 }
 
+/** 供 projectStore.renameCategory 原子替换整个主题库（分类重命名时同步主题 key） */
+export function saveCustomThemes(themes: Record<string, ArticleTheme>): void {
+  writeThemes(themes)
+}
+
+/** 分类重命名时同步主题 key（旧名主题移到新名，无旧主题时静默） */
+export function renameCustomTheme(oldName: string, newName: string): void {
+  const themes = listCustomThemes()
+  if (!themes[oldName]) return
+  themes[newName] = themes[oldName]
+  delete themes[oldName]
+  writeThemes(themes)
+}
+
 /** 校验分类名（与 projectStore.assertCategoryName 同规则，避免目录穿越） */
 export function validateThemeName(name: string): void {
   if (

@@ -306,8 +306,16 @@ export interface IpcApi {
   'project:delete': (name: string) => void
   /** 切换分类：工程目录迁移到 workspace/<分类>/ 下并更新 meta，返回新 meta */
   'project:setCategory': (project: string, category: string) => ProjectMeta
-  /** 全部可用分类：预设 + 未分类 + workspace 顶层自定义分类文件夹 */
+  /** 全部可用分类：预设 + 未分类 + workspace 顶层自定义分类文件夹（不含已删除/隐藏的） */
   'project:listCategories': () => string[]
+  /** 已删除（隐藏）的分类：可在管理里恢复 */
+  'project:listHiddenCategories': () => string[]
+  /** 删除分类（= 隐藏：目录与工程保留，恢复后归位）；未分类不可删 */
+  'project:deleteCategory': (name: string) => void
+  /** 恢复被隐藏的分类 */
+  'project:restoreCategory': (name: string) => void
+  /** 重命名分类：目录 + 工程 meta + 自定义主题同步；预设重命名后成为自定义分类 */
+  'project:renameCategory': (oldName: string, newName: string) => void
   /** 打开工程：返回 meta+正文，并让主进程开始监听该工程目录 */
   'project:open': (name: string) => ProjectData
   'project:close': () => void
