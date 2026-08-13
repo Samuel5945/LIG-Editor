@@ -82,6 +82,9 @@ export default function App(): JSX.Element {
   const [filterCat, setFilterCat] = useState<string>('all')
   const [categorizing, setCategorizing] = useState(false)
   const [categories, setCategories] = useState<string[]>(() => [...PROJECT_CATEGORIES, UNCATEGORIZED])
+  // 新建分类内联输入（Electron 不支持 window.prompt，用行内输入框代替）
+  const [newCatFor, setNewCatFor] = useState<string | null>(null)
+  const [newCatName, setNewCatName] = useState('')
   const editorRef = useRef<ArticleEditorHandle>(null)
   // 贴图面板句柄：右栏贴图审阅的落盘/优化/定位经这里转发
   const cardsRef = useRef<CardsPanelHandle>(null)
@@ -609,8 +612,9 @@ export default function App(): JSX.Element {
                             onChange={(e) => {
                               const v = e.target.value
                               if (v === '__new__') {
-                                const custom = window.prompt('输入新分类名称（自动创建 workspace/<分类>/ 文件夹）：')
-                                if (custom && custom.trim()) void applyCategory(p.name, custom.trim())
+                                // Electron 不支持 window.prompt：展开行内输入框新建分类
+                                setNewCatFor(p.name)
+                                setNewCatName('')
                                 return
                               }
                               void applyCategory(p.name, v)
@@ -632,6 +636,49 @@ export default function App(): JSX.Element {
                             className="shrink-0 rounded bg-panel px-1.5 py-1 text-[11px] text-accent hover:bg-panel-2 disabled:opacity-40"
                           >
                             {categorizing ? '判断中…' : '✦ AI'}
+                          </button>
+                        </div>
+                      )}
+                      {isCurrent && newCatFor === p.name && (
+                        <div className="mt-1.5 flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            autoFocus
+                            value={newCatName}
+                            onChange={(e) => setNewCatName(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' && newCatName.trim()) {
+                                void applyCategory(p.name, newCatName.trim())
+                                setNewCatFor(null)
+                                setNewCatName('')
+                              }
+                              if (e.key === 'Escape') {
+                                setNewCatFor(null)
+                                setNewCatName('')
+                              }
+                            }}
+                            placeholder="新分类名（自动建 workspace/<分类>/ 文件夹）"
+                            className="min-w-0 flex-1 rounded bg-panel px-1.5 py-1 text-[11px] text-ink outline-none placeholder:text-ink-dim"
+                          />
+                          <button
+                            onClick={() => {
+                              if (!newCatName.trim()) return
+                              void applyCategory(p.name, newCatName.trim())
+                              setNewCatFor(null)
+                              setNewCatName('')
+                            }}
+                            disabled={!newCatName.trim()}
+                            className="shrink-0 rounded bg-accent px-1.5 py-1 text-[11px] text-white disabled:opacity-40"
+                          >
+                            建
+                          </button>
+                          <button
+                            onClick={() => {
+                              setNewCatFor(null)
+                              setNewCatName('')
+                            }}
+                            className="shrink-0 rounded bg-panel px-1.5 py-1 text-[11px] text-ink-dim hover:text-ink"
+                          >
+                            取消
                           </button>
                         </div>
                       )}
