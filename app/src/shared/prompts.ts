@@ -1,4 +1,5 @@
 import type { ChatMessage, WebSearchResult } from './types'
+import { PROJECT_CATEGORIES, UNCATEGORIZED } from './categories'
 
 /**
  * 副驾驶五能力提示词（M5；M8 移入 shared 供主进程无头能力核复用）
@@ -245,6 +246,25 @@ ${article.slice(0, 6000)}
 - 主体居中、四周留出裁切余量（封面会被裁成 2.35:1 头图与 1:1 方图两种规格）
 - 色彩现代明快，画面中不出现任何文字、字母、字幕或水印
 - 只输出提示词本身一段话，不要解释、不要引号、不要围栏`
+    }
+  ]
+}
+
+/** 项目分类：通读内容从预设分类里选一个（只输出分类名，渲染层做容错匹配） */
+export function categoryMessages(source: string, skill: string | null): ChatMessage[] {
+  return [
+    { role: 'system', content: systemPrompt(skill) },
+    {
+      role: 'user',
+      content: `下面是一个公众号图文工程的内容，请判断它最适合归入哪个预设分类。
+
+候选分类：${PROJECT_CATEGORIES.join(' / ')}
+
+<内容>
+${source.slice(0, 4000)}
+</内容>
+
+只输出最合适的那一个分类名本身（例如「${PROJECT_CATEGORIES[0]}」），不要输出任何其他文字、标点或解释；若都不贴切，输出「${UNCATEGORIZED}」。`
     }
   ]
 }

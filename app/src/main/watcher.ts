@@ -42,12 +42,13 @@ export function stopProjectWatch(): Promise<void> {
 
 let workspaceWatcher: FSWatcher | null = null
 
-/** 监听 workspace 顶层：工程新增/删除时通知渲染进程刷新列表 */
+/** 监听 workspace 顶层：工程新增/删除时通知渲染进程刷新列表
+ * depth 2：分类布局下 project.json 位于 workspace/<分类>/<工程>/ 第二层 */
 export function watchWorkspace(): void {
   if (workspaceWatcher) return
   workspaceWatcher = chokidar.watch(getAppPaths().workspace, {
     ignoreInitial: true,
-    depth: 1,
+    depth: 2,
     // 同上：轮询避免锁住 workspace 及其下工程目录
     usePolling: true,
     interval: 1000

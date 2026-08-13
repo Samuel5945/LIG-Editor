@@ -6,6 +6,7 @@ import { watchWorkspace } from './watcher'
 import { getAppPaths } from './paths'
 import { startBridge, stopBridge } from './bridge'
 import { seedBundledSkills } from './skillStore'
+import { migrateWorkspaceLayout } from './projectStore'
 
 // --mcp：无头模式（由 resources/mcp-proxy.cjs 拉起）：只开 HTTP bridge 不开窗口
 // Windows 下 Electron 主进程拿不到管道 stdin/stdout（electron#4218），MCP stdio 由纯 Node 代理承接后转 HTTP 进来
@@ -65,6 +66,7 @@ function createWindow(): BrowserWindow {
 
 app.whenReady().then(() => {
   seedBundledSkills() // 预装 Skill 铺入 <root>/skills（已存在不覆盖）；GUI 与无头模式都需要
+  migrateWorkspaceLayout() // 一次性：历史平铺工程挪入「未分类」，分类目录内工程补齐 meta.category
   if (MCP_MODE) {
     // 无头模式：不开窗口不起 watcher，只挂 HTTP bridge 供代理转发（figure:render 的离屏窗口不受影响）
     startBridge()
