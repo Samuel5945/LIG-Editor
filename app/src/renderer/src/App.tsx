@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { AppPaths, IdeaCard, ProjectData, ProjectMeta, ProjectSummary, SkillInfo } from '@shared/types'
 import { PROJECT_CATEGORIES, UNCATEGORIZED } from '@shared/categories'
+import { resolveArticleTheme } from '@shared/categoryThemes'
 import { CARD_FORMAT_LABEL, parseCardItems, type CardFormat } from '@shared/cards'
 import { chatOnce } from './copilot/llm'
 import { cardsMessages, categoryMessages } from './copilot/prompts'
@@ -100,6 +101,12 @@ export default function App(): JSX.Element {
   savedRef.current = saved
 
   const dirty = article !== saved
+
+  /** 排版调性：分类调性打底、项目显式强调色覆盖（meta 变化即时跟换） */
+  const articleTheme = useMemo(() => resolveArticleTheme(meta), [meta])
+
+  /** 当前工程真实目录（分类布局后在 workspace/<分类>/<工程名>/，不能再用 workspace 根拼接） */
+  const currentDir = useMemo(() => projects.find((p) => p.name === current)?.dir ?? '', [projects, current])
 
   /** 正文字数：去掉 Markdown/HTML 标记后，CJK 每字记 1、连续西文数字记 1 词 */
   const wordCount = useMemo(() => {
@@ -841,7 +848,7 @@ export default function App(): JSX.Element {
                   key={current}
                   ref={cardsRef}
                   project={current}
-                  projectDir={paths ? `${paths.workspace}\\${current}` : ''}
+                  projectDir={currentDir}
                   skill={skillContent}
                   hasArticle={Boolean(article.trim())}
                   onArticleGenerated={handleArticleGenerated}
@@ -856,8 +863,9 @@ export default function App(): JSX.Element {
                     ref={editorRef}
                     project={current}
                     markdown={article}
-                    projectDir={paths ? `${paths.workspace}\\${current}` : ''}
+                    projectDir={currentDir}
                     accent={meta?.accent}
+                    theme={articleTheme}
                     onChange={setArticle}
                     onAiModify={handleAiModify}
                     onAiReview={handleAiReview}
@@ -1072,7 +1080,7 @@ export default function App(): JSX.Element {
       {figRequest && current && paths && (
         <FigureDialog
           project={current}
-          projectDir={`${paths.workspace}\\${current}`}
+          projectDir={currentDir}
           article={article}
           request={figRequest}
           skill={skillContent}
@@ -1084,9 +1092,9 @@ export default function App(): JSX.Element {
       {showExport && current && paths && (
         <ExportDialog
           project={current}
-          projectDir={`${paths.workspace}\\${current}`}
+          projectDir={currentDir}
           markdown={article}
-          accent={meta?.accent}
+          theme={articleTheme}
           onToast={setToast}
           onClose={() => setShowExport(false)}
         />

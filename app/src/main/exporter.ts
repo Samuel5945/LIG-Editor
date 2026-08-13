@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'fs'
 import { clipboard } from 'electron'
 import { mdToDoc } from '@shared/markdown'
 import { docToExportHtml, extractTitle, wrapExportPage } from '@shared/exportHtml'
+import { resolveArticleTheme } from '@shared/categoryThemes'
 import { projectDir, readMeta, readTextFile, writeTracked } from './projectStore'
 
 /**
@@ -30,7 +31,7 @@ function toDataUrl(dir: string, src: string): string {
 /** 导出独立 article.html 到工程目录（图片保持相对路径，文件夹整体可迁移），返回绝对路径 */
 export function exportArticleHtml(project: string): string {
   const doc = mdToDoc(readTextFile(project, 'article.md'))
-  const fragment = docToExportHtml(doc, (src) => src, readMeta(project).accent)
+  const fragment = docToExportHtml(doc, (src) => src, resolveArticleTheme(readMeta(project)))
   const page = wrapExportPage(fragment, extractTitle(doc, project))
   const target = join(projectDir(project), 'article.html')
   writeTracked(target, page)
@@ -42,6 +43,6 @@ export function copyArticleRich(project: string): void {
   const dir = projectDir(project)
   const md = readTextFile(project, 'article.md')
   const doc = mdToDoc(md)
-  const html = docToExportHtml(doc, (src) => toDataUrl(dir, src), readMeta(project).accent)
+  const html = docToExportHtml(doc, (src) => toDataUrl(dir, src), resolveArticleTheme(readMeta(project)))
   clipboard.write({ html, text: md })
 }

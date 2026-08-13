@@ -108,21 +108,27 @@ body {
 }
 
 /* ---- TipTap 正文排版（公众号阅读感）----
-   强调色走 --article-accent 变量（meta.accent 由 ArticleEditor 注入），缺省默认蓝 */
+   排版调性变量由 ArticleEditor 按分类调性注入（--article-accent / --article-font /
+   --article-lh / --article-ls / --article-h-align / --article-bar-left），缺省为默认调性 */
 .article-editor .ProseMirror {
-  @apply min-h-full px-16 py-10 text-[15px] leading-8 text-slate-200 outline-none;
+  @apply min-h-full px-16 py-10 text-[15px] text-slate-200 outline-none;
   max-width: 760px;
   margin: 0 auto;
-  letter-spacing: 0.02em;
+  font-family: var(--article-font, 'Microsoft YaHei', 'PingFang SC', system-ui, sans-serif);
+  line-height: var(--article-lh, 2.13);
+  letter-spacing: var(--article-ls, 0.02em);
 }
-/* H1 大标题：居中 + 强调色短线收尾，和正文拉开仪式感 */
+/* H1 大标题：对齐方式随调性（居中仪式感 / 左对齐干练）+ 强调色短线收尾 */
 .article-editor .ProseMirror h1 {
-  @apply mb-7 mt-8 text-center text-[26px] font-bold leading-snug tracking-wide;
+  @apply mb-7 mt-8 text-[26px] font-bold leading-snug tracking-wide;
+  text-align: var(--article-h-align, center);
   color: rgb(var(--ink));
 }
 .article-editor .ProseMirror h1::after {
   content: '';
-  @apply mx-auto mt-3 block h-[3px] w-12 rounded-full;
+  @apply mt-3 block h-[3px] w-12 rounded-full;
+  margin-left: var(--article-bar-left, auto);
+  margin-right: var(--article-bar-right, auto);
   background: var(--article-accent, #4f8cff);
 }
 /* H2 小节标题：左侧强调色竖条，一眼区分层级 */

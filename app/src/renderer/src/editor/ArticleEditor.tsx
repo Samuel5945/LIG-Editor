@@ -13,6 +13,7 @@ import StarterKit from '@tiptap/starter-kit'
 import type { JSONContent } from '@tiptap/react'
 import { mdToDoc, docToMd, type ArticleDoc } from '@shared/markdown'
 import { isHexColor } from '@shared/cards'
+import { DEFAULT_THEME, type ArticleTheme } from '@shared/categoryThemes'
 import { FigureImage, type FigureImageStorage } from './FigureImage'
 import { FigSuggest, type FigSuggestStorage } from './FigSuggest'
 import { FigureGallery } from './FigureGallery'
@@ -55,6 +56,8 @@ interface ArticleEditorProps {
   projectDir: string
   /** 文章强调色（meta.accent）：排版装饰/加粗色跟随；缺省默认蓝 */
   accent?: string
+  /** 排版调性（分类调性解析结果）：字体/行高/字距/标题对齐/强调色注入编辑器 */
+  theme?: ArticleTheme
   onChange: (md: string) => void
   /** 选区浮动条「AI 修改」：App 打开修改弹窗 */
   onAiModify?: () => void
@@ -74,7 +77,7 @@ interface ArticleEditorProps {
  * - lastEmitted 防止 onChange → props.markdown 回流时循环 setContent
  */
 const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(function ArticleEditor(
-  { markdown, project, projectDir, accent, onChange, onAiModify, onAiReview, onFigAction, onEditFigureSource, onAccentChange },
+  { markdown, project, projectDir, accent, theme, onChange, onAiModify, onAiReview, onFigAction, onEditFigureSource, onAccentChange },
   ref
 ): ReactElement {
   const lastEmitted = useRef(markdown)
@@ -365,12 +368,19 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
         <EditorContent
           editor={editor}
           className="article-editor selectable h-full"
-          // 强调色变量注入：非法/缺省不设，CSS 回 var 默认蓝
-          style={
-            accent && isHexColor(accent)
-              ? ({ '--article-accent': accent } as CSSProperties)
-              : undefined
-          }
+          // 分类调性变量注入：缺省回 CSS 内置默认值（默认调性）
+          style={(() => {
+            const t = theme ?? DEFAULT_THEME
+            const vars: Record<string, string> = {
+              '--article-accent': isHexColor(t.accent) ? t.accent : DEFAULT_THEME.accent,
+              '--article-font': t.fontFamily,
+              '--article-lh': String(t.lineHeight),
+              '--article-ls': t.letterSpacing,
+              '--article-h-align': t.headingAlign
+            }
+            if (t.headingAlign === 'left') vars['--article-bar-left'] = '0'
+            return vars as CSSProperties
+          })()}
         />
       </div>
     </div>

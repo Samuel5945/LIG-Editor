@@ -1,5 +1,6 @@
 import type { ArticleDoc, BlockNode, FigureGalleryAttrs, InlineNode, ParagraphNode } from './markdown'
 import { isHexColor } from './cards'
+import { DEFAULT_THEME, type ArticleTheme } from './categoryThemes'
 
 /**
  * article.md → 公众号可粘贴 HTML（M7 导出）
@@ -45,14 +46,24 @@ const S = {
 
 type Styles = { -readonly [K in keyof typeof S]: string }
 
-/** 强调色着色（与编辑器同源同构）：H1 短横 / H2 竖条 / H3 菱形 / 引用边线 / 加粗词；缺省/非法色回默认蓝 */
-function buildStyles(accent?: string): Styles {
+/** 按排版调性着色（与编辑器同源同构）：强调色（H1 短横 / H2 竖条 / H3 菱形 / 引用边线 / 加粗词）
+ * + 字体/行高/字距/标题对齐；缺省/非法值回默认调性 */
+function buildStyles(theme?: ArticleTheme): Styles {
+  const t = theme ?? DEFAULT_THEME
   const s: Styles = { ...S }
-  const c = accent && isHexColor(accent) ? accent.trim() : DEFAULT_ACCENT
-  s.h1Bar = `${S.h1Bar}background:${c};`
+  const c = t.accent && isHexColor(t.accent) ? t.accent.trim() : DEFAULT_ACCENT
+  const lh = t.lineHeight || 2.13
+  s.root = `font-size:15px;line-height:${lh};color:#333;letter-spacing:${t.letterSpacing};word-break:break-word;font-family:${t.fontFamily};`
+  s.p = `font-size:15px;line-height:${lh};color:#333;margin:16px 0;`
+  s.quoteP = `margin:4px 0;font-size:15px;line-height:${lh};color:#777;`
+  s.quotePLast = `margin:4px 0;font-size:15px;line-height:${lh};color:#777;`
+  s.blockquote = S.blockquote.replace('line-height:2.13', `line-height:${lh}`).replace('#4f8cff', c)
+  s.h1Wrap = `text-align:${t.headingAlign};`
+  // 左对齐调性：短横靠左；居中的保持 auto 居中
+  const barMargin = t.headingAlign === 'left' ? 'margin:12px 0 0;' : 'margin:12px auto 0;'
+  s.h1Bar = `width:48px;height:3px;border-radius:9999px;${barMargin}background:${c};`
   s.h2 = `${S.h2}border-left:4px solid ${c};padding-left:12px;`
   s.h3Diamond = `${S.h3Diamond}background:${c};`
-  s.blockquote = S.blockquote.replace('#4f8cff', c)
   s.strong = `font-weight:bold;color:${c};`
   return s
 }
@@ -148,9 +159,9 @@ function blockToHtml(block: BlockNode, resolveImg: (src: string) => string, s: S
   }
 }
 
-/** doc → 正文片段 HTML（粘贴公众号用这段；不含 <html> 外壳）；accent 为文章强调色（meta.accent） */
-export function docToExportHtml(doc: ArticleDoc, resolveImg: (src: string) => string, accent?: string): string {
-  const s = buildStyles(accent)
+/** doc → 正文片段 HTML（粘贴公众号用这段；不含 <html> 外壳）；theme 为排版调性（分类调性解析结果） */
+export function docToExportHtml(doc: ArticleDoc, resolveImg: (src: string) => string, theme?: ArticleTheme): string {
+  const s = buildStyles(theme)
   const body = (doc.content ?? [])
     .map((b) => blockToHtml(b, resolveImg, s))
     .filter(Boolean)

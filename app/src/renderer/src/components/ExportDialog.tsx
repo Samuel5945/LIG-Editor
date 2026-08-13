@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState, type ReactElement } from 'react'
 import { mdToDoc } from '@shared/markdown'
 import { docToExportHtml, extractTitle, wrapExportPage } from '@shared/exportHtml'
+import type { ArticleTheme } from '@shared/categoryThemes'
 import type { PushDraftResult } from '@shared/wechatIpc'
 
 /**
@@ -13,8 +14,8 @@ interface ExportDialogProps {
   /** 工程目录绝对路径（预览图片走 asset:// 协议） */
   projectDir: string
   markdown: string
-  /** 文章强调色（meta.accent）：预览与导出产物同源跟色 */
-  accent?: string
+  /** 排版调性（分类调性解析结果）：预览与导出产物同源跟色 */
+  theme?: ArticleTheme
   onToast: (msg: string) => void
   onClose: () => void
 }
@@ -28,7 +29,7 @@ export default function ExportDialog({
   project,
   projectDir,
   markdown,
-  accent,
+  theme,
   onToast,
   onClose
 }: ExportDialogProps): ReactElement {
@@ -47,10 +48,10 @@ export default function ExportDialog({
         /^(data:|https?:)/.test(src)
           ? src
           : 'asset://file/' + encodeURIComponent(`${projectDir}\\${src.replace(/\//g, '\\')}`),
-      accent
+      theme
     )
     return wrapExportPage(fragment, extractTitle(doc, project))
-  }, [markdown, projectDir, project, accent])
+  }, [markdown, projectDir, project, theme])
 
   const copyRich = useCallback(async () => {
     if (busy) return

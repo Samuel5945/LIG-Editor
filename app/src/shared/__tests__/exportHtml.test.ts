@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { mdToDoc } from '../markdown'
 import { docToExportHtml, extractTitle, wrapExportPage } from '../exportHtml'
+import { DEFAULT_THEME } from '../categoryThemes'
 
 const SAMPLE = `# 荣耀换标：一个环的诞生
 
@@ -83,7 +84,7 @@ describe('docToExportHtml 强调色', () => {
   const MD = '## 小标题\n\n### 小小标题\n\n**重点**正文。\n\n> 引用一句。\n'
 
   it('合法色着到 H2竖条/H3菱形/引用边线/加粗', () => {
-    const out = docToExportHtml(mdToDoc(MD), (src) => src, '#e53935')
+    const out = docToExportHtml(mdToDoc(MD), (src) => src, { ...DEFAULT_THEME, accent: '#e53935' })
     expect(out).toContain('border-left:4px solid #e53935;padding-left:12px;') // H2 竖条
     expect(out).toMatch(/<span style="[^"]*background:#e53935/) // H3 菱形
     expect(out).toContain('border-left:4px solid #e53935;') // 引用边线
@@ -92,12 +93,14 @@ describe('docToExportHtml 强调色', () => {
   })
 
   it('非法色/缺省回默认蓝（与编辑器一致，不再变灰）', () => {
-    for (const bad of [undefined, 'red', '#12345g']) {
-      const out = docToExportHtml(mdToDoc(MD), (src) => src, bad)
+    for (const bad of ['red', '#12345g']) {
+      const out = docToExportHtml(mdToDoc(MD), (src) => src, { ...DEFAULT_THEME, accent: bad })
       expect(out).toContain('border-left:4px solid #4f8cff;padding-left:12px;')
       expect(out).toMatch(/<span style="[^"]*background:#4f8cff/)
       expect(out).not.toContain('#d9d9d9')
     }
+    const out = docToExportHtml(mdToDoc(MD), (src) => src)
+    expect(out).toContain('border-left:4px solid #4f8cff;padding-left:12px;')
   })
 })
 
