@@ -37,7 +37,7 @@ export interface ArticleTheme {
   fontSize?: number
   /** 标题基准字号（px，缺省 20；H1=+6 H2=+0 H3=-3，与经典导出 26/20/17 一致） */
   headingFontSize?: number
-  /** 正文排列：indent 首行缩进 2em / flush 定格两端对齐 / center 居中；缺省左对齐不缩进 */
+  /** 正文排列：indent 首行缩进 2em / flush 顶格两端对齐 / center 居中；缺省左对齐不缩进 */
   bodyAlign?: 'indent' | 'flush' | 'center'
   /** 标题文字色（卡片底色不同需显式指定，缺省按 bodyBg 深/浅自适应） */
   headingColor?: string
@@ -114,7 +114,7 @@ export interface ProjectMeta {
   bodyFontSize?: number
   /** 标题字号覆盖（px）：覆盖主题 headingFontSize；缺省跟随主题 */
   headingFontSize?: number
-  /** 正文排列覆盖：indent 缩进 / flush 定格 / center 居中；缺省跟随主题 */
+  /** 正文排列覆盖：indent 缩进 / flush 顶格 / center 居中；缺省跟随主题 */
   bodyAlign?: 'indent' | 'flush' | 'center'
   /** 标题排列覆盖：center 居中 / left 左对齐；缺省跟随主题 */
   headingAlign?: 'center' | 'left'

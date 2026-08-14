@@ -65,10 +65,10 @@ const FONT_SIZES = [12, 13, 14, 15, 16, 17, 18, 20, 22, 24]
 const BODY_FONT_SIZES = [14, 15, 16, 17, 18]
 /** 工具栏标题字号预设（px）：标题基准 17-24，缺省 20（H1=+6 H2=+0 H3=-3） */
 const HEADING_FONT_SIZES = [17, 18, 20, 22, 24]
-/** 正文排列三态：indent 首行缩进 / flush 定格两端对齐 / center 居中 */
+/** 正文排列三态：indent 首行缩进 / flush 顶格两端对齐 / center 居中 */
 const BODY_ALIGNS: { value: 'indent' | 'flush' | 'center'; label: string }[] = [
   { value: 'indent', label: '缩进' },
-  { value: 'flush', label: '定格' },
+  { value: 'flush', label: '顶格' },
   { value: 'center', label: '居中' }
 ]
 /** 标题排列两态：center 居中 / left 左对齐 */
@@ -428,7 +428,7 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
           const headingSize = typography?.headingFontSize ?? t.headingFontSize ?? 20
           const bodyAlign = typography?.bodyAlign ?? t.bodyAlign ?? 'flush'
           const headingAlign = typography?.headingAlign ?? t.headingAlign ?? 'center'
-          const bodyAlignLabel = BODY_ALIGNS.find((a) => a.value === bodyAlign)?.label ?? '定格'
+          const bodyAlignLabel = BODY_ALIGNS.find((a) => a.value === bodyAlign)?.label ?? '顶格'
           const headingAlignLabel = HEADING_ALIGNS.find((a) => a.value === headingAlign)?.label ?? '居中'
           const typeBtn = 'flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[11px] text-slate-300 hover:bg-slate-700'
           const typePanel =
@@ -474,7 +474,7 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
                 )}
               </div>
               <div className="relative">
-                <button type="button" title="正文排列：缩进 / 定格 / 居中" onClick={() => setTypePop(typePop === 'bodyAlign' ? null : 'bodyAlign')} className={typeBtn}>
+                <button type="button" title="正文排列：缩进 / 顶格 / 居中" onClick={() => setTypePop(typePop === 'bodyAlign' ? null : 'bodyAlign')} className={typeBtn}>
                   正文·{bodyAlignLabel} <span className="text-[8px] text-slate-500">▾</span>
                 </button>
                 {typePop === 'bodyAlign' && (
@@ -762,7 +762,7 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
               '--article-h1-size': `${(t.headingFontSize ?? 20) + 6}px`,
               '--article-h2-size': `${t.headingFontSize ?? 20}px`,
               '--article-h3-size': `${Math.max(12, (t.headingFontSize ?? 20) - 3)}px`,
-              // 正文排列：indent 首行缩进 / flush 定格两端对齐 / center 居中
+              // 正文排列：indent 首行缩进 / flush 顶格两端对齐 / center 居中
               '--article-p-align': t.bodyAlign === 'center' ? 'center' : t.bodyAlign === 'flush' ? 'justify' : 'left',
               '--article-p-indent': t.bodyAlign === 'indent' ? '2em' : '0',
               '--article-heading-color': headingColor,
