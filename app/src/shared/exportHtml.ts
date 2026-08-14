@@ -1,6 +1,6 @@
 import type { ArticleDoc, BlockNode, FigureGalleryAttrs, InlineNode, ParagraphNode } from './markdown'
 import { isHexColor } from './cards'
-import { DEFAULT_THEME, contrastText, isDarkColor, resolveEditorTheme, type ArticleTheme } from './categoryThemes'
+import { DEFAULT_NIGHT_BG, DEFAULT_THEME, contrastText, isDarkColor, resolveEditorTheme, type ArticleTheme } from './categoryThemes'
 
 /**
  * article.md → 公众号可粘贴 HTML（M7 导出）
@@ -381,8 +381,14 @@ export function docToExportHtml(
   return `<section style="${s.root}">\n${body}\n</section>`
 }
 
-/** 片段 → 完整独立页面（article.html / 手机预览） */
-export function wrapExportPage(fragment: string, title: string): string {
+/** 所选配色变体的页面外壳背景：卡片主题取实际卡片色（整页一体，与编辑器正文区一致）；
+ * 无卡片主题夜间给默认深底 DEFAULT_NIGHT_BG、日间白底。 */
+export function exportPageBg(theme: ArticleTheme | undefined, uiDark: boolean): string {
+  return resolveEditorTheme(theme ?? DEFAULT_THEME, uiDark).bodyBg ?? (uiDark ? DEFAULT_NIGHT_BG : '#fff')
+}
+
+/** 片段 → 完整独立页面（article.html / 手机预览）。bg 为外壳背景，缺省白底（向后兼容） */
+export function wrapExportPage(fragment: string, title: string, bg = '#fff'): string {
   return `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -390,7 +396,7 @@ export function wrapExportPage(fragment: string, title: string): string {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(title)}</title>
 </head>
-<body style="margin:0;background:#fff;">
+<body style="margin:0;background:${bg};">
 <div style="max-width:677px;margin:0 auto;padding:20px 16px 48px;">
 ${fragment}
 </div>
@@ -404,7 +410,13 @@ ${fragment}
  * 用于部署到自有网页/博客——读者系统深色自动看夜间配色、浅色看日间配色。
  * 注意：公众号渲染器不认媒体查询，推送/复制富文本请用固定配色（二选一）。
  */
-export function wrapExportPageDayNight(dayFragment: string, nightFragment: string, title: string): string {
+export function wrapExportPageDayNight(
+  dayFragment: string,
+  nightFragment: string,
+  title: string,
+  dayBg = '#fff',
+  nightBg = DEFAULT_NIGHT_BG
+): string {
   return `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -414,13 +426,15 @@ export function wrapExportPageDayNight(dayFragment: string, nightFragment: strin
 <style>
 .art-day{display:block}
 .art-night{display:none}
+body{background:${dayBg}}
 @media (prefers-color-scheme: dark){
   .art-day{display:none!important}
   .art-night{display:block!important}
+  body{background:${nightBg}!important}
 }
 </style>
 </head>
-<body style="margin:0;background:#fff;">
+<body style="margin:0">
 <div style="max-width:677px;margin:0 auto;padding:20px 16px 48px;">
 <div class="art-day">${dayFragment}</div>
 <div class="art-night">${nightFragment}</div>

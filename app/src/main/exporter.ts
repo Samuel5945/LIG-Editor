@@ -2,7 +2,7 @@ import { join } from 'path'
 import { existsSync, readFileSync } from 'fs'
 import { clipboard } from 'electron'
 import { mdToDoc } from '@shared/markdown'
-import { docToExportHtml, extractTitle, wrapExportPage, wrapExportPageDayNight } from '@shared/exportHtml'
+import { docToExportHtml, exportPageBg, extractTitle, wrapExportPage, wrapExportPageDayNight } from '@shared/exportHtml'
 import { resolveArticleTheme } from '@shared/categoryThemes'
 import { projectDir, readMeta, readTextFile, writeTracked } from './projectStore'
 
@@ -40,13 +40,13 @@ export function exportArticleHtml(project: string, variant: ExportVariant = 'aut
   const title = extractTitle(doc, project)
   let page: string
   if (variant === 'auto') {
-    // 读者端自动昼夜：日间/夜间两套都生成，媒体查询切换
+    // 读者端自动昼夜：日间/夜间两套都生成，媒体查询切换（外壳背景同步随系统深浅切换）
     const day = docToExportHtml(doc, (src) => src, theme, false)
     const night = docToExportHtml(doc, (src) => src, theme, true)
-    page = wrapExportPageDayNight(day, night, title)
+    page = wrapExportPageDayNight(day, night, title, exportPageBg(theme, false), exportPageBg(theme, true))
   } else {
     const fragment = docToExportHtml(doc, (src) => src, theme, variant === 'night')
-    page = wrapExportPage(fragment, title)
+    page = wrapExportPage(fragment, title, exportPageBg(theme, variant === 'night'))
   }
   const target = join(projectDir(project), 'article.html')
   writeTracked(target, page)

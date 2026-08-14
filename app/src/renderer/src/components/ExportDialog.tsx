@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState, type ReactElement } from 'react'
 import { mdToDoc } from '@shared/markdown'
-import { docToExportHtml, extractTitle, wrapExportPage } from '@shared/exportHtml'
+import { docToExportHtml, exportPageBg, extractTitle, wrapExportPage } from '@shared/exportHtml'
 import type { ArticleTheme } from '@shared/categoryThemes'
 import type { PushDraftResult } from '@shared/wechatIpc'
 
@@ -66,7 +66,8 @@ export default function ExportDialog({
       theme,
       pubVariant === 'night'
     )
-    return wrapExportPage(fragment, extractTitle(doc, project))
+    // 页面外壳背景跟随所选配色变体：夜间深底、日间白底/浅卡（与正文片段同源，整页一体）
+    return wrapExportPage(fragment, extractTitle(doc, project), exportPageBg(theme, pubVariant === 'night'))
   }, [markdown, projectDir, project, theme, pubVariant])
 
   const copyRich = useCallback(async () => {

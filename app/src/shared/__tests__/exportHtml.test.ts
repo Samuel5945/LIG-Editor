@@ -314,4 +314,16 @@ describe('wrapExportPage / extractTitle', () => {
     expect(page).toContain('<title>标题&lt;注入&gt;</title>')
     expect(page).toContain('max-width:677px')
   })
+
+  it('外壳背景跟随昼夜配色变体', () => {
+    // 缺省日间白底（向后兼容）
+    expect(wrapExportPage('<p>x</p>', 't')).toContain('background:#fff')
+    // 夜间深底
+    expect(wrapExportPage('<p>x</p>', 't', '#1e2126')).toContain('background:#1e2126')
+    // 自动昼夜版：日间白底 + 媒体查询切深底
+    const auto = wrapExportPageDayNight('<p>d</p>', '<p>n</p>', 't', '#fff', '#1e2126')
+    expect(auto).toContain('body{background:#fff}')
+    expect(auto).toContain('prefers-color-scheme: dark')
+    expect(auto).toContain('body{background:#1e2126!important}')
+  })
 })
