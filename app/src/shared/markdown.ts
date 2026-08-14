@@ -97,6 +97,12 @@ export interface FigureGalleryNode {
   attrs: FigureGalleryAttrs
 }
 
+/** 表格（GFM pipe 语法：首行表头 + 分隔行 + 数据行） */
+export interface TableNode {
+  type: 'table'
+  attrs: { rows: string[][] }
+}
+
 export type BlockNode =
   | ParagraphNode
   | HeadingNode
@@ -105,6 +111,7 @@ export type BlockNode =
   | FigureImageNode
   | FigSuggestNode
   | FigureGalleryNode
+  | TableNode
 
 export interface ArticleDoc {
   type: 'doc'
@@ -154,6 +161,33 @@ const GALLERY_START_RE = /^<!--\s*gallery:\s*([\w-]+)(?:\s+(\d+:\d+))?\s*-->\s*$
 const GALLERY_END_RE = /^<!--\s*\/gallery\s*-->\s*$/
 const HEADING_RE = /^(#{1,6})\s+(.*)$/
 const HR_RE = /^(-{3,}|\*{3,})\s*$/
+
+// ---------- 表格（GFP pipe 语法） ----------
+
+/** 表格行：以 | 开头且以 | 结尾（含前后空白） */
+function isTableRow(line: string): boolean {
+  return /^\s*\|.*\|\s*$/.test(line)
+}
+
+/** 分隔行：|---|:---:|---|（纯 - : | 空格组成） */
+function isTableSeparator(line: string): boolean {
+  return /^\s*\|?[\s:|-]+\|?\s*$/.test(line) && /-/.test(line)
+}
+
+/** 表格起始：当前行是表格行（是否为表头由分隔行决定） */
+function isTableStart(line: string): boolean {
+  return isTableRow(line) && !isTableSeparator(line)
+}
+
+/** 拆表格行：去首尾 |，按 | 切分并 trim */
+function splitTableRow(line: string): string[] {
+  return line
+    .trim()
+    .replace(/^\|/, '')
+    .replace(/\|$/, '')
+    .split('|')
+    .map((c) => c.trim())
+}
 
 export function mdToDoc(md: string): ArticleDoc {
   const lines = md.replace(/\r\n/g, '\n').split('\n')
@@ -209,6 +243,32 @@ export function mdToDoc(md: string): ArticleDoc {
       flush()
       blocks.push({ type: 'blockquote', content: paras })
       continue
+    }
+
+    // 表格：GFM pipe 语法（首行表头 + 分隔行 + 数据行）
+    if (isTableStart(line)) {
+      const rows: string[][] = []
+      let header: string[] | null = null
+      let k = i
+      let first = true
+      while (k < lines.length && isTableRow(lines[k])) {
+        const cells = splitTableRow(lines[k])
+        if (first && k + 1 < lines.length && isTableSeparator(lines[k + 1])) {
+          header = cells
+          k += 2
+          first = false
+          continue
+        }
+        rows.push(cells)
+        k++
+        first = false
+      }
+      const tableRows = header ? [header, ...rows] : rows
+      if (tableRows.length > 0) {
+        blocks.push({ type: 'table', attrs: { rows: tableRows } })
+        i = k
+        continue
+      }
     }
 
     // 配图建议占位（独立成行）
@@ -340,6 +400,20 @@ export function docToMd(doc: ArticleDoc): string {
         if (caption) s += `\n<!-- caption: ${caption} -->`
         s += '\n<!-- /gallery -->'
         parts.push(s)
+        break
+      }
+      case 'table': {
+        const rows = block.attrs.rows
+        if (rows.length === 0) break
+        // 首行作表头 + 分隔行，其余数据行
+        const header = rows[0]
+        const body = rows.slice(1)
+        const sep = header.map(() => '---').join(' | ')
+        parts.push(
+          ['| ' + header.join(' | ') + ' |', '| ' + sep + ' |', ...body.map((r) => '| ' + r.join(' | ') + ' |')].join(
+            '\n'
+          )
+        )
         break
       }
     }

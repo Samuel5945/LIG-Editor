@@ -53,6 +53,16 @@ export interface ArticleTheme {
   strongStyle?: StrongStyle
   /** highlight 加粗的底色（配 strongStyle: 'highlight'） */
   strongBg?: string
+  /** 加粗强调色（缺省=accent；文章常用专属强调色强调关键词） */
+  strongColor?: string
+  /** 表格风格：bordered 全边框 / striped 斑马纹 / plain 极简（无边框） */
+  tableStyle?: 'bordered' | 'striped' | 'plain'
+  /** 表头背景色 */
+  tableHeaderBg?: string
+  /** 表格边框色 */
+  tableBorder?: string
+  /** 表头文字色（缺省按表头背景亮度自适应） */
+  tableHeaderText?: string
   /** 图片圆角 px */
   imgRadius?: number
   /** 段落间距 px */

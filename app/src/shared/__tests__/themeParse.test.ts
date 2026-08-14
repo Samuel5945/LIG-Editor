@@ -124,3 +124,56 @@ describe('trimHtmlForTheme（公众号 3MB 页面裁剪）', () => {
     expect(trimmed).not.toContain('<script')
   })
 })
+
+describe('parseThemeFromHtml v2（细节提取）', () => {
+  it('标题/加粗/正文分色：强调色取标题与加粗的品牌色，而非杂元素', () => {
+    const html = `<section>
+<h2 style="color:#2bae85;">小节标题</h2>
+<p style="color:#666;line-height:1.8;">正文 <strong style="color:rgb(53,179,120);">关键词</strong> 继续</p>
+<a href="#" style="color:#1e6bb8;">外链</a>
+</section>`
+    const r = parseThemeFromHtml(html)
+    // 标题色 + 加粗色是青绿系（品牌色），accent 与之同系而非链接蓝
+    expect(r.theme.accent).toBe('#35b378') // strong rgb(53,179,120)
+    expect(r.theme.headingColor).toBe('#2bae85')
+    expect(r.theme.strongColor).toBe('#35b378')
+    expect(r.theme.bodyText).toBe('#666666') // 正文灰保留
+    expect(r.theme.strongStyle).toBe('color') // 无背景 → 不着色块
+  })
+
+  it('微信多图层复合背景不再误判为 highlight 黑底', () => {
+    const html = `<section>
+<p style="color:#333;">正文 <strong style="background:rgba(0, 0, 0, 0.4) rgba(0, 0, 0, 0.4) rgba(0, 0, 0, 0.4) rgb(53, 179, 120);color:#fff;">词</strong></p>
+</section>`
+    const r = parseThemeFromHtml(html)
+    expect(r.theme.strongStyle).toBe('color')
+    expect(r.theme.strongBg).toBeUndefined()
+  })
+
+  it('表格样式：表头背景 + 边框色 + 单元格底色 → bordered/striped', () => {
+    const html = `<section>
+<table style="border:1px solid #e0e0e0;">
+<tr><th style="background:#f3f4f6;color:#111;">列A</th><th style="background:#f3f4f6;">列B</th></tr>
+<tr><td style="border:1px solid #e0e0e0;color:#2c2c2c;">1</td><td style="border:1px solid #e0e0e0;">2</td></tr>
+<tr><td style="background:#fafafa;border:1px solid #e0e0e0;">3</td><td style="background:#fafafa;border:1px solid #e0e0e0;">4</td></tr>
+</table>
+</section>`
+    const r = parseThemeFromHtml(html)
+    expect(r.theme.tableStyle).toBe('striped') // td 有非表头背景 → 斑马纹
+    expect(r.theme.tableHeaderBg).toBe('#f3f4f6')
+    expect(r.theme.tableBorder).toBe('#e0e0e0')
+  })
+
+  it('无表格的文章不产生表格字段', () => {
+    const r = parseThemeFromHtml(`<section><p style="color:#333;">纯文本</p></section>`)
+    expect(r.theme.tableStyle).toBeUndefined()
+    expect(r.theme.tableHeaderBg).toBeUndefined()
+  })
+
+  it('纯色背景的 strong 仍正确判 highlight', () => {
+    const html = `<section><p>正文 <strong style="background:#fef3c7;color:#333;">黄底加粗</strong></p></section>`
+    const r = parseThemeFromHtml(html)
+    expect(r.theme.strongStyle).toBe('highlight')
+    expect(r.theme.strongBg).toBe('#fef3c7')
+  })
+})

@@ -17,6 +17,7 @@ import { DEFAULT_THEME, contrastText, isDarkColor, type ArticleTheme } from '@sh
 import { FigureImage, type FigureImageStorage } from './FigureImage'
 import { FigSuggest, type FigSuggestStorage } from './FigSuggest'
 import { FigureGallery } from './FigureGallery'
+import ArticleTable from './ArticleTable'
 
 /** 工具栏快速换色预设：常用参考色，选不中用取色器自定义 */
 const ACCENT_PRESETS: { color: string; name: string }[] = [
@@ -98,7 +99,8 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
       }),
       FigureImage,
       FigSuggest,
-      FigureGallery
+      FigureGallery,
+      ArticleTable
     ],
     content: mdToDoc(markdown),
     onUpdate({ editor }) {
@@ -461,6 +463,29 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
               vars['--article-strong-radius'] = '4px'
             } else if (strong === 'plain') {
               vars['--article-strong-color'] = 'inherit'
+            } else if (t.strongColor && isHexColor(t.strongColor)) {
+              // color 样式 + 专属加粗强调色（文章常 strong 用独立品牌色）
+              vars['--article-strong-color'] = t.strongColor
+            }
+            // 表格：边框 / 表头背景 / 表头字色（按表头背景亮度）
+            if (t.tableStyle) {
+              const border = t.tableBorder && isHexColor(t.tableBorder) ? t.tableBorder : darkBg ? '#3a4a5e' : '#e5e7eb'
+              const hbg =
+                t.tableHeaderBg && isHexColor(t.tableHeaderBg) ? t.tableHeaderBg : darkBg ? '#1e2b3d' : '#f3f4f6'
+              vars['--article-table-border'] = border
+              vars['--article-table-header-bg'] = hbg
+              vars['--article-table-header-text'] =
+                t.tableHeaderText && isHexColor(t.tableHeaderText)
+                  ? t.tableHeaderText
+                  : isDarkColor(hbg)
+                    ? '#eef2f7'
+                    : '#1a1a1a'
+              vars['--article-table-stripe'] = t.tableStyle === 'striped' ? '1' : '0'
+              // 斑马纹底色：striped 用表头色的淡色，其余透明
+              vars['--article-table-stripe-bg'] =
+                t.tableStyle === 'striped'
+                  ? `color-mix(in srgb, ${hbg} 40%, transparent)`
+                  : 'transparent'
             }
             return vars as CSSProperties
           })()}

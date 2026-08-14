@@ -1,6 +1,48 @@
 import { describe, it, expect } from 'vitest'
 import { mdToDoc, docToMd, parseInline, inlineToMd, splitFigDesc } from '../markdown'
 
+const TABLE_MD = `| 功能 | 免费版 | 专业版 |
+| --- | --- | --- |
+| 模板 | 5 套 | 全量 |
+| 导出 | 水印 | 无水印 |
+`
+
+describe('表格（GFM pipe 语法）', () => {
+  it('md → doc → md 往返无损', () => {
+    expect(docToMd(mdToDoc(TABLE_MD))).toBe(TABLE_MD)
+  })
+
+  it('解析为单 table 节点，首行是表头', () => {
+    const doc = mdToDoc(TABLE_MD)
+    const table = doc.content.find((b) => b.type === 'table')
+    expect(table).toBeTruthy()
+    if (table?.type === 'table') {
+      expect(table.attrs.rows[0]).toEqual(['功能', '免费版', '专业版'])
+      expect(table.attrs.rows).toHaveLength(3)
+    }
+  })
+
+  it('无分隔行（纯数据表格）也能解析', () => {
+    const md = '| a | b |\n| c | d |\n'
+    const doc = mdToDoc(md)
+    const table = doc.content.find((b) => b.type === 'table')
+    expect(table?.type).toBe('table')
+    if (table?.type === 'table') {
+      expect(table.attrs.rows).toEqual([
+        ['a', 'b'],
+        ['c', 'd']
+      ])
+    }
+  })
+
+  it('表格行不会被当普通段落', () => {
+    const doc = mdToDoc('| x | y |\n| --- | --- |\n| 1 | 2 |\n')
+    expect(doc.content.every((b) => b.type !== 'paragraph')).toBe(true)
+    expect(doc.content.some((b) => b.type === 'table')).toBe(true)
+  })
+})
+
+
 const SAMPLE = `# 荣耀换标：一个环的诞生
 
 **荣耀**在 2026 年发布了新 LOGO，这一次是一个环。

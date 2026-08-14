@@ -213,6 +213,32 @@ body {
 .article-editor .ProseMirror figcaption {
   color: var(--article-caption-color, rgb(148 163 184));
 }
+/* 表格（GFM pipe 语法）：边框 / 表头背景 / 表头字色 / 斑马纹随调性 */
+.article-editor .ProseMirror table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: var(--article-p-gap, 16px) 0;
+  font-size: 14px;
+  line-height: 1.8;
+  border: 1px solid var(--article-table-border, rgb(51 65 85));
+}
+.article-editor .ProseMirror th {
+  background: var(--article-table-header-bg, rgb(30 41 59));
+  color: var(--article-table-header-text, #eef2f7);
+  border: 1px solid var(--article-table-border, rgb(51 65 85));
+  padding: 8px 12px;
+  text-align: left;
+  font-weight: 700;
+}
+.article-editor .ProseMirror td {
+  border: 1px solid var(--article-table-border, rgb(51 65 85));
+  padding: 7px 12px;
+  color: var(--article-body-text, rgb(226 232 240));
+}
+.article-editor .ProseMirror tbody tr:nth-child(even) td {
+  background: var(--article-table-stripe-bg, rgb(30 41 59 / 0.5));
+}
+
 /* 空文档占位 */
 .article-editor .ProseMirror p.is-editor-empty:first-child::before {
   content: '开始写作，或让右栏副驾驶帮你起草…';

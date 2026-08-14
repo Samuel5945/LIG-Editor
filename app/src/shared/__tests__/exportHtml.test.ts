@@ -3,6 +3,42 @@ import { mdToDoc } from '../markdown'
 import { docToExportHtml, extractTitle, wrapExportPage } from '../exportHtml'
 import { DEFAULT_THEME, CATEGORY_THEMES } from '../categoryThemes'
 
+const TABLE_MD = `| 功能 | 免费版 |
+| --- | --- |
+| 模板 | 5 套 |
+| 导出 | 无水印 |
+`
+
+describe('表格导出', () => {
+  it('pipe 表格 → <table> 内联样式（表头 + 数据行）', () => {
+    const html = docToExportHtml(mdToDoc(TABLE_MD), (src) => src)
+    expect(html).toContain('<table style=')
+    expect(html).toContain('<thead><tr><th style=')
+    expect(html).toContain('<tbody>')
+    expect(html).toContain('>5 套</td>')
+    expect(html).not.toMatch(/class=/)
+  })
+
+  it('striped 主题输出斑马纹样式', () => {
+    const striped = {
+      ...DEFAULT_THEME,
+      tableStyle: 'striped' as const,
+      tableHeaderBg: '#f3f4f6',
+      tableBorder: '#e0e0e0'
+    }
+    const html = docToExportHtml(mdToDoc(TABLE_MD), (src) => src, striped)
+    expect(html).toContain('background:rgba(243,244,246,0.35)') // 斑马纹淡色
+    expect(html).toContain('border:1px solid #e0e0e0')
+  })
+
+  it('plain 表格无边框样式', () => {
+    const plain = { ...DEFAULT_THEME, tableStyle: 'plain' as const }
+    const html = docToExportHtml(mdToDoc(TABLE_MD), (src) => src, plain)
+    expect(html).toContain('border:0 none')
+  })
+})
+
+
 const SAMPLE = `# 荣耀换标：一个环的诞生
 
 **荣耀**在 2026 年发布了新 LOGO。

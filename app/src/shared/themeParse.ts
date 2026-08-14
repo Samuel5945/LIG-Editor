@@ -83,6 +83,20 @@ function toHex(color: string): string | null {
   return null
 }
 
+/**
+ * 背景值是否为「单一背景色」：微信编辑器常生成多图层复合背景
+ * （`rgba(0,0,0,0.4) rgba(0,0,0,0.4) rgb(53,179,120)`），此时不能当 highlight 底色
+ */
+function singleBgColor(v: string): string | null {
+  const colorCount = (v.match(/#[0-9a-f]{3,8}\b|rgba?\([^)]*\)/gi) || []).length
+  if (colorCount > 1) return null
+  const hex = toHex(v)
+  if (!hex) return null
+  // 透明/全透明背景不算
+  if (/rgba\(\s*0\s*,\s*0\s*,\s*0\s*,\s*0\s*\)/.test(v)) return null
+  return hex
+}
+
 /** 是否「接近黑白灰」：三通道极差 < 40 视为中性色 */
 function isNeutral(hex: string): boolean {
   const n = parseInt(hex.slice(1), 16)
@@ -90,6 +104,59 @@ function isNeutral(hex: string): boolean {
   const g = (n >> 8) & 0xff
   const b = n & 0xff
   return Math.max(r, g, b) - Math.min(r, g, b) < 40
+}
+
+/** 颜色亮度（WCAG 相对亮度，0-1） */
+function luminance(hex: string): number {
+  const n = parseInt(hex.slice(1), 16)
+  const r = ((n >> 16) & 0xff) / 255
+  const g = ((n >> 8) & 0xff) / 255
+  const b = (n & 0xff) / 255
+  const lin = (v: number) => (v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4))
+  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
+}
+
+/** 统计某类元素指定属性的颜色频次（含中性色，排除白色/透明） */
+function tallyColors(
+  els: ElementStyles[],
+  tags: string[],
+  keys: string[],
+  opts: { skipNeutral?: boolean; maxLum?: number } = {}
+): Map<string, number> {
+  const freq = new Map<string, number>()
+  for (const e of els) {
+    if (!tags.includes(e.tag)) continue
+    for (const k of keys) {
+      const v = e.style[k]
+      if (!v) continue
+      const hex = singleBgColor(v) ?? toHex(v)
+      if (!hex) continue
+      if (WHITEISH.has(hex)) continue
+      if (opts.skipNeutral && isNeutral(hex)) continue
+      if (opts.maxLum !== undefined && luminance(hex) > opts.maxLum) continue
+      freq.set(hex, (freq.get(hex) ?? 0) + 1)
+    }
+  }
+  return freq
+}
+
+/** 频次最高者；空返回 undefined */
+function topColor(freq: Map<string, number>): string | undefined {
+  let best: string | undefined
+  let n = 0
+  for (const [hex, c] of freq) {
+    if (c > n) {
+      n = c
+      best = hex
+    }
+  }
+  return best
+}
+
+/** 元素样式收集（含标签名），供多轮统计 */
+interface ElementStyles {
+  tag: string
+  style: Record<string, string>
 }
 
 /** 判断字体族气质 */
@@ -161,35 +228,36 @@ export function parseThemeFromHtml(html: string): ParsedTheme {
       break
     }
   }
-  const dark = !!bodyBg
+  const dark = !!bodyBg && luminance(bodyBg) < 0.35
 
-  // ---- 强调色：所有颜色里最高频的「彩色」 ----
-  const freq = new Map<string, number>()
-  const colorKeys = [
-    'color',
-    'background',
-    'background-color',
-    'border-left',
-    'border-top',
-    'border-bottom',
-    'border-color'
-  ]
-  for (const e of els) {
-    for (const k of colorKeys) {
-      const v = e.style[k]
-      if (!v) continue
-      const hex = toHex(v)
-      if (hex && !isNeutral(hex)) freq.set(hex, (freq.get(hex) ?? 0) + 1)
-    }
+  // ---- 强调色（加权投票）：标题/加粗的 color 权重最高（品牌色常在此），
+  //      其次普通元素 color，最后 border/背景；排除中性色与过浅色（浅色多为高亮底色） ----
+  const COLOR_KEYS = ['color']
+  const BORDER_KEYS = ['border-left', 'border-top', 'border-bottom', 'border-color']
+  const accentFreq = new Map<string, number>()
+  const addAll = (map: Map<string, number>, tags: string[], keys: string[], w: number): void => {
+    const t = tallyColors(els, tags, keys, { skipNeutral: true, maxLum: 0.75 })
+    for (const [hex, n] of t) map.set(hex, (map.get(hex) ?? 0) + n * w)
   }
-  let accent = DEFAULT_THEME.accent
-  let best = 0
-  for (const [hex, n] of freq) {
-    if (n > best) {
-      best = n
-      accent = hex
-    }
-  }
+  addAll(accentFreq, ['h1', 'h2', 'h3'], COLOR_KEYS, 4)
+  addAll(accentFreq, ['strong', 'b'], COLOR_KEYS, 5)
+  addAll(accentFreq, ['a', 'span', 'p', 'div', 'section', 'td', 'th'], COLOR_KEYS, 1)
+  addAll(accentFreq, ['h1', 'h2', 'h3', 'strong', 'b', 'td', 'th'], BORDER_KEYS, 1)
+  let accent = topColor(accentFreq) ?? DEFAULT_THEME.accent
+
+  // ---- 标题文字色（h1/h2/h3 的 color；有彩色强调色时用，否则与正文同色） ----
+  const headingColor = topColor(
+    tallyColors(els, ['h1', 'h2', 'h3'], COLOR_KEYS, { skipNeutral: true })
+  )
+
+  // ---- 加粗强调色（strong/b 的 color；缺省=accent） ----
+  const strongColor = topColor(tallyColors(els, ['strong', 'b'], COLOR_KEYS, { skipNeutral: true }))
+
+  // ---- 正文色：优先 p 的 color（span 常被代码高亮/链接色污染，如本文 74 次蓝色高亮）；
+  //      无 p 色时取 span 的中性色作后备 ----
+  const bodyText =
+    topColor(tallyColors(els, ['p'], COLOR_KEYS, { maxLum: 0.92 })) ??
+    topColor(tallyColors(els, ['span'], COLOR_KEYS, { skipNeutral: true, maxLum: 0.92 }))
 
   // ---- 标题装饰：h1 / h2 的首个样式 ----
   const h1 = els.find((e) => e.tag === 'h1')
@@ -197,7 +265,7 @@ export function parseThemeFromHtml(html: string): ParsedTheme {
   const h1s = h1?.style ?? {}
   const h2s = h2?.style ?? {}
   const h1Style: ArticleTheme['h1Style'] =
-    h1s['background'] && !WHITEISH.has(toHex(h1s['background']) ?? '')
+    h1s['background'] && singleBgColor(h1s['background']) && !WHITEISH.has(singleBgColor(h1s['background'])!)
       ? 'pill'
       : h1s['border-bottom']
         ? 'underline'
@@ -228,10 +296,29 @@ export function parseThemeFromHtml(html: string): ParsedTheme {
       ? 'long'
       : 'line'
 
-  // ---- 加粗 ----
-  const strong = els.find((e) => e.tag === 'strong')
-  const ss = strong?.style ?? {}
-  const strongStyle: ArticleTheme['strongStyle'] = ss['background'] ? 'highlight' : 'color'
+  // ---- 加粗：仅「单一背景色」才算 highlight（微信多图层复合值不算） ----
+  const strongEl = els.find((e) => e.tag === 'strong') ?? els.find((e) => e.tag === 'b')
+  const ss = strongEl?.style ?? {}
+  const strongBg = ss['background'] ? singleBgColor(ss['background']) : null
+  const strongStyle: ArticleTheme['strongStyle'] = strongBg ? 'highlight' : 'color'
+
+  // ---- 表格样式：th 背景 / 边框色 / 单元格底色 → bordered | striped | plain ----
+  const thBg = topColor(tallyColors(els, ['th'], ['background', 'background-color'], { maxLum: 0.98 }))
+  const tableBorder = topColor(
+    tallyColors(els, ['table', 'td', 'th'], ['border', 'border-top', 'border-bottom', 'border-color'], {
+      maxLum: 0.98
+    })
+  )
+  const tdBg = topColor(tallyColors(els, ['td'], ['background', 'background-color'], { maxLum: 0.98 }))
+  // 表格风格：有表头背景 → bordered；td 有非白背景 → striped（斑马纹意图）；否则按边框有无
+  const hasTable = els.some((e) => e.tag === 'table')
+  const tableStyle: ArticleTheme['tableStyle'] = !hasTable
+    ? undefined
+    : tdBg && tdBg !== thBg
+      ? 'striped'
+      : thBg || tableBorder
+        ? 'bordered'
+        : 'plain'
 
   // ---- 数值 ----
   const first = els.find((e) => e.tag === 'p')?.style ?? {}
@@ -255,13 +342,27 @@ export function parseThemeFromHtml(html: string): ParsedTheme {
     lineHeight: Number.isFinite(lineHeight) && lineHeight >= 1 ? lineHeight : DEFAULT_THEME.lineHeight,
     letterSpacing: letterSpacing ?? DEFAULT_THEME.letterSpacing,
     headingAlign: h1s['text-align'] === 'left' ? 'left' : 'center',
-    ...(bodyBg ? { bodyBg, bodyText: dark ? '#cbd5e1' : '#333', headingColor: dark ? '#eef2f7' : '#1a1a1a', bodyRadius: 14, bodyPadding: '16px 18px' } : {}),
+    ...(bodyBg
+      ? {
+          bodyBg,
+          bodyText: bodyText && bodyText !== '#ffffff' ? bodyText : dark ? '#cbd5e1' : '#333',
+          bodyRadius: 14,
+          bodyPadding: '16px 18px'
+        }
+      : bodyText && bodyText !== '#ffffff'
+        ? { bodyText }
+        : {}),
+    ...(headingColor ? { headingColor } : {}),
     h1Style,
     h2Style,
     quoteStyle,
     hrStyle,
     strongStyle,
-    ...(ss['background'] ? { strongBg: toHex(ss['background']) ?? '#fef3c7' } : {}),
+    ...(strongColor ? { strongColor } : {}),
+    ...(strongBg ? { strongBg } : {}),
+    ...(tableStyle ? { tableStyle } : {}),
+    ...(thBg ? { tableHeaderBg: thBg } : {}),
+    ...(tableBorder ? { tableBorder } : {}),
     ...(imgRadius !== undefined ? { imgRadius } : {}),
     ...(pGap !== undefined ? { pGap } : {})
   }
@@ -269,10 +370,13 @@ export function parseThemeFromHtml(html: string): ParsedTheme {
   const summary = [
     `强调色 ${accent}`,
     bodyBg ? `背景卡片 ${bodyBg}` : '白底',
+    headingColor && headingColor !== accent ? `标题色 ${headingColor}` : `标题随强调色`,
+    strongColor && strongColor !== accent ? `加粗色 ${strongColor}` : '',
     `大标题 ${h1Style} / 小节 ${h2Style}`,
     `引用 ${quoteStyle} / 分隔线 ${hrStyle}`,
-    `加粗 ${strongStyle}${ss['background'] ? `（底 ${toHex(ss['background'])}）` : ''}`
-  ]
+    `加粗 ${strongStyle}${strongBg ? `（底 ${strongBg}）` : ''}`,
+    hasTable ? `表格 ${tableStyle}${thBg ? `（表头 ${thBg}）` : ''}` : ''
+  ].filter(Boolean)
 
   return { name, theme, summary }
 }

@@ -46,7 +46,15 @@ const S = {
   hint: 'font-size:12px;color:#bbb;line-height:1.6;margin-top:6px;text-align:center;'
 } as const
 
-type Styles = { -readonly [K in keyof typeof S]: string } & { quoteMark: string; imgR: string }
+type Styles = { -readonly [K in keyof typeof S]: string } & {
+  quoteMark: string
+  imgR: string
+  table: string
+  th: string
+  td: string
+  tdStripe: string
+  tdFirst: string
+}
 
 /** 强调色转淡色底（公众号客户端不认 color-mix，预计算 rgba；非法输入回默认蓝） */
 function tint(hex: string, alpha: number): string {
@@ -59,7 +67,16 @@ function tint(hex: string, alpha: number): string {
 /** 按排版调性着色与造型（与编辑器同源同构）；缺省/非法值回默认调性 */
 function buildStyles(theme?: ArticleTheme): Styles {
   const t = theme ?? DEFAULT_THEME
-  const s: Styles = { ...S, quoteMark: '', imgR: '4px' }
+  const s: Styles = {
+    ...S,
+    quoteMark: '',
+    imgR: '4px',
+    table: '',
+    th: '',
+    td: '',
+    tdStripe: '',
+    tdFirst: ''
+  }
   const c = t.accent && isHexColor(t.accent) ? t.accent.trim() : DEFAULT_ACCENT
   const lh = t.lineHeight || 2.13
   // 按背景卡片实际亮度判断深/浅（不能用「有无卡片」——暖白卡也是浅色）
@@ -74,6 +91,16 @@ function buildStyles(theme?: ArticleTheme): Styles {
   const captionColor = dark ? '#b6c4d4' : '#555'
   const pGap = t.pGap ?? 16
   const imgR = t.imgRadius ?? 4
+  // 表格：边框色 / 表头背景 / 表头字色（按表头背景亮度自适应）/ 斑马纹
+  const tableBorder = t.tableBorder && isHexColor(t.tableBorder) ? t.tableBorder.trim() : dark ? '#3a4a5e' : '#e5e7eb'
+  const headerBg = t.tableHeaderBg && isHexColor(t.tableHeaderBg) ? t.tableHeaderBg.trim() : dark ? '#1e2b3d' : '#f3f4f6'
+  const headerText =
+    t.tableHeaderText && isHexColor(t.tableHeaderText)
+      ? t.tableHeaderText.trim()
+      : isDarkColor(headerBg)
+        ? '#eef2f7'
+        : '#1a1a1a'
+  const tableStyle = t.tableStyle ?? 'bordered'
 
   // 正文容器：背景卡片（深色卡片 / 暖色卡片 / 透明白底）
   s.root = `font-size:15px;line-height:${lh};color:${textColor};letter-spacing:${t.letterSpacing};word-break:break-word;font-family:${t.fontFamily};`
@@ -90,6 +117,20 @@ function buildStyles(theme?: ArticleTheme): Styles {
   s.imgR = `${imgR}px`
   s.quoteMark = ''
   s.strong = strongStyle(t, dark, c)
+  // 表格：全边框 / 斑马纹 / 极简（plain 用底线分隔，无竖边框）
+  s.table = `border-collapse:collapse;width:100%;margin:${pGap}px 0;font-size:14px;line-height:1.8;font-family:${t.fontFamily};`
+  if (tableStyle === 'plain') {
+    s.table += 'border:0 none;'
+    s.th = `padding:10px 4px;text-align:left;font-weight:bold;color:${headerText};border-bottom:2px solid ${tableBorder};`
+    s.td = `padding:9px 4px;color:${textColor};border-bottom:1px solid ${tableBorder};`
+    s.tdStripe = ''
+    s.tdFirst = ''
+  } else {
+    s.th = `padding:10px 12px;text-align:left;font-weight:bold;color:${headerText};background:${headerBg};border:1px solid ${tableBorder};`
+    s.td = `padding:9px 12px;color:${textColor};border:1px solid ${tableBorder};`
+    s.tdStripe = tableStyle === 'striped' ? `background:${tint(headerBg, 0.35)};` : ''
+    s.tdFirst = ''
+  }
   s.h1Wrap = `text-align:${t.headingAlign};`
 
   // H1 装饰：bar 经典短横 / pill 胶囊色块字底 / underline 下划线
@@ -155,15 +196,16 @@ function buildStyles(theme?: ArticleTheme): Styles {
   return s
 }
 
-/** 加粗强调：color 着色 / highlight 底色高亮 / plain 纯黑加粗 */
+/** 加粗强调：color 着色 / highlight 底色高亮 / plain 纯黑加粗；强调色可用专属 strongColor（缺省 accent） */
 function strongStyle(t: ArticleTheme, dark: boolean, accent: string): string {
   const style = t.strongStyle ?? 'color'
+  const strongColor = t.strongColor && isHexColor(t.strongColor) ? t.strongColor.trim() : accent
   if (style === 'plain') return 'font-weight:bold;'
   if (style === 'highlight') {
     const bg = t.strongBg && isHexColor(t.strongBg) ? t.strongBg : '#fef3c7'
     return `font-weight:bold;color:${dark ? '#f5f5f4' : '#333'};background:${bg};padding:1px 6px;border-radius:4px;`
   }
-  return `font-weight:bold;color:${accent};`
+  return `font-weight:bold;color:${strongColor};`
 }
 
 function escapeHtml(s: string): string {
@@ -256,6 +298,28 @@ function blockToHtml(block: BlockNode, resolveImg: (src: string) => string, s: S
     }
     case 'figureGallery':
       return galleryToHtml(block.attrs, resolveImg, s)
+    case 'table': {
+      const rows = block.attrs.rows
+      if (rows.length === 0) return ''
+      const [header, ...body] = rows
+      const head = header.length
+        ? `<thead><tr>${header.map((c) => `<th style="${s.th}">${escapeHtml(c)}</th>`).join('')}</tr></thead>`
+        : ''
+      const tbody = body.length
+        ? `<tbody>${body
+            .map(
+              (r, ri) =>
+                `<tr>${r
+                  .map(
+                    (c, ci) =>
+                      `<td style="${s.td}${s.tdStripe && ri % 2 === 1 ? s.tdStripe : ''}${ci === 0 && s.tdFirst ? s.tdFirst : ''}">${escapeHtml(c)}</td>`
+                  )
+                  .join('')}</tr>`
+            )
+            .join('')}</tbody>`
+        : ''
+      return `<table style="${s.table}">${head}${tbody}</table>`
+    }
     case 'figSuggest':
       return '' // 占位卡是工作过程产物，不导出
   }
