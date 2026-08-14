@@ -209,6 +209,10 @@ body {
 .article-editor .ProseMirror img {
   border-radius: var(--article-img-radius, 4px);
 }
+/* 图注：随背景亮度（深底浅字 / 浅底深字），覆盖组件默认灰字 */
+.article-editor .ProseMirror figcaption {
+  color: var(--article-caption-color, rgb(148 163 184));
+}
 /* 空文档占位 */
 .article-editor .ProseMirror p.is-editor-empty:first-child::before {
   content: '开始写作，或让右栏副驾驶帮你起草…';

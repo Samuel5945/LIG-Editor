@@ -372,7 +372,11 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
           style={(() => {
             const t = theme ?? DEFAULT_THEME
             const accent = isHexColor(t.accent) ? t.accent : DEFAULT_THEME.accent
-            const headingColor = t.headingColor ?? (t.bodyBg ? '#eef2f7' : '')
+            // 背景卡片实际亮度（编辑器默认深底面板 → 浅字；浅色卡片 → 深字，不用灰字）
+            const darkBg = t.bodyBg ? isDarkColor(t.bodyBg) : true
+            // 正文色：有卡片按亮度给明确深/浅字（不再让 CSS 默认浅灰白落在浅卡上），无卡片留空走编辑器默认
+            const bodyText = t.bodyText ?? (t.bodyBg ? (darkBg ? '#cbd5e1' : '#333') : '')
+            const headingColor = t.headingColor ?? (t.bodyBg ? (darkBg ? '#eef2f7' : '#1a1a1a') : '')
             const vars: Record<string, string> = {
               '--article-accent': accent,
               '--article-font': t.fontFamily,
@@ -381,12 +385,14 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
               '--article-h-align': t.headingAlign,
               // 结构级：背景卡片 / 段距 / 图片圆角 / 标题色
               '--article-body-bg': t.bodyBg ?? 'transparent',
-              '--article-body-text': t.bodyText ?? '',
+              '--article-body-text': bodyText,
               '--article-body-radius': `${t.bodyRadius ?? 0}px`,
               '--article-body-pad': t.bodyPadding ?? '',
               '--article-p-gap': `${t.pGap ?? 16}px`,
               '--article-img-radius': `${t.imgRadius ?? 4}px`,
-              '--article-heading-color': headingColor
+              '--article-heading-color': headingColor,
+              // 图注：深底浅字 / 浅底深字（不用灰字）
+              '--article-caption-color': darkBg ? '#cbd5e1' : '#555'
             }
             if (t.headingAlign === 'left') vars['--article-bar-left'] = '0'
             // H1 装饰：pill 胶囊色块 / underline 下划线（bar 用 CSS 默认短横）
@@ -427,8 +433,7 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
             else if (mark === 'none') vars['--article-mark-display'] = 'none'
             // 引用：card 圆角卡片 / quotes 引号（leftbar 用 CSS 默认左条）
             const quote = t.quoteStyle ?? 'leftbar'
-            // 引用文字色按背景实际亮度：编辑器默认深底面板 → 浅字；浅色卡片 → 深字（不用灰字）
-            const darkBg = t.bodyBg ? isDarkColor(t.bodyBg) : true
+            // 引用文字色按背景实际亮度：深底 → 浅字；浅色卡片 → 深字（不用灰字）
             vars['--article-quote-color'] = darkBg ? '#cbd5e1' : '#333'
             if (quote === 'card') {
               vars['--article-quote-left'] = 'none'
@@ -450,7 +455,8 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
             const strong = t.strongStyle ?? 'color'
             if (strong === 'highlight') {
               vars['--article-strong-bg'] = t.strongBg && isHexColor(t.strongBg) ? t.strongBg : '#fef3c7'
-              vars['--article-strong-color'] = t.bodyBg ? '#f5f5f4' : '#333'
+              // 高亮底上的字色按背景亮度：深底浅字 / 浅底深字（浅卡不再白字混底）
+              vars['--article-strong-color'] = darkBg ? '#f5f5f4' : '#333'
               vars['--article-strong-pad'] = '1px 6px'
               vars['--article-strong-radius'] = '4px'
             } else if (strong === 'plain') {
