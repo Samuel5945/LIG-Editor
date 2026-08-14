@@ -284,6 +284,13 @@ export function parseThemeFromHtml(html: string): ParsedTheme {
   const bodyText =
     topColor(tallyColors(els, ['p'], COLOR_KEYS, { maxLum: 0.92 })) ??
     topColor(tallyColors(els, ['span'], COLOR_KEYS, { skipNeutral: true, maxLum: 0.92 }))
+  // 深浅搭配校验：浅底必须深字、深底必须浅字。原文跨元素误配的常见坑——
+  // 浅色卡片 + 深色卡片上的浅灰字（如 #fff0f0 底配 #cbd5e1 字，浅底浅字看不清）。
+  // 提取的正文色与背景亮度不匹配时按背景回退（深底 #cbd5e1 / 浅底 #333）。
+  const bodyTextOk =
+    !!bodyText &&
+    bodyText !== '#ffffff' &&
+    (dark ? luminance(bodyText) >= 0.45 : luminance(bodyText) < 0.55)
 
   // ---- 标题装饰：h1 / h2 的首个样式 ----
   const h1 = els.find((e) => e.tag === 'h1')
@@ -375,11 +382,11 @@ export function parseThemeFromHtml(html: string): ParsedTheme {
     ...(bodyBg
       ? {
           bodyBg,
-          bodyText: bodyText && bodyText !== '#ffffff' ? bodyText : dark ? '#cbd5e1' : '#333',
+          bodyText: bodyTextOk ? bodyText : dark ? '#cbd5e1' : '#333',
           bodyRadius: 14,
           bodyPadding: '16px 18px'
         }
-      : bodyText && bodyText !== '#ffffff'
+      : bodyTextOk
         ? { bodyText }
         : {}),
     ...(headingColor ? { headingColor } : {}),

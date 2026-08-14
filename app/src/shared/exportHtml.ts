@@ -81,10 +81,14 @@ function buildStyles(theme?: ArticleTheme): Styles {
   const lh = t.lineHeight || 2.13
   // 按背景卡片实际亮度判断深/浅（不能用「有无卡片」——暖白卡也是浅色）
   const dark = !!t.bodyBg && isDarkColor(t.bodyBg)
-  // 正文色：有卡片用主题 bodyText（缺省按深浅兜底），无卡片白底深字
-  const textColor = t.bodyBg ? t.bodyText ?? (dark ? '#cbd5e1' : '#333') : '#333'
-  const headingColor = t.headingColor ?? (dark ? '#eef2f7' : '#1a1a1a')
-  const subColor = t.headingColor ?? (dark ? '#c7d2e0' : '#1a1a1a')
+  // 深浅兜底：背景与正文/标题亮度不匹配时强制修正（浅底必须深字、深底必须浅字）。
+  // 兜底对象含历史导入产生的脏数据（浅粉底 #fff0f0 配浅灰字 #cbd5e1 等跨元素误配）
+  const bodyTv = t.bodyText ?? (dark ? '#cbd5e1' : '#333')
+  const textColor = t.bodyBg && isDarkColor(bodyTv) === dark ? (dark ? '#cbd5e1' : '#333') : bodyTv
+  const headTv = t.headingColor ?? (dark ? '#eef2f7' : '#1a1a1a')
+  const headingColor =
+    t.bodyBg && isDarkColor(headTv) === dark ? (dark ? '#eef2f7' : '#1a1a1a') : headTv
+  const subColor = headingColor
   // 引用/图注/提示不再用灰字：浅底深字、深底亮字，与正文同系靠背景块区分层次
   const quoteColor = dark ? '#cbd5e1' : '#333'
   const quoteBg = dark ? 'rgba(255,255,255,0.07)' : '#f7f7f7'

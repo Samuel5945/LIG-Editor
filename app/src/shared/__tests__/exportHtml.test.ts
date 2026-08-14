@@ -93,6 +93,28 @@ describe('手动样式导出（span 字色/背景/字号）', () => {
     expect(html).toContain('font-size:24px') // H2 = 24
     expect(html).toContain('font-size:21px') // H3 = 24-3
   })
+
+  it('深浅兜底：历史脏数据（浅粉底 + 浅灰字）导出正文强制深字', () => {
+    const dirty = {
+      ...DEFAULT_THEME,
+      bodyBg: '#fff0f0', // 浅粉底
+      bodyText: '#cbd5e1' // 浅灰字（误配）
+    }
+    const html = docToExportHtml(mdToDoc('正文一行'), (src) => src, dirty)
+    expect(html).toContain('background:#fff0f0')
+    expect(html).toContain('color:#333') // 浅底 → 深字兜底
+    expect(html).not.toContain('color:#cbd5e1')
+  })
+
+  it('深浅兜底：深底配浅字保持（不误伤正常主题）', () => {
+    const ok = {
+      ...DEFAULT_THEME,
+      bodyBg: '#0d1526',
+      bodyText: '#cbd5e1'
+    }
+    const html = docToExportHtml(mdToDoc('正文一行'), (src) => src, ok)
+    expect(html).toContain('color:#cbd5e1')
+  })
 })
 
 

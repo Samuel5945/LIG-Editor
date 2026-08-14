@@ -56,6 +56,31 @@ describe('parseThemeFromHtml（公众号 HTML → 排版调性）', () => {
     expect(theme.accent).toBe('#4f8cff')
     expect(theme.h1Style).toBe('bar')
   })
+
+  it('深浅搭配校验：浅底配浅字 → 正文色修正为深字（防跨元素误配看不清）', () => {
+    // 原文坑：浅粉卡片 #fff0f0 + 深色卡片上常见的浅灰字 #cbd5e1 → 浅底浅字
+    const dirty = `<html><body>
+<section style="background:#fff0f0;">
+<p style="color:#cbd5e1;">浅粉底上的浅灰字</p>
+<p style="color:#cbd5e1;">第二行</p>
+</section></body></html>`
+    const { theme } = parseThemeFromHtml(dirty)
+    expect(theme.bodyBg).toBe('#fff0f0')
+    expect(theme.bodyText).toBe('#333') // 浅底 → 强制深字
+  })
+
+  it('深浅搭配校验：深底配浅字保持；深底深字修正为浅字', () => {
+    const ok = `<html><body>
+<section style="background:#0d1526;">
+<p style="color:#cbd5e1;">深底浅字正常</p>
+</section></body></html>`
+    expect(parseThemeFromHtml(ok).theme.bodyText).toBe('#cbd5e1')
+    const bad = `<html><body>
+<section style="background:#0d1526;">
+<p style="color:#333;">深底深字看不清</p>
+</section></body></html>`
+    expect(parseThemeFromHtml(bad).theme.bodyText).toBe('#cbd5e1')
+  })
 })
 
 describe('contrastText（色块前景自适应）', () => {

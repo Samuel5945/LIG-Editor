@@ -741,10 +741,14 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
             // 背景卡片实际亮度：有卡片看卡片明暗；无卡片（设计鉴赏/情感回忆/哲学思考等）
             // 跟随编辑器 UI 主题——深色面板浅字、日间浅面板深字，杜绝日间浅底灰字看不清
             const darkBg = t.bodyBg ? isDarkColor(t.bodyBg) : uiDark !== false
-            // 正文色：有卡片按亮度给明确深/浅字；无卡片也按 UI 主题显式给色，
+            // 正文/标题色：有卡片按亮度给明确深/浅字；无卡片也按 UI 主题显式给色，
             // 不再留空落到 CSS 硬编码浅灰白（rgb 226 232 240）在日间面板上不可读
-            const bodyText = t.bodyText ?? (darkBg ? '#cbd5e1' : '#333')
-            const headingColor = t.headingColor ?? (darkBg ? '#eef2f7' : '#1a1a1a')
+            // 深浅兜底：背景与文字亮度不匹配（浅底浅字/深底深字，历史导入脏数据）时强制修正
+            const bodyTv = t.bodyText ?? (darkBg ? '#cbd5e1' : '#333')
+            const bodyText = t.bodyBg && isDarkColor(bodyTv) === darkBg ? (darkBg ? '#cbd5e1' : '#333') : bodyTv
+            const headTv = t.headingColor ?? (darkBg ? '#eef2f7' : '#1a1a1a')
+            const headingColor =
+              t.bodyBg && isDarkColor(headTv) === darkBg ? (darkBg ? '#eef2f7' : '#1a1a1a') : headTv
             const vars: Record<string, string> = {
               '--article-accent': accent,
               '--article-font': t.fontFamily,
