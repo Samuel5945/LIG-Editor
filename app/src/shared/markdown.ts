@@ -32,6 +32,51 @@ export interface TextStyleMark {
   fontSize?: number
 }
 
+/**
+ * 取 textStyle mark 的实际样式属性（兼容两种结构）：
+ * - 扁平：{ type:'textStyle', color, bg, fontSize }（mdToDoc 解析产物，导出/测试同源）
+ * - 嵌套：{ type:'textStyle', attrs:{ color, bg, fontSize } }（tiptap editor.getJSON() 产物，
+ *   未设置属性为 null）。编辑器 → md 序列化直接吃 getJSON，必须兼容嵌套结构，否则字号/字色/高亮全丢。
+ */
+export function textStyleAttrs(
+  mk: TextMark
+): Partial<TextStyleMark> | undefined {
+  if (mk.type !== 'textStyle') return undefined
+  const m = mk as TextStyleMark & { attrs?: Partial<TextStyleMark> }
+  return m.attrs ?? m
+}
+
+/**
+ * mdToDoc 扁平 mark → tiptap 嵌套 attrs 结构（setContent/insertContent 前调用）。
+ * tiptap 的 Mark.fromJSON 只读 json.attrs，扁平结构下所有属性回默认 null，
+ * 导入的字色/字号在编辑器里不显示。原地转换，返回同一 doc。
+ */
+export function docToTiptap(doc: ArticleDoc): ArticleDoc {
+  const walkInline = (nodes: InlineNode[] | undefined): void => {
+    for (const n of nodes ?? []) {
+      if (n.type !== 'text' || !n.marks) continue
+      n.marks = n.marks.map((mk) => {
+        if (mk.type !== 'textStyle' || 'attrs' in (mk as object)) return mk
+        const flat = mk as TextStyleMark
+        return {
+          type: 'textStyle',
+          attrs: { color: flat.color ?? null, bg: flat.bg ?? null, fontSize: flat.fontSize ?? null }
+        }
+      })
+    }
+  }
+  const walk = (blocks: BlockNode[] | undefined): void => {
+    for (const b of blocks ?? []) {
+      if (b.type === 'paragraph' || b.type === 'heading') walkInline(b.content)
+      else if (b.type === 'blockquote') {
+        for (const p of (b as BlockquoteNode).content) walkInline(p.content)
+      }
+    }
+  }
+  walk(doc.content)
+  return doc
+}
+
 export interface HardBreakNode {
   type: 'hardBreak'
 }
@@ -159,14 +204,16 @@ function parseSpanStyle(text: string): { attrs: TextStyleMark; rest: string } | 
 
 /** 把行内 mark 序列化为 md 片段（textStyle 用内联 span，bold 用 **） */
 function inlineToMdNode(n: TextNode): string {
-  const ts = n.marks?.find((mk): mk is TextStyleMark => mk.type === 'textStyle')
+  const ts = n.marks?.find((mk) => mk.type === 'textStyle')
   const bold = n.marks?.some((mk) => mk.type === 'bold')
   let inner = bold ? `**${n.text}**` : n.text
-  if (ts && (ts.color || ts.bg || ts.fontSize)) {
+  // 兼容扁平（mdToDoc）与嵌套（tiptap getJSON）两种 mark 结构
+  const a = ts ? textStyleAttrs(ts) : undefined
+  if (a && (a.color || a.bg || a.fontSize)) {
     const parts: string[] = []
-    if (ts.color) parts.push(`color:${ts.color}`)
-    if (ts.bg) parts.push(`background-color:${ts.bg}`)
-    if (ts.fontSize) parts.push(`font-size:${ts.fontSize}px`)
+    if (a.color) parts.push(`color:${a.color}`)
+    if (a.bg) parts.push(`background-color:${a.bg}`)
+    if (a.fontSize) parts.push(`font-size:${a.fontSize}px`)
     inner = `<span style="${parts.join(';')}">${inner}</span>`
   }
   return inner

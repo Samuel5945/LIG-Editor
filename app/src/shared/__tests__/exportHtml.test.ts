@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { mdToDoc } from '../markdown'
+import { mdToDoc, type ArticleDoc } from '../markdown'
 import { docToExportHtml, extractTitle, wrapExportPage, wrapExportPageDayNight } from '../exportHtml'
 import { DEFAULT_THEME, CATEGORY_THEMES } from '../categoryThemes'
 
@@ -53,6 +53,27 @@ describe('手动样式导出（span 字色/背景/字号）', () => {
     const md = '<span style="font-size:20px">大标题感</span>'
     const html = docToExportHtml(mdToDoc(md), (src) => src)
     expect(html).toContain('<span style="font-size:20px">大标题感</span>')
+  })
+
+  it('嵌套 attrs mark（tiptap 结构）同样渲染字号 span', () => {
+    // 模拟编辑器 getJSON 产物直接喂导出（防御：doc 结构不依赖 mdToDoc 单一来源）
+    const doc = {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            {
+              type: 'text',
+              text: '重点',
+              marks: [{ type: 'textStyle', attrs: { color: null, bg: null, fontSize: 18 } }]
+            }
+          ]
+        }
+      ]
+    } as unknown as ArticleDoc
+    const html = docToExportHtml(doc, (src) => src)
+    expect(html).toContain('<span style="font-size:18px">重点</span>')
   })
 
   it('正文默认字号 16px（主题 fontSize 生效）', () => {

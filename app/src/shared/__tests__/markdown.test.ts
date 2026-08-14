@@ -1,5 +1,14 @@
 import { describe, it, expect } from 'vitest'
-import { mdToDoc, docToMd, parseInline, inlineToMd, splitFigDesc } from '../markdown'
+import {
+  mdToDoc,
+  docToMd,
+  docToTiptap,
+  parseInline,
+  inlineToMd,
+  splitFigDesc,
+  type ArticleDoc,
+  type ParagraphNode
+} from '../markdown'
 
 const TABLE_MD = `| 功能 | 免费版 | 专业版 |
 | --- | --- | --- |
@@ -228,6 +237,78 @@ describe('行内手动样式（span 字色/背景/字号）', () => {
     expect(inlineToMd(inline)).toBe(
       '<span style="color:#e63946">红</span>中<span style="background-color:#dbeafe">蓝底</span>'
     )
+  })
+})
+
+describe('docToMd 兼容 tiptap 嵌套 mark 结构（编辑器 getJSON 产物）', () => {
+  it('字号/字色在 attrs 嵌套结构下序列化不丢', () => {
+    // tiptap getJSON 输出：mark 属性放 attrs 子对象（未设置属性为 null）
+    const doc = {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            { type: 'text', text: '前' },
+            {
+              type: 'text',
+              text: '大一点',
+              marks: [{ type: 'textStyle', attrs: { color: null, bg: null, fontSize: 20 } }]
+            },
+            { type: 'text', text: '后' }
+          ]
+        }
+      ]
+    } as unknown as ArticleDoc
+    expect(docToMd(doc)).toBe('前<span style="font-size:20px">大一点</span>后\n')
+  })
+
+  it('字色+字号混合嵌套结构完整保留', () => {
+    const doc = {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            {
+              type: 'text',
+              text: '重点',
+              marks: [{ type: 'textStyle', attrs: { color: '#e63946', bg: null, fontSize: 18 } }]
+            }
+          ]
+        }
+      ]
+    } as unknown as ArticleDoc
+    expect(docToMd(doc)).toBe('<span style="color:#e63946;font-size:18px">重点</span>\n')
+  })
+
+  it('docToTiptap：扁平 mark → 嵌套 attrs（setContent 前转换）', () => {
+    const doc = mdToDoc('<span style="font-size:18px">重点</span>')
+    const converted = docToTiptap(doc)
+    const text = (converted.content[0] as ParagraphNode).content?.[0] as
+      | { marks?: unknown[] }
+      | undefined
+    expect(text?.marks?.[0]).toEqual({
+      type: 'textStyle',
+      attrs: { color: null, bg: null, fontSize: 18 }
+    })
+  })
+
+  it('docToTiptap 幂等：已是嵌套结构不改动', () => {
+    const doc = {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            { type: 'text', text: 'x', marks: [{ type: 'textStyle', attrs: { fontSize: 18 } }] },
+            { type: 'text', text: 'b', marks: [{ type: 'bold' }] }
+          ]
+        }
+      ]
+    } as unknown as ArticleDoc
+    const out = docToTiptap(doc)
+    expect(out).toBe(doc)
   })
 })
 

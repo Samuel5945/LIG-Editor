@@ -12,7 +12,7 @@ import {
 import { useEditor, EditorContent, BubbleMenu } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import type { JSONContent } from '@tiptap/react'
-import { mdToDoc, docToMd, type ArticleDoc } from '@shared/markdown'
+import { mdToDoc, docToMd, docToTiptap, type ArticleDoc } from '@shared/markdown'
 import { isHexColor } from '@shared/cards'
 import { DEFAULT_THEME, contrastText, isDarkColor, resolveEditorTheme, type ArticleTheme } from '@shared/categoryThemes'
 import { FigureImage, type FigureImageStorage } from './FigureImage'
@@ -78,7 +78,7 @@ const HEADING_ALIGNS: { value: 'center' | 'left'; label: string }[] = [
   { value: 'left', label: '左' }
 ]
 
-/** 选区样式弹层：全屏透明层点击关闭 + 绝对定位面板（相对 BubbleMenu 容器） */
+/** 选区样式弹层：全屏透明层点击关闭 + 绝对定位面板（相对 BubbleMenu 容器，向上展开不挡选区） */
 function StylePanel({
   title,
   onClose,
@@ -91,7 +91,7 @@ function StylePanel({
   return (
     <>
       <div className="fixed inset-0 z-10" onClick={onClose} />
-      <div className="absolute left-0 top-full z-20 mt-1 w-56 rounded-lg border border-slate-700 bg-slate-900 p-2 shadow-2xl">
+      <div className="absolute bottom-full left-0 z-20 mb-1 w-56 rounded-lg border border-slate-700 bg-slate-900 p-2 shadow-2xl">
         <p className="mb-1.5 text-[10px] text-slate-500">{title}</p>
         {children}
       </div>
@@ -191,7 +191,7 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
       ArticleTable,
       TextStyleMark
     ],
-    content: mdToDoc(markdown),
+    content: docToTiptap(mdToDoc(markdown)),
     onUpdate({ editor }) {
       const md = docToMd(editor.getJSON() as ArticleDoc)
       lastEmitted.current = md
@@ -210,7 +210,8 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
       },
       replaceRange(from, to, md) {
         if (!editor) return
-        const blocks = mdToDoc(md.trim()).content as JSONContent[]
+        // mdToDoc 产出扁平 mark，转 tiptap 嵌套 attrs 再插入（否则字色/字号 attrs 全丢）
+        const blocks = docToTiptap(mdToDoc(md.trim())).content as JSONContent[]
         if (blocks.length === 0) {
           editor.chain().focus().deleteRange({ from, to }).run()
           return
@@ -289,7 +290,7 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
     if (!editor) return
     if (markdown !== lastEmitted.current) {
       lastEmitted.current = markdown
-      editor.commands.setContent(mdToDoc(markdown))
+      editor.commands.setContent(docToTiptap(mdToDoc(markdown)))
     }
   }, [editor, markdown])
 
@@ -521,7 +522,14 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
       </div>
       <div className="min-h-0 flex-1 overflow-auto">
         {/* 选区浮动指令条：加粗 + 手动样式（字色/背景高亮/字号）+ AI 指令 */}
-        <BubbleMenu editor={editor} tippyOptions={{ duration: 100 }}>
+        <BubbleMenu
+          editor={editor}
+          tippyOptions={{
+            duration: 100,
+            // BubbleMenu 隐藏（点外部/选区清空）时同步收回样式面板，避免下次选中又冒出来
+            onHidden: () => setStylePop(null)
+          }}
+        >
           <div className="relative flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-900 px-1.5 py-1 shadow-xl">
             <button
               type="button"

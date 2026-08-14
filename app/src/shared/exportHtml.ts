@@ -246,16 +246,21 @@ function inlineToHtml(content: InlineNode[] | undefined, s: Styles): string {
       if (n.type === 'hardBreak') return '<br>'
       const text = escapeHtml(n.text)
       const bold = n.marks?.some((mk) => mk.type === 'bold')
-      const ts = n.marks?.find((mk) => mk.type === 'textStyle') as
-        | { color?: string; bg?: string; fontSize?: number }
-        | undefined
+      const ts = n.marks?.find((mk) => mk.type === 'textStyle')
+      // 兼容扁平（mdToDoc）与嵌套（tiptap getJSON）两种 mark 结构
+      const a = ts
+        ? (ts as { color?: string; bg?: string; fontSize?: number } & {
+            attrs?: { color?: string | null; bg?: string | null; fontSize?: number | null }
+          })
+        : undefined
+      const attrs = a ? (a.attrs ?? a) : undefined
       // 手动样式 span：字色 / 背景高亮 / 字号（与编辑器所见同源）
       const styleParts: string[] = []
-      if (ts?.color) styleParts.push(`color:${ts.color}`)
-      if (ts?.bg) styleParts.push(`background-color:${ts.bg}`)
-      if (ts?.fontSize) styleParts.push(`font-size:${ts.fontSize}px`)
+      if (attrs?.color) styleParts.push(`color:${attrs.color}`)
+      if (attrs?.bg) styleParts.push(`background-color:${attrs.bg}`)
+      if (attrs?.fontSize) styleParts.push(`font-size:${attrs.fontSize}px`)
       // 手动字色优先于主题 strongColor：有 color 时 strong 不带主题色样式（继承 span）
-      const strongStyle = ts?.color ? '' : ` style="${s.strong}"`
+      const strongStyle = attrs?.color ? '' : ` style="${s.strong}"`
       let inner = text
       if (bold) inner = `<strong${strongStyle}>${inner}</strong>`
       if (styleParts.length) inner = `<span style="${styleParts.join(';')}">${inner}</span>`
