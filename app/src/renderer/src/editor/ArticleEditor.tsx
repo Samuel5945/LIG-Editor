@@ -33,8 +33,9 @@ const ACCENT_PRESETS: { color: string; name: string }[] = [
   { color: '#5b6470', name: '灰' }
 ]
 
-/** 选区字色预设（正文/强调通用） */
+/** 选区字色预设（正文/强调通用；白色常用于深底卡片上提亮文字） */
 const TEXT_COLORS: { color: string; name: string }[] = [
+  { color: '#ffffff', name: '白色' },
   { color: '#1a1a1a', name: '深黑' },
   { color: '#595959', name: '灰' },
   { color: '#e63946', name: '红' },
@@ -575,7 +576,7 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
                     自定义
                     <input
                       type="color"
-                      defaultValue="#e63946"
+                      value={(editor.getAttributes('textStyle').color as string | undefined) ?? '#e63946'}
                       onChange={(e) => {
                         editor.chain().focus().setTextStyle({ color: e.target.value }).run()
                         setStylePop(null)
