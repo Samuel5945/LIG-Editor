@@ -901,7 +901,7 @@ export default function App(): JSX.Element {
                     project={current}
                     markdown={article}
                     projectDir={currentDir}
-                    accent={meta?.accent}
+                    accent={articleTheme.accent}
                     theme={articleTheme}
                     uiDark={theme === 'dark'}
                     onChange={setArticle}

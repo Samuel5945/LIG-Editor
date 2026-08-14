@@ -153,6 +153,9 @@ export const CATEGORY_THEMES: Record<string, ArticleTheme> = {
 /**
  * 解析工程最终排版调性：分类调性打底，项目显式强调色覆盖颜色。
  * custom 为运行时加载的自定义主题库（settings/customThemes.json，优先级高于预设分类）。
+ * 用户手动选强调色 = 全文主强调色换色：标题文字色（headingColor）与加粗色（strongColor）
+ * 同源联动跟随（v2 主题的独立色也一并覆盖，恢复「强调色一键换全文主色」的直觉）；
+ * 正文阅读色（bodyText）、块背景（h2Bg 黑块等）属排版形态，保持主题原值。
  */
 export function resolveArticleTheme(
   meta: Pick<ProjectMeta, 'accent' | 'category'> | null | undefined,
@@ -161,5 +164,13 @@ export function resolveArticleTheme(
   const cat = meta?.category
   const base = (cat && (custom?.[cat] ?? CATEGORY_THEMES[cat])) || DEFAULT_THEME
   const accent = meta?.accent && isHexColor(meta.accent) ? meta.accent.trim() : base.accent
+  if (meta?.accent && isHexColor(meta.accent)) {
+    return {
+      ...base,
+      accent,
+      ...(base.headingColor ? { headingColor: accent } : {}),
+      ...(base.strongColor ? { strongColor: accent } : {})
+    }
+  }
   return { ...base, accent }
 }
