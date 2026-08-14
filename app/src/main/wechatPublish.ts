@@ -162,7 +162,7 @@ function extractDigest(md: string): string {
  * 推送工程到公众号草稿箱。
  * 两遍渲染：第一遍收集正文全部本地图片路径，逐张上传 CDN 后，第二遍用 URL 映射出最终 HTML
  */
-export async function pushDraft(project: string): Promise<PushDraftResult> {
+export async function pushDraft(project: string, variant: 'day' | 'night' = 'day'): Promise<PushDraftResult> {
   try {
     const md = readTextFile(project, 'article.md')
     if (!md.trim()) throw new Error('article.md 为空，先写正文再推送')
@@ -192,8 +192,8 @@ export async function pushDraft(project: string): Promise<PushDraftResult> {
     if (!existsSync(coverAbs)) throw new Error(`封面图不存在：${meta.cover.main}`)
     const thumbMediaId = await uploadCoverMaterial(token, coverAbs)
 
-    // 第二遍：本地图替换为 CDN URL，产出最终正文 HTML（跟随分类排版调性）
-    const content = docToExportHtml(doc, (src) => urlMap.get(src) ?? src, resolveArticleTheme(meta))
+    // 第二遍：本地图替换为 CDN URL，产出最终正文 HTML（跟随分类排版调性 + 指定配色变体）
+    const content = docToExportHtml(doc, (src) => urlMap.get(src) ?? src, resolveArticleTheme(meta), variant === 'night')
 
     const title = extractTitle(doc, project).slice(0, 64)
     const data = await wxFetch<WxError & { media_id: string }>(`${API}/draft/add?access_token=${token}`, {

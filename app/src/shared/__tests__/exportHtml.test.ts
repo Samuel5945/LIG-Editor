@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { mdToDoc } from '../markdown'
-import { docToExportHtml, extractTitle, wrapExportPage } from '../exportHtml'
+import { docToExportHtml, extractTitle, wrapExportPage, wrapExportPageDayNight } from '../exportHtml'
 import { DEFAULT_THEME, CATEGORY_THEMES } from '../categoryThemes'
 
 const TABLE_MD = `| 功能 | 免费版 |
@@ -114,6 +114,41 @@ describe('手动样式导出（span 字色/背景/字号）', () => {
     }
     const html = docToExportHtml(mdToDoc('正文一行'), (src) => src, ok)
     expect(html).toContain('color:#cbd5e1')
+  })
+
+  it('配色变体：uiDark 传参切换昼夜配色（导出预览跟随 UI）', () => {
+    const life = CATEGORY_THEMES['生活常识']
+    const day = docToExportHtml(mdToDoc('正文'), (src) => src, life, false)
+    const night = docToExportHtml(mdToDoc('正文'), (src) => src, life, true)
+    expect(day).toContain('background:#fffaf2') // 日间基础色
+    expect(day).toContain('color:#3d3a34')
+    expect(night).toContain('background:#262016') // 夜间变体深暖卡
+    expect(night).toContain('color:#e7e0d4')
+  })
+
+  it('读者端自动昼夜：双份配色 + prefers-color-scheme 切换', () => {
+    const life = CATEGORY_THEMES['生活常识']
+    const doc = mdToDoc('正文')
+    const day = docToExportHtml(doc, (src) => src, life, false)
+    const night = docToExportHtml(doc, (src) => src, life, true)
+    const page = wrapExportPageDayNight(day, night, '标题')
+    expect(page).toContain('art-day')
+    expect(page).toContain('art-night')
+    expect(page).toContain('@media (prefers-color-scheme: dark)')
+    expect(page).toContain('background:#fffaf2') // 日间份
+    expect(page).toContain('background:#262016') // 夜间份
+    // 默认显示日间，深色系统切夜间
+    expect(page).toContain('.art-day{display:block}')
+    expect(page).toContain('.art-night{display:none}')
+  })
+
+  it('高亮加粗字色按高亮底色亮度：淡黄底恒为深字（深卡夜间版不出现淡黄底白字）', () => {
+    const life = CATEGORY_THEMES['生活常识'] // strongStyle=highlight, strongBg=#fef3c7 淡黄
+    const night = docToExportHtml(mdToDoc('**重点**内容'), (src) => src, life, true)
+    // 夜间版卡片深暖 #262016，但高亮底仍是淡黄 #fef3c7 → 字色必须深色
+    expect(night).toContain('background:#fef3c7')
+    expect(night).toContain('color:#333')
+    expect(night).not.toContain('background:#fef3c7;padding:1px 6px;border-radius:4px;font-weight:bold;color:#f5f5f4')
   })
 })
 

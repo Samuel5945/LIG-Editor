@@ -1,6 +1,6 @@
 import type { ArticleDoc, BlockNode, FigureGalleryAttrs, InlineNode, ParagraphNode } from './markdown'
 import { isHexColor } from './cards'
-import { DEFAULT_THEME, contrastText, isDarkColor, type ArticleTheme } from './categoryThemes'
+import { DEFAULT_THEME, contrastText, isDarkColor, resolveEditorTheme, type ArticleTheme } from './categoryThemes'
 
 /**
  * article.md → 公众号可粘贴 HTML（M7 导出）
@@ -64,9 +64,16 @@ function tint(hex: string, alpha: number): string {
   return `rgba(${n >> 16},${(n >> 8) & 0xff},${n & 0xff},${alpha})`
 }
 
-/** 按排版调性着色与造型（与编辑器同源同构）；缺省/非法值回默认调性 */
-function buildStyles(theme?: ArticleTheme): Styles {
-  const t = theme ?? DEFAULT_THEME
+/** 按排版调性着色与造型（与编辑器同源同构）；缺省/非法值回默认调性。
+ * uiDark 提供时按昼夜变体（bodyBgLight/Dark 等）覆盖配色——导出预览跟随 UI；
+ * 不传则固定主题基础色——导出文件/公众号草稿静态，不随读者昼夜切换。 */
+function buildStyles(theme?: ArticleTheme, uiDark?: boolean): Styles {
+  let t = theme ?? DEFAULT_THEME
+  if (uiDark !== undefined) {
+    // 昼夜变体覆盖：编辑器预览所见 = 编辑器正文区配色
+    const c = resolveEditorTheme(t, uiDark)
+    t = { ...t, bodyBg: c.bodyBg, bodyText: c.bodyText, headingColor: c.headingColor }
+  }
   const s: Styles = {
     ...S,
     quoteMark: '',
@@ -221,7 +228,9 @@ function strongStyle(t: ArticleTheme, dark: boolean, accent: string): string {
   if (style === 'plain') return 'font-weight:bold;'
   if (style === 'highlight') {
     const bg = t.strongBg && isHexColor(t.strongBg) ? t.strongBg : '#fef3c7'
-    return `font-weight:bold;color:${dark ? '#f5f5f4' : '#333'};background:${bg};padding:1px 6px;border-radius:4px;`
+    // 高亮字色按高亮底色自身亮度（不是卡片亮度）：淡黄 #fef3c7 上恒为深字，
+    // 深色卡片夜间模式配淡黄高亮也不出「淡黄底白字」看不清
+    return `font-weight:bold;color:${isDarkColor(bg) ? '#f5f5f4' : '#333'};background:${bg};padding:1px 6px;border-radius:4px;`
   }
   return `font-weight:bold;color:${strongColor};`
 }
@@ -358,8 +367,13 @@ function blockToHtml(block: BlockNode, resolveImg: (src: string) => string, s: S
 }
 
 /** doc → 正文片段 HTML（粘贴公众号用这段；不含 <html> 外壳）；theme 为排版调性（分类调性解析结果） */
-export function docToExportHtml(doc: ArticleDoc, resolveImg: (src: string) => string, theme?: ArticleTheme): string {
-  const s = buildStyles(theme)
+export function docToExportHtml(
+  doc: ArticleDoc,
+  resolveImg: (src: string) => string,
+  theme?: ArticleTheme,
+  uiDark?: boolean
+): string {
+  const s = buildStyles(theme, uiDark)
   const body = (doc.content ?? [])
     .map((b) => blockToHtml(b, resolveImg, s))
     .filter(Boolean)
@@ -379,6 +393,37 @@ export function wrapExportPage(fragment: string, title: string): string {
 <body style="margin:0;background:#fff;">
 <div style="max-width:677px;margin:0 auto;padding:20px 16px 48px;">
 ${fragment}
+</div>
+</body>
+</html>
+`
+}
+
+/**
+ * 读者端自动昼夜版页面：日间/夜间两套配色都内联，靠 prefers-color-scheme 切换显示。
+ * 用于部署到自有网页/博客——读者系统深色自动看夜间配色、浅色看日间配色。
+ * 注意：公众号渲染器不认媒体查询，推送/复制富文本请用固定配色（二选一）。
+ */
+export function wrapExportPageDayNight(dayFragment: string, nightFragment: string, title: string): string {
+  return `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${escapeHtml(title)}</title>
+<style>
+.art-day{display:block}
+.art-night{display:none}
+@media (prefers-color-scheme: dark){
+  .art-day{display:none!important}
+  .art-night{display:block!important}
+}
+</style>
+</head>
+<body style="margin:0;background:#fff;">
+<div style="max-width:677px;margin:0 auto;padding:20px 16px 48px;">
+<div class="art-day">${dayFragment}</div>
+<div class="art-night">${nightFragment}</div>
 </div>
 </body>
 </html>

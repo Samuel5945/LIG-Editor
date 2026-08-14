@@ -1155,6 +1155,7 @@ export default function App(): JSX.Element {
           projectDir={currentDir}
           markdown={article}
           theme={articleTheme}
+          uiDark={theme === 'dark'}
           onToast={setToast}
           onClose={() => setShowExport(false)}
         />

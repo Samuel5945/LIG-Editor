@@ -147,9 +147,13 @@ export function registerIpc(): void {
   handle('figure:readHtml', (project, relPath) => readFigureHtml(project, relPath))
   handle('figure:render', (project, htmlRelPath) => renderFigure(project, htmlRelPath))
 
-  // ---- 导出（M7）----
-  handle('export:html', (project) => exportArticleHtml(project))
-  handle('export:copyRich', (project) => copyArticleRich(project))
+  // ---- 导出（M7）：variant auto=读者端自动昼夜 / day / night（复制与推送只用 day/night）----
+  handle('export:html', ({ project, variant }: { project: string; variant?: string }) =>
+    exportArticleHtml(project, (variant as 'auto' | 'day' | 'night') ?? 'auto')
+  )
+  handle('export:copyRich', ({ project, variant }: { project: string; variant?: string }) =>
+    copyArticleRich(project, variant === 'night' ? 'night' : 'day')
+  )
   handle('export:openFile', async (absPath) => {
     // 先校验存在：ShellExecute 对不存在的路径会弹 Windows 原生错误框，改走应用内提示
     if (!existsSync(absPath)) throw new Error(`路径不存在：${absPath}`)
@@ -171,7 +175,9 @@ export function registerIpc(): void {
     // 换号后清 access_token 缓存，新凭据立即生效
     invalidateToken()
   })
-  handle('wechat:push-draft', ({ project }) => pushDraft(project))
+  handle('wechat:push-draft', ({ project, variant }: { project: string; variant?: string }) =>
+    pushDraft(project, variant === 'night' ? 'night' : 'day')
+  )
   handle('wechat:push-cards', ({ project }) => pushCards(project))
   handle('wechat:public-ip', () => getPublicIp())
 

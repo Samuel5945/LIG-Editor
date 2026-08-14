@@ -414,10 +414,10 @@ export interface IpcApi {
   /** 离屏渲染 figures/*.html → assets/<同名>.png，返回 PNG 相对路径 */
   'figure:render': (project: string, htmlRelPath: string) => string
   // ---- 导出（M7）----
-  /** 导出内联样式 article.html 到工程目录（图片保持相对路径），返回绝对路径 */
-  'export:html': (project: string) => string
-  /** 富文本复制到剪贴板（text/html 图片 dataURL 内嵌 + 纯文本 md 兑底） */
-  'export:copyRich': (project: string) => void
+  /** 导出 article.html 到工程目录（图片保持相对路径），返回绝对路径；variant 配色模式 */
+  'export:html': (args: { project: string; variant?: 'auto' | 'day' | 'night' }) => string
+  /** 富文本复制到剪贴板（text/html 图片 dataURL 内嵌 + 纯文本 md 兑底）；variant 配色二选一 */
+  'export:copyRich': (args: { project: string; variant?: 'day' | 'night' }) => void
   /** 用系统默认应用（浏览器）打开导出的文件 */
   'export:openFile': (absPath: string) => void
   // ---- 贴图卡片 ----

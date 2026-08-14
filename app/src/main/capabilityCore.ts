@@ -491,16 +491,33 @@ export const TOOLS: ToolDef[] = [
   },
   {
     name: 'export_html',
-    description: '把 article.md 导出为全内联样式的 article.html（公众号兼容排版），返回绝对路径',
-    inputSchema: { type: 'object', properties: { project: P.project }, required: ['project'] },
-    handler: (a) => ({ path: exportArticleHtml(str(a, 'project')) })
+    description:
+      '把 article.md 导出为 article.html，返回绝对路径。variant 配色模式：auto 读者端自动昼夜（prefers-color-scheme 媒体查询，读者系统深色自动看夜间配色，适合部署自有网页/博客）/ day 固定日间配色（浅卡深字）/ night 固定夜间配色（深卡浅字）。公众号推送不支持媒体查询，若要复制到公众号请用 day/night 固定配色',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project: P.project,
+        variant: { type: 'string', enum: ['auto', 'day', 'night'], description: '配色模式（缺省 auto）' }
+      },
+      required: ['project']
+    },
+    handler: (a) => ({
+      path: exportArticleHtml(str(a, 'project'), (str(a, 'variant', false) || 'auto') as 'auto' | 'day' | 'night')
+    })
   },
   {
     name: 'push_draft',
     description:
-      '把工程推送到公众号草稿箱：正文本地图片自动上传微信 CDN，封面传永久素材，draft/add 入草稿。需先配置 AppID/AppSecret（settings/wechat.json）且本机公网 IP 已加入公众平台白名单',
-    inputSchema: { type: 'object', properties: { project: P.project }, required: ['project'] },
-    handler: (a) => pushDraft(str(a, 'project'))
+      '把工程推送到公众号草稿箱：正文本地图片自动上传微信 CDN，封面传永久素材，draft/add 入草稿。variant 配色（公众号读者统一看一套，二选一）：day 固定日间配色（浅卡深字，缺省）/ night 固定夜间配色（深卡浅字）。需先配置 AppID/AppSecret（settings/wechat.json）且本机公网 IP 已加入公众平台白名单',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project: P.project,
+        variant: { type: 'string', enum: ['day', 'night'], description: '发布配色（缺省 day）' }
+      },
+      required: ['project']
+    },
+    handler: (a) => pushDraft(str(a, 'project'), str(a, 'variant', false) === 'night' ? 'night' : 'day')
   },
   {
     name: 'push_cards',

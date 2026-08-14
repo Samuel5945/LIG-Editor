@@ -9,7 +9,7 @@ declare module './types' {
   interface IpcApi {
     'wechat:get-settings': () => WechatSettings
     'wechat:set-settings': (settings: WechatSettings) => void
-    'wechat:push-draft': (args: { project: string }) => PushDraftResult
+    'wechat:push-draft': (args: { project: string; variant?: 'day' | 'night' }) => PushDraftResult
     'wechat:push-cards': (args: { project: string }) => PushDraftResult
     'wechat:public-ip': () => PublicIpResult
   }
