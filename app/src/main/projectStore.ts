@@ -329,11 +329,15 @@ export function setProjectCategory(name: string, category: string): ProjectMeta 
     if (existsSync(target)) throw new Error(`分类「${category}」下已有同名工程：${name}`)
     mkdirSync(join(workspace, category), { recursive: true })
     renameSync(dir, target)
-    // 旧分类目录空了就顺手清掉
+    // 旧分类目录空了就顺手清掉；但绑定自定义主题的分类是用户主动保存的排版资产，
+    // 保留空目录防止「导入排版的分类随项目移出而消失」（主题仍在 customThemes.json）
     try {
       const parent = normalize(join(dir, '..'))
       if (parent.toLowerCase() !== normalize(workspace).toLowerCase() && readdirSync(parent).length === 0) {
-        rmSync(parent, { recursive: true, force: true })
+        const catName = normalize(parent).split(/[\\/]/).pop() ?? ''
+        if (!listCustomThemes()[catName]) {
+          rmSync(parent, { recursive: true, force: true })
+        }
       }
     } catch {
       // 清理失败不影响迁移结果

@@ -73,6 +73,20 @@ export function deleteCustomTheme(name: string): void {
 }
 
 /**
+ * 启动自愈：保证每个自定义主题对应的分类目录存在。
+ * 历史 bug：setProjectCategory 移出项目时会把空的旧分类目录顺手删掉，
+ * 绑定自定义主题的分类目录也被误删（主题变孤儿、分类从列表消失）。
+ * 主题存在 = 用户主动保存的排版资产，对应分类目录必须补回来。
+ */
+export function ensureThemeCategoryDirs(): void {
+  const { workspace } = getAppPaths()
+  for (const name of Object.keys(listCustomThemes())) {
+    const dir = join(workspace, name)
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+  }
+}
+
+/**
  * 抓取公众号文章/网页 HTML（导入排版的链接入口）。
  * 公众号原始页面普遍 3MB+，抓取后立即裁剪（提取 js_content 正文容器），
  * 只把解析所需的小体积 HTML 传回渲染进程。
