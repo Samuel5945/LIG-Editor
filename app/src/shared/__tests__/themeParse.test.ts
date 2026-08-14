@@ -149,6 +149,20 @@ describe('resolveEditorTheme（昼夜版：编辑器按 UI 深浅切卡片配色
     expect(night.bodyText).toBe('#cbd5e1')
   })
 
+  it('夜间配色语义统一：无卡片/浅底主题给默认深底（防白底浅字不可读）', () => {
+    const design = CATEGORY_THEMES['设计鉴赏'] // 无 bodyBg
+    const night = resolveEditorTheme(design, true)
+    expect(night.bodyBg).toBe('#1e2126')
+    expect(night.darkBg).toBe(true)
+    // 浅粉底主题（导入排版）无 Dark 变体：夜间同样给默认深底
+    const lightCard = { ...DEFAULT_THEME, bodyBg: '#fff0f0', bodyText: '#333' }
+    const c = resolveEditorTheme(lightCard, true)
+    expect(c.bodyBg).toBe('#1e2126')
+    expect(c.darkBg).toBe(true)
+    // 深色基础色主题（科技数码）夜间保持深卡（不套默认底）
+    expect(resolveEditorTheme(CATEGORY_THEMES['科技数码'], true).bodyBg).toBe('#0d1526')
+  })
+
   it('脏数据兜底仍生效：浅底显式浅字被修正为深字', () => {
     const dirty = { ...DEFAULT_THEME, bodyBg: '#fff0f0', bodyText: '#cbd5e1' }
     const c = resolveEditorTheme(dirty, false)

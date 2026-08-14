@@ -150,6 +150,17 @@ describe('手动样式导出（span 字色/背景/字号）', () => {
     expect(night).toContain('color:#333')
     expect(night).not.toContain('background:#fef3c7;padding:1px 6px;border-radius:4px;font-weight:bold;color:#f5f5f4')
   })
+
+  it('无卡片主题夜间配色：导出输出默认深底 + 浅字（不再白底浅字）', () => {
+    const design = CATEGORY_THEMES['设计鉴赏'] // 无 bodyBg
+    const html = docToExportHtml(mdToDoc('正文一行'), (src) => src, design, true)
+    expect(html).toContain('background:#1e2126')
+    expect(html).toContain('color:#cbd5e1')
+    // 日间保持无背景 + 深字
+    const day = docToExportHtml(mdToDoc('正文一行'), (src) => src, design, false)
+    expect(day).not.toContain('background:#1e2126')
+    expect(day).toContain('color:#333')
+  })
 })
 
 

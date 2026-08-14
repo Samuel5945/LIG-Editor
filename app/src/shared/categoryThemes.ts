@@ -43,7 +43,7 @@ export function contrastText(bg: string): string {
 }
 
 export interface EditorThemeColors {
-  /** 实际卡片背景色（变体优先；无卡片为 undefined → 编辑器透明白底） */
+  /** 实际卡片背景色（变体优先；夜间配色无卡片主题给默认深底；日间无卡片为 undefined → 透明白底） */
   bodyBg?: string
   /** 实际正文文字色（已做深浅兜底，杜绝浅底浅字看不清） */
   bodyText: string
@@ -53,15 +53,23 @@ export interface EditorThemeColors {
   darkBg: boolean
 }
 
+/** 夜间配色兜底卡片底色（无卡片/浅底主题选夜间配色时使用，防白底浅字不可读） */
+export const DEFAULT_NIGHT_BG = '#1e2126'
+
 /**
  * 编辑器昼夜配色解析（纯函数，ArticleEditor 注入 CSS 变量用）：
  * - 带背景卡片的主题：UI 深色优先 bodyBgDark、UI 浅色优先 bodyBgLight，无变体回退基础色
+ * - 夜间配色语义统一 = 深色卡片 + 浅字：无卡片主题或基础色为浅底时给默认深底 DEFAULT_NIGHT_BG，
+ *   避免「白底浅字」不可读；日间配色保持无卡片主题透明白底深字
  * - 深浅兜底：背景与文字亮度不匹配（浅底浅字/深底深字，历史导入脏数据）时强制修正
- * - 无卡片主题（设计鉴赏/情感回忆/哲学思考等）：跟随 UI 主题——深色面板浅字、日间深字
- * 导出/公众号不受影响：buildStyles 固定用基础色（bodyBg），公众号文章不可能昼夜切换。
+ * 导出/公众号同源：buildStyles 传 uiDark 时走同一解析，预览/复制/推送与编辑器一致。
  */
 export function resolveEditorTheme(theme: ArticleTheme, uiDark: boolean): EditorThemeColors {
-  const bg = uiDark ? theme.bodyBgDark ?? theme.bodyBg : theme.bodyBgLight ?? theme.bodyBg
+  // 夜间：Dark 变体 → 深色基础色 → 默认深底；日间：Light 变体 → 基础色（浅底保留、深底用 Light）
+  const baseBg = theme.bodyBg
+  const bg = uiDark
+    ? theme.bodyBgDark ?? (baseBg && isDarkColor(baseBg) ? baseBg : DEFAULT_NIGHT_BG)
+    : theme.bodyBgLight ?? baseBg
   const darkBg = bg ? isDarkColor(bg) : uiDark
   const bodyTv =
     (uiDark ? theme.bodyTextDark : theme.bodyTextLight) ?? theme.bodyText ?? (darkBg ? '#cbd5e1' : '#333')
