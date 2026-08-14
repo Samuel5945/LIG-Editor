@@ -187,6 +187,50 @@ describe('行内加粗', () => {
   })
 })
 
+describe('行内手动样式（span 字色/背景/字号）', () => {
+  it('解析 span 样式 → textStyle mark，序列化还原', () => {
+    const inline = parseInline(
+      '前<span style="color:#e63946;background-color:#fef3c7;font-size:18px">重点</span>后'
+    )
+    expect(inline).toEqual([
+      { type: 'text', text: '前' },
+      {
+        type: 'text',
+        text: '重点',
+        marks: [{ type: 'textStyle', color: '#e63946', bg: '#fef3c7', fontSize: 18 }]
+      },
+      { type: 'text', text: '后' }
+    ])
+    expect(inlineToMd(inline)).toBe(
+      '前<span style="color:#e63946;background-color:#fef3c7;font-size:18px">重点</span>后'
+    )
+  })
+
+  it('span 内加粗与手动样式叠加（往返无损）', () => {
+    const inline = parseInline('<span style="color:#2bae85;font-size:17px">**青绿粗**</span>续')
+    expect(inlineToMd(inline)).toBe('<span style="color:#2bae85;font-size:17px">**青绿粗**</span>续')
+    const ts = inline.find((n) => n.type === 'text' && n.text === '青绿粗') as
+      | { marks?: { type: string }[] }
+      | undefined
+    expect(ts?.marks?.some((m) => m.type === 'bold')).toBe(true)
+    expect(ts?.marks?.some((m) => m.type === 'textStyle')).toBe(true)
+  })
+
+  it('无样式的 span / 不可识别样式按普通文本保留', () => {
+    const inline = parseInline('<span style="text-decoration:underline">下划线</span>')
+    expect(inlineToMd(inline)).toBe('<span style="text-decoration:underline">下划线</span>')
+  })
+
+  it('多 span 连续 + 普通文本混合', () => {
+    const inline = parseInline(
+      '<span style="color:#e63946">红</span>中<span style="background-color:#dbeafe">蓝底</span>'
+    )
+    expect(inlineToMd(inline)).toBe(
+      '<span style="color:#e63946">红</span>中<span style="background-color:#dbeafe">蓝底</span>'
+    )
+  })
+})
+
 describe('splitFigDesc 拆分占位描述', () => {
   it('「画面描述 | 图注」按首个竖线拆两段', () => {
     expect(splitFigDesc('俯拍视角的环形 LOGO 悬浮在深色背景上 | 荣耀新环')).toEqual({

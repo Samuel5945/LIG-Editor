@@ -169,7 +169,12 @@ body {
   background: var(--article-accent, #4f8cff);
 }
 .article-editor .ProseMirror p {
+  font-size: var(--article-font-size, 16px);
   margin: var(--article-p-gap, 1rem) 0;
+}
+/* 手动 span 样式里的加粗：继承 span 的自定义字色，避免主题 strongColor 盖掉手动色 */
+.article-editor .ProseMirror span[style*="color:"] strong {
+  color: inherit;
 }
 /* 引用：左条浅底 / 圆角卡片 / 引号，从正文里浮出来 */
 .article-editor .ProseMirror blockquote {

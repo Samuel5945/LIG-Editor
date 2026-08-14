@@ -38,6 +38,29 @@ describe('表格导出', () => {
   })
 })
 
+describe('手动样式导出（span 字色/背景/字号）', () => {
+  it('textStyle mark → 内联 span，bold 叠加时 strong 继承 span 色', () => {
+    const md =
+      '前<span style="color:#e63946;background-color:#fef3c7;font-size:18px">**重点**</span>后'
+    const html = docToExportHtml(mdToDoc(md), (src) => src)
+    expect(html).toContain('<span style="color:#e63946;background-color:#fef3c7;font-size:18px">')
+    // 手动字色时 strong 不带主题色样式（继承 span 色），保留加粗标签
+    expect(html).toContain('<strong>重点</strong>')
+    expect(html).not.toContain('<strong style="')
+  })
+
+  it('仅字号：输出 font-size span', () => {
+    const md = '<span style="font-size:20px">大标题感</span>'
+    const html = docToExportHtml(mdToDoc(md), (src) => src)
+    expect(html).toContain('<span style="font-size:20px">大标题感</span>')
+  })
+
+  it('正文默认字号 16px（主题 fontSize 生效）', () => {
+    const html = docToExportHtml(mdToDoc('正文一行'), (src) => src, DEFAULT_THEME)
+    expect(html).toContain('font-size:16px')
+  })
+})
+
 
 const SAMPLE = `# 荣耀换标：一个环的诞生
 

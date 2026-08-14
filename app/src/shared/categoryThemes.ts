@@ -48,6 +48,7 @@ export const DEFAULT_THEME: ArticleTheme = {
   fontFamily: SANS,
   lineHeight: 2.13,
   letterSpacing: '0.02em',
+  fontSize: 16,
   headingAlign: 'center'
 }
 

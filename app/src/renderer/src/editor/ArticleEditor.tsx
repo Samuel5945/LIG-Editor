@@ -6,7 +6,8 @@ import {
   useRef,
   useState,
   type CSSProperties,
-  type ReactElement
+  type ReactElement,
+  type ReactNode
 } from 'react'
 import { useEditor, EditorContent, BubbleMenu } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
@@ -18,6 +19,7 @@ import { FigureImage, type FigureImageStorage } from './FigureImage'
 import { FigSuggest, type FigSuggestStorage } from './FigSuggest'
 import { FigureGallery } from './FigureGallery'
 import ArticleTable from './ArticleTable'
+import { TextStyleMark } from './TextStyleMark'
 
 /** 工具栏快速换色预设：常用参考色，选不中用取色器自定义 */
 const ACCENT_PRESETS: { color: string; name: string }[] = [
@@ -30,6 +32,55 @@ const ACCENT_PRESETS: { color: string; name: string }[] = [
   { color: '#e86fa4', name: '粉' },
   { color: '#5b6470', name: '灰' }
 ]
+
+/** 选区字色预设（正文/强调通用） */
+const TEXT_COLORS: { color: string; name: string }[] = [
+  { color: '#1a1a1a', name: '深黑' },
+  { color: '#595959', name: '灰' },
+  { color: '#e63946', name: '红' },
+  { color: '#ff6b35', name: '橙' },
+  { color: '#c9a227', name: '金' },
+  { color: '#2bae85', name: '青绿' },
+  { color: '#4f8cff', name: '蓝' },
+  { color: '#7c5cff', name: '紫' },
+  { color: '#e86fa4', name: '粉' }
+]
+
+/** 选区背景高亮预设（浅色系，保证黑字可读） */
+const BG_COLORS: { color: string; name: string }[] = [
+  { color: '#fef3c7', name: '浅黄' },
+  { color: '#dcfce7', name: '浅绿' },
+  { color: '#dbeafe', name: '浅蓝' },
+  { color: '#fee2e2', name: '浅红' },
+  { color: '#f3e8ff', name: '浅紫' },
+  { color: '#ffedd5', name: '浅橙' },
+  { color: '#ffe4e6', name: '浅粉' },
+  { color: '#e2e8f0', name: '浅灰' }
+]
+
+/** 选区字号预设（px）：公众号正文 14-16 常规，17+ 强调 */
+const FONT_SIZES = [12, 13, 14, 15, 16, 17, 18, 20, 22, 24]
+
+/** 选区样式弹层：全屏透明层点击关闭 + 绝对定位面板（相对 BubbleMenu 容器） */
+function StylePanel({
+  title,
+  onClose,
+  children
+}: {
+  title: string
+  onClose: () => void
+  children: ReactNode
+}): ReactElement {
+  return (
+    <>
+      <div className="fixed inset-0 z-10" onClick={onClose} />
+      <div className="absolute left-0 top-full z-20 mt-1 w-52 rounded-lg border border-slate-700 bg-slate-900 p-2 shadow-2xl">
+        <p className="mb-1.5 text-[10px] text-slate-500">{title}</p>
+        {children}
+      </div>
+    </>
+  )
+}
 
 export interface EditorSelection {
   from: number
@@ -85,6 +136,8 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
 ): ReactElement {
   const lastEmitted = useRef(markdown)
   const [accentOpen, setAccentOpen] = useState(false)
+  /** 选区样式弹层：color 字色 / bg 背景高亮 / size 字号 */
+  const [stylePop, setStylePop] = useState<'color' | 'bg' | 'size' | null>(null)
 
   const editor = useEditor({
     extensions: [
@@ -102,7 +155,8 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
       FigureImage,
       FigSuggest,
       FigureGallery,
-      ArticleTable
+      ArticleTable,
+      TextStyleMark
     ],
     content: mdToDoc(markdown),
     onUpdate({ editor }) {
@@ -338,37 +392,187 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
         <span className="ml-auto text-[10px] text-slate-500">Ctrl+Z 撤销 · Ctrl+Y 重做 · Ctrl+B 加粗</span>
       </div>
       <div className="min-h-0 flex-1 overflow-auto">
-        {/* 选区浮动指令条 */}
+        {/* 选区浮动指令条：加粗 + 手动样式（字色/背景高亮/字号）+ AI 指令 */}
         <BubbleMenu editor={editor} tippyOptions={{ duration: 100 }}>
-        <div className="flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-900 px-1.5 py-1 shadow-xl">
-          <button
-            type="button"
-            onClick={() => editor.chain().focus().toggleBold().run()}
-            className={`rounded px-2 py-0.5 text-xs font-bold ${
-              editor.isActive('bold')
-                ? 'bg-sky-600 text-white'
-                : 'text-slate-300 hover:bg-slate-700'
-            }`}
-          >
-            B
-          </button>
-          <div className="mx-0.5 h-4 w-px bg-slate-700" />
-          <button
-            type="button"
-            onClick={() => onAiModify?.()}
-            className="rounded px-2 py-0.5 text-xs text-slate-300 hover:bg-slate-700"
-          >
-            AI 修改
-          </button>
-          <button
-            type="button"
-            onClick={() => onAiReview?.()}
-            className="rounded px-2 py-0.5 text-xs text-slate-300 hover:bg-slate-700"
-          >
-            AI 审阅
-          </button>
-        </div>
-      </BubbleMenu>
+          <div className="relative flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-900 px-1.5 py-1 shadow-xl">
+            <button
+              type="button"
+              onClick={() => editor.chain().focus().toggleBold().run()}
+              className={`rounded px-2 py-0.5 text-xs font-bold ${
+                editor.isActive('bold')
+                  ? 'bg-sky-600 text-white'
+                  : 'text-slate-300 hover:bg-slate-700'
+              }`}
+            >
+              B
+            </button>
+            {/* 字色 */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setStylePop(stylePop === 'color' ? null : 'color')}
+                title="字体颜色"
+                className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-slate-300 hover:bg-slate-700"
+              >
+                <span
+                  className="inline-block h-3 w-3 rounded-full border border-slate-500"
+                  style={{
+                    background:
+                      (editor.getAttributes('textStyle').color as string | undefined) ?? '#e2e4ea'
+                  }}
+                />
+                A
+              </button>
+              {stylePop === 'color' && (
+                <StylePanel title="字体颜色" onClose={() => setStylePop(null)}>
+                  <div className="grid grid-cols-5 gap-1.5">
+                    {TEXT_COLORS.map((c) => (
+                      <button
+                        key={c.color}
+                        type="button"
+                        title={c.name}
+                        onClick={() => {
+                          editor.chain().focus().setTextStyle({ color: c.color }).run()
+                          setStylePop(null)
+                        }}
+                        className={`h-6 w-6 rounded border ${
+                          editor.isActive('textStyle', { color: c.color })
+                            ? 'border-sky-400 ring-1 ring-sky-400'
+                            : 'border-slate-600'
+                        }`}
+                        style={{ background: c.color }}
+                      />
+                    ))}
+                  </div>
+                  <label className="mt-2 flex cursor-pointer items-center gap-2 rounded border border-slate-600 px-2 py-1 text-[10px] text-slate-300 hover:bg-slate-700">
+                    自定义
+                    <input
+                      type="color"
+                      defaultValue="#e63946"
+                      onChange={(e) => {
+                        editor.chain().focus().setTextStyle({ color: e.target.value }).run()
+                        setStylePop(null)
+                      }}
+                      className="h-5 w-8 cursor-pointer border-0 bg-transparent p-0"
+                    />
+                  </label>
+                </StylePanel>
+              )}
+            </div>
+            {/* 背景高亮 */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setStylePop(stylePop === 'bg' ? null : 'bg')}
+                title="背景高亮"
+                className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-slate-300 hover:bg-slate-700"
+              >
+                <span
+                  className="inline-block h-3 w-3 rounded-sm border border-slate-500"
+                  style={{
+                    background:
+                      (editor.getAttributes('textStyle').bg as string | undefined) ?? 'transparent'
+                  }}
+                />
+                高亮
+              </button>
+              {stylePop === 'bg' && (
+                <StylePanel title="背景高亮" onClose={() => setStylePop(null)}>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {BG_COLORS.map((c) => (
+                      <button
+                        key={c.color}
+                        type="button"
+                        title={c.name}
+                        onClick={() => {
+                          editor.chain().focus().setTextStyle({ bg: c.color }).run()
+                          setStylePop(null)
+                        }}
+                        className={`h-6 w-8 rounded border ${
+                          editor.isActive('textStyle', { bg: c.color })
+                            ? 'border-sky-400 ring-1 ring-sky-400'
+                            : 'border-slate-600'
+                        }`}
+                        style={{ background: c.color }}
+                      />
+                    ))}
+                  </div>
+                  <label className="mt-2 flex cursor-pointer items-center gap-2 rounded border border-slate-600 px-2 py-1 text-[10px] text-slate-300 hover:bg-slate-700">
+                    自定义
+                    <input
+                      type="color"
+                      defaultValue="#fef3c7"
+                      onChange={(e) => {
+                        editor.chain().focus().setTextStyle({ bg: e.target.value }).run()
+                        setStylePop(null)
+                      }}
+                      className="h-5 w-8 cursor-pointer border-0 bg-transparent p-0"
+                    />
+                  </label>
+                </StylePanel>
+              )}
+            </div>
+            {/* 字号 */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setStylePop(stylePop === 'size' ? null : 'size')}
+                title="字号"
+                className="rounded px-1.5 py-0.5 text-xs text-slate-300 hover:bg-slate-700"
+              >
+                {(editor.getAttributes('textStyle').fontSize as number | undefined) ?? '字号'}
+              </button>
+              {stylePop === 'size' && (
+                <StylePanel title="字号（px）" onClose={() => setStylePop(null)}>
+                  <div className="flex max-h-56 flex-col gap-0.5 overflow-auto">
+                    {FONT_SIZES.map((n) => (
+                      <button
+                        key={n}
+                        type="button"
+                        onClick={() => {
+                          editor.chain().focus().setTextStyle({ fontSize: n }).run()
+                          setStylePop(null)
+                        }}
+                        className={`rounded px-2 py-0.5 text-left ${
+                          editor.isActive('textStyle', { fontSize: n })
+                            ? 'bg-sky-600 text-white'
+                            : 'text-slate-300 hover:bg-slate-700'
+                        }`}
+                        style={{ fontSize: Math.min(n, 20) }}
+                      >
+                        {n}px
+                      </button>
+                    ))}
+                  </div>
+                </StylePanel>
+              )}
+            </div>
+            {/* 清除手动样式（保留加粗） */}
+            <button
+              type="button"
+              onClick={() => editor.chain().focus().unsetTextStyle().run()}
+              title="清除字色/高亮/字号"
+              className="rounded px-1.5 py-0.5 text-xs text-slate-400 hover:bg-slate-700 hover:text-slate-200"
+            >
+              ×
+            </button>
+            <div className="mx-0.5 h-4 w-px bg-slate-700" />
+            <button
+              type="button"
+              onClick={() => onAiModify?.()}
+              className="rounded px-2 py-0.5 text-xs text-slate-300 hover:bg-slate-700"
+            >
+              AI 修改
+            </button>
+            <button
+              type="button"
+              onClick={() => onAiReview?.()}
+              className="rounded px-2 py-0.5 text-xs text-slate-300 hover:bg-slate-700"
+            >
+              AI 审阅
+            </button>
+          </div>
+        </BubbleMenu>
         <EditorContent
           editor={editor}
           className="article-editor selectable h-full"
@@ -396,6 +600,7 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
               '--article-body-pad': t.bodyPadding ?? '',
               '--article-p-gap': `${t.pGap ?? 16}px`,
               '--article-img-radius': `${t.imgRadius ?? 4}px`,
+              '--article-font-size': `${t.fontSize ?? 16}px`,
               '--article-heading-color': headingColor,
               // 图注：深底浅字 / 浅底深字（不用灰字）
               '--article-caption-color': darkBg ? '#cbd5e1' : '#555'

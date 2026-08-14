@@ -33,6 +33,8 @@ export interface ArticleTheme {
   bodyBg?: string
   /** 正文文字色（深底卡片需浅色文字） */
   bodyText?: string
+  /** 正文基准字号（px，缺省 16；AI 排版正文默认偏小，留白与节奏靠行高/字距撑） */
+  fontSize?: number
   /** 标题文字色（卡片底色不同需显式指定，缺省按 bodyBg 深/浅自适应） */
   headingColor?: string
   /** 正文容器圆角 */

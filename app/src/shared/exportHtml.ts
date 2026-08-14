@@ -91,6 +91,8 @@ function buildStyles(theme?: ArticleTheme): Styles {
   const captionColor = dark ? '#b6c4d4' : '#555'
   const pGap = t.pGap ?? 16
   const imgR = t.imgRadius ?? 4
+  // 正文基准字号：主题可调，缺省 16px（AI 排版默认 14-15px 偏小，正文以大字号为舒适）
+  const baseSize = t.fontSize && t.fontSize >= 10 && t.fontSize <= 40 ? t.fontSize : 16
   // 表格：边框色 / 表头背景 / 表头字色（按表头背景亮度自适应）/ 斑马纹
   const tableBorder = t.tableBorder && isHexColor(t.tableBorder) ? t.tableBorder.trim() : dark ? '#3a4a5e' : '#e5e7eb'
   const headerBg = t.tableHeaderBg && isHexColor(t.tableHeaderBg) ? t.tableHeaderBg.trim() : dark ? '#1e2b3d' : '#f3f4f6'
@@ -103,13 +105,13 @@ function buildStyles(theme?: ArticleTheme): Styles {
   const tableStyle = t.tableStyle ?? 'bordered'
 
   // 正文容器：背景卡片（深色卡片 / 暖色卡片 / 透明白底）
-  s.root = `font-size:15px;line-height:${lh};color:${textColor};letter-spacing:${t.letterSpacing};word-break:break-word;font-family:${t.fontFamily};`
+  s.root = `font-size:${baseSize}px;line-height:${lh};color:${textColor};letter-spacing:${t.letterSpacing};word-break:break-word;font-family:${t.fontFamily};`
   if (t.bodyBg) {
     s.root += `background:${t.bodyBg};border-radius:${t.bodyRadius ?? 0}px;padding:${t.bodyPadding ?? '16px 18px'};`
   }
-  s.p = `font-size:15px;line-height:${lh};color:${textColor};margin:${pGap}px 0;`
-  s.quoteP = `margin:4px 0;font-size:15px;line-height:${lh};color:${quoteColor};`
-  s.quotePLast = `margin:4px 0;font-size:15px;line-height:${lh};color:${quoteColor};`
+  s.p = `font-size:${baseSize}px;line-height:${lh};color:${textColor};margin:${pGap}px 0;`
+  s.quoteP = `margin:4px 0;font-size:${baseSize}px;line-height:${lh};color:${quoteColor};`
+  s.quotePLast = `margin:4px 0;font-size:${baseSize}px;line-height:${lh};color:${quoteColor};`
   s.caption = `font-size:12px;color:${captionColor};line-height:1.6;margin-top:8px;text-align:center;`
   s.hint = `font-size:12px;color:${captionColor};line-height:1.6;margin-top:6px;text-align:center;`
   s.img = `max-width:100%;max-height:420px;border-radius:${imgR}px;`
@@ -221,7 +223,21 @@ function inlineToHtml(content: InlineNode[] | undefined, s: Styles): string {
     .map((n) => {
       if (n.type === 'hardBreak') return '<br>'
       const text = escapeHtml(n.text)
-      return n.marks?.some((mk) => mk.type === 'bold') ? `<strong style="${s.strong}">${text}</strong>` : text
+      const bold = n.marks?.some((mk) => mk.type === 'bold')
+      const ts = n.marks?.find((mk) => mk.type === 'textStyle') as
+        | { color?: string; bg?: string; fontSize?: number }
+        | undefined
+      // 手动样式 span：字色 / 背景高亮 / 字号（与编辑器所见同源）
+      const styleParts: string[] = []
+      if (ts?.color) styleParts.push(`color:${ts.color}`)
+      if (ts?.bg) styleParts.push(`background-color:${ts.bg}`)
+      if (ts?.fontSize) styleParts.push(`font-size:${ts.fontSize}px`)
+      // 手动字色优先于主题 strongColor：有 color 时 strong 不带主题色样式（继承 span）
+      const strongStyle = ts?.color ? '' : ` style="${s.strong}"`
+      let inner = text
+      if (bold) inner = `<strong${strongStyle}>${inner}</strong>`
+      if (styleParts.length) inner = `<span style="${styleParts.join(';')}">${inner}</span>`
+      return inner
     })
     .join('')
 }

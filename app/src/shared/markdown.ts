@@ -18,7 +18,18 @@
 export interface TextNode {
   type: 'text'
   text: string
-  marks?: { type: 'bold' }[]
+  marks?: TextMark[]
+}
+
+/** 行内 mark：加粗 / 手动样式（字体色、背景高亮、字号） */
+export type TextMark = { type: 'bold' } | TextStyleMark
+
+/** 手动样式 mark：选中片段自定义字体色 / 背景高亮 / 字号（md 用内联 span style 往返） */
+export interface TextStyleMark {
+  type: 'textStyle'
+  color?: string
+  bg?: string
+  fontSize?: number
 }
 
 export interface HardBreakNode {
@@ -120,23 +131,110 @@ export interface ArticleDoc {
 
 // ---------- 行内：md 文本 ↔ inline 节点 ----------
 
+/**
+ * 解析内联 `<span style="color:#f00;background-color:#ff0;font-size:18px">` 前缀。
+ * 返回 { attrs, rest }；非 span 或 style 无可识别属性返回 null。
+ */
+function parseSpanStyle(text: string): { attrs: TextStyleMark; rest: string } | null {
+  const m = /^<span\s+style=["']([^"']*)["']\s*>/i.exec(text)
+  if (!m) return null
+  const style: TextStyleMark = { type: 'textStyle' }
+  const parts = m[1].split(';')
+  for (const seg of parts) {
+    const i = seg.indexOf(':')
+    if (i < 0) continue
+    const k = seg.slice(0, i).trim().toLowerCase()
+    const v = seg.slice(i + 1).trim()
+    if (!v) continue
+    if (k === 'color') style.color = v
+    else if (k === 'background-color' || k === 'background') style.bg = v
+    else if (k === 'font-size') {
+      const px = /^(\d+(?:\.\d+)?)px$/.exec(v)
+      if (px) style.fontSize = Math.round(Number(px[1]))
+    }
+  }
+  if (!style.color && !style.bg && !style.fontSize) return null
+  return { attrs: style, rest: text.slice(m[0].length) }
+}
+
+/** 把行内 mark 序列化为 md 片段（textStyle 用内联 span，bold 用 **） */
+function inlineToMdNode(n: TextNode): string {
+  const ts = n.marks?.find((mk): mk is TextStyleMark => mk.type === 'textStyle')
+  const bold = n.marks?.some((mk) => mk.type === 'bold')
+  let inner = bold ? `**${n.text}**` : n.text
+  if (ts && (ts.color || ts.bg || ts.fontSize)) {
+    const parts: string[] = []
+    if (ts.color) parts.push(`color:${ts.color}`)
+    if (ts.bg) parts.push(`background-color:${ts.bg}`)
+    if (ts.fontSize) parts.push(`font-size:${ts.fontSize}px`)
+    inner = `<span style="${parts.join(';')}">${inner}</span>`
+  }
+  return inner
+}
+
 /** 解析一段（可能多行）文本为 inline 节点；行间转 hardBreak */
 export function parseInline(text: string): InlineNode[] {
   const out: InlineNode[] = []
   const lines = text.split('\n')
   lines.forEach((line, i) => {
     if (i > 0) out.push({ type: 'hardBreak' })
-    // **bold** 切分；未闭合的 ** 按普通文本保留
-    const re = /\*\*([^*]+)\*\*/g
-    let last = 0
-    let m: RegExpExecArray | null
-    while ((m = re.exec(line)) !== null) {
-      if (m.index > last) out.push({ type: 'text', text: line.slice(last, m.index) })
-      out.push({ type: 'text', text: m[1], marks: [{ type: 'bold' }] })
-      last = m.index + m[0].length
+    // 内联 span 样式 + **bold** 混合切分；未闭合的按普通文本保留
+    let rest = line
+    while (rest.length > 0) {
+      // span 不一定要在行首：先定位 <span，前面普通文本直接解析
+      const spIdx = rest.indexOf('<span ')
+      if (spIdx < 0) break
+      if (spIdx > 0) {
+        out.push(...parseInlineText(rest.slice(0, spIdx)))
+        rest = rest.slice(spIdx)
+      }
+      const sp = parseSpanStyle(rest)
+      if (!sp) {
+        // 形如 <span 但不是可识别样式（如 <span leaf>）：按普通文本处理剩余
+        out.push(...parseInlineText(rest))
+        rest = ''
+        break
+      }
+      const closeRe = /<\/span>/i
+      const close = closeRe.exec(sp.rest)
+      if (!close) {
+        out.push({ type: 'text', text: rest })
+        rest = ''
+        break
+      }
+      const innerText = sp.rest.slice(0, close.index)
+      const tail = sp.rest.slice(close.index + close[0].length)
+      const innerNodes = parseInlineText(innerText)
+      // 给 inner 的文本节点叠加 textStyle mark
+      for (const nd of innerNodes) {
+        if (nd.type === 'text') {
+          const merged: TextMark[] = [...(nd.marks ?? []), sp.attrs]
+          out.push({ ...nd, marks: merged })
+        } else {
+          out.push(nd)
+        }
+      }
+      rest = tail
     }
-    if (last < line.length) out.push({ type: 'text', text: line.slice(last) })
+    if (rest.length > 0) {
+      out.push(...parseInlineText(rest))
+    }
   })
+  return out
+}
+
+/** 无 span 的普通行内解析：**bold** 切分；未闭合的 ** 按普通文本保留 */
+function parseInlineText(text: string): InlineNode[] {
+  const out: InlineNode[] = []
+  const re = /\*\*([^*]+)\*\*/g
+  let last = 0
+  let m: RegExpExecArray | null
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) out.push({ type: 'text', text: text.slice(last, m.index) })
+    out.push({ type: 'text', text: m[1], marks: [{ type: 'bold' }] })
+    last = m.index + m[0].length
+  }
+  if (last < text.length) out.push({ type: 'text', text: text.slice(last) })
   return out
 }
 
@@ -145,8 +243,7 @@ export function inlineToMd(content: InlineNode[] | undefined): string {
   return content
     .map((n) => {
       if (n.type === 'hardBreak') return '\n'
-      const bold = n.marks?.some((mk) => mk.type === 'bold')
-      return bold ? `**${n.text}**` : n.text
+      return inlineToMdNode(n)
     })
     .join('')
 }
