@@ -59,6 +59,8 @@ interface ArticleEditorProps {
   accent?: string
   /** 排版调性（分类调性解析结果）：字体/行高/字距/标题对齐/强调色注入编辑器 */
   theme?: ArticleTheme
+  /** 编辑器所在 UI 主题（深色/日间）：无背景卡片的分类按此选正文深浅色，避免日间浅底灰字 */
+  uiDark?: boolean
   onChange: (md: string) => void
   /** 选区浮动条「AI 修改」：App 打开修改弹窗 */
   onAiModify?: () => void
@@ -78,7 +80,7 @@ interface ArticleEditorProps {
  * - lastEmitted 防止 onChange → props.markdown 回流时循环 setContent
  */
 const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(function ArticleEditor(
-  { markdown, project, projectDir, accent, theme, onChange, onAiModify, onAiReview, onFigAction, onEditFigureSource, onAccentChange },
+  { markdown, project, projectDir, accent, theme, uiDark, onChange, onAiModify, onAiReview, onFigAction, onEditFigureSource, onAccentChange },
   ref
 ): ReactElement {
   const lastEmitted = useRef(markdown)
@@ -374,11 +376,13 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
           style={(() => {
             const t = theme ?? DEFAULT_THEME
             const accent = isHexColor(t.accent) ? t.accent : DEFAULT_THEME.accent
-            // 背景卡片实际亮度（编辑器默认深底面板 → 浅字；浅色卡片 → 深字，不用灰字）
-            const darkBg = t.bodyBg ? isDarkColor(t.bodyBg) : true
-            // 正文色：有卡片按亮度给明确深/浅字（不再让 CSS 默认浅灰白落在浅卡上），无卡片留空走编辑器默认
-            const bodyText = t.bodyText ?? (t.bodyBg ? (darkBg ? '#cbd5e1' : '#333') : '')
-            const headingColor = t.headingColor ?? (t.bodyBg ? (darkBg ? '#eef2f7' : '#1a1a1a') : '')
+            // 背景卡片实际亮度：有卡片看卡片明暗；无卡片（设计鉴赏/情感回忆/哲学思考等）
+            // 跟随编辑器 UI 主题——深色面板浅字、日间浅面板深字，杜绝日间浅底灰字看不清
+            const darkBg = t.bodyBg ? isDarkColor(t.bodyBg) : uiDark !== false
+            // 正文色：有卡片按亮度给明确深/浅字；无卡片也按 UI 主题显式给色，
+            // 不再留空落到 CSS 硬编码浅灰白（rgb 226 232 240）在日间面板上不可读
+            const bodyText = t.bodyText ?? (darkBg ? '#cbd5e1' : '#333')
+            const headingColor = t.headingColor ?? (darkBg ? '#eef2f7' : '#1a1a1a')
             const vars: Record<string, string> = {
               '--article-accent': accent,
               '--article-font': t.fontFamily,

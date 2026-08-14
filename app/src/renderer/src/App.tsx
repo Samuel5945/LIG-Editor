@@ -903,6 +903,7 @@ export default function App(): JSX.Element {
                     projectDir={currentDir}
                     accent={meta?.accent}
                     theme={articleTheme}
+                    uiDark={theme === 'dark'}
                     onChange={setArticle}
                     onAiModify={handleAiModify}
                     onAiReview={handleAiReview}
