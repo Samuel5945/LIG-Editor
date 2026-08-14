@@ -829,9 +829,11 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
             // 加粗：highlight 底色高亮 / plain 纯加粗（color 用 CSS 默认着色）
             const strong = t.strongStyle ?? 'color'
             if (strong === 'highlight') {
-              vars['--article-strong-bg'] = t.strongBg && isHexColor(t.strongBg) ? t.strongBg : '#fef3c7'
-              // 高亮底上的字色按背景亮度：深底浅字 / 浅底深字（浅卡不再白字混底）
-              vars['--article-strong-color'] = c.darkBg ? '#f5f5f4' : '#333'
+              const strongBg = t.strongBg && isHexColor(t.strongBg) ? t.strongBg : '#fef3c7'
+              vars['--article-strong-bg'] = strongBg
+              // 高亮字色按高亮底色自身亮度（与导出端 strongStyle 同源）：
+              // 淡黄 #fef3c7 上恒为深字，夜间深卡配淡黄高亮也不出「白字混底」看不清
+              vars['--article-strong-color'] = isDarkColor(strongBg) ? '#f5f5f4' : '#333'
               vars['--article-strong-pad'] = '1px 6px'
               vars['--article-strong-radius'] = '4px'
             } else if (strong === 'plain') {

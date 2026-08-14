@@ -48,11 +48,13 @@ export default function ExportDialog({
   // 推送草稿状态：null=未推 / pushing / 结果
   const [pushing, setPushing] = useState(false)
   const [pushResult, setPushResult] = useState<PushDraftResult | null>(null)
-  // 发布配色（复制/推送固定用）；article.html 默认读者端自动昼夜
-  const [pubVariant, setPubVariant] = useState<PubVariant>('day')
+  // 发布配色（复制/推送固定用）；article.html 默认读者端自动昼夜。
+  // 初始值跟随编辑器 UI 昼夜：夜间 UI 默认「夜间配色」，打开弹窗预览与正文区一致
+  const [pubVariant, setPubVariant] = useState<PubVariant>(uiDark ? 'night' : 'day')
   const [htmlAuto, setHtmlAuto] = useState(true)
 
-  // 预览页：图片解析为 asset:// 绝对地址，配色跟随编辑器 UI 昼夜（与正文区所见即所得）
+  // 预览页：图片解析为 asset:// 绝对地址，配色跟随发布配色选择（所见即所得——
+  // 复制/推送/固定导出的是哪套配色，预览就显示哪套）
   const previewHtml = useMemo(() => {
     const doc = mdToDoc(markdown)
     const fragment = docToExportHtml(
@@ -62,10 +64,10 @@ export default function ExportDialog({
           ? src
           : 'asset://file/' + encodeURIComponent(`${projectDir}\\${src.replace(/\//g, '\\')}`),
       theme,
-      uiDark
+      pubVariant === 'night'
     )
     return wrapExportPage(fragment, extractTitle(doc, project))
-  }, [markdown, projectDir, project, theme, uiDark])
+  }, [markdown, projectDir, project, theme, pubVariant])
 
   const copyRich = useCallback(async () => {
     if (busy) return
