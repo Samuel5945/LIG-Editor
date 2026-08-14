@@ -126,7 +126,8 @@ body {
 /* H1 大标题：对齐方式随调性（居中仪式感 / 左对齐干练）+ 强调色短线收尾
    pill 胶囊色块字底 / underline 下划线 / 默认短横 */
 .article-editor .ProseMirror h1 {
-  @apply mb-7 mt-8 text-[26px] font-bold leading-snug tracking-wide;
+  @apply mb-7 mt-8 font-bold leading-snug tracking-wide;
+  font-size: var(--article-h1-size, 26px);
   text-align: var(--article-h-align, center);
   display: var(--article-h1-display, block);
   color: var(--article-heading-color, rgb(var(--ink)));
@@ -145,7 +146,8 @@ body {
 }
 /* H2 小节标题：左竖条 / 色块标签 / 下划线 / 纯文字，一眼区分层级 */
 .article-editor .ProseMirror h2 {
-  @apply text-xl font-bold leading-snug;
+  @apply font-bold leading-snug;
+  font-size: var(--article-h2-size, 20px);
   margin: var(--article-h2-margin, 2.5rem 0 1rem);
   display: var(--article-h2-display, block);
   color: var(--article-h2-color, var(--article-heading-color, rgb(var(--ink))));
@@ -157,7 +159,8 @@ body {
 }
 /* H3 子标题：菱形 / 圆点 / 无前缀 */
 .article-editor .ProseMirror h3 {
-  @apply mb-3 mt-8 text-[17px] font-semibold;
+  @apply mb-3 mt-8 font-semibold;
+  font-size: var(--article-h3-size, 17px);
   color: var(--article-heading-color, rgb(var(--ink)));
 }
 .article-editor .ProseMirror h3::before {
@@ -170,6 +173,8 @@ body {
 }
 .article-editor .ProseMirror p {
   font-size: var(--article-font-size, 16px);
+  text-align: var(--article-p-align, left);
+  text-indent: var(--article-p-indent, 0);
   margin: var(--article-p-gap, 1rem) 0;
 }
 /* 手动 span 样式里的加粗：继承 span 的自定义字色，避免主题 strongColor 盖掉手动色 */

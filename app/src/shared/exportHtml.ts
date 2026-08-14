@@ -93,6 +93,14 @@ function buildStyles(theme?: ArticleTheme): Styles {
   const imgR = t.imgRadius ?? 4
   // 正文基准字号：主题可调，缺省 16px（AI 排版默认 14-15px 偏小，正文以大字号为舒适）
   const baseSize = t.fontSize && t.fontSize >= 10 && t.fontSize <= 40 ? t.fontSize : 16
+  // 标题基准字号：缺省 20（H1=+6 H2=+0 H3=-3，与经典导出 26/20/17 一致）
+  const headingBase = t.headingFontSize && t.headingFontSize >= 12 && t.headingFontSize <= 40 ? t.headingFontSize : 20
+  // 正文排列：indent 首行缩进 2em / flush 两端对齐 / center 居中；缺省左对齐不缩进
+  const pAlign =
+    t.bodyAlign === 'indent' ? 'text-align:justify;text-indent:2em;'
+    : t.bodyAlign === 'flush' ? 'text-align:justify;'
+    : t.bodyAlign === 'center' ? 'text-align:center;'
+    : ''
   // 表格：边框色 / 表头背景 / 表头字色（按表头背景亮度自适应）/ 斑马纹
   const tableBorder = t.tableBorder && isHexColor(t.tableBorder) ? t.tableBorder.trim() : dark ? '#3a4a5e' : '#e5e7eb'
   const headerBg = t.tableHeaderBg && isHexColor(t.tableHeaderBg) ? t.tableHeaderBg.trim() : dark ? '#1e2b3d' : '#f3f4f6'
@@ -109,7 +117,7 @@ function buildStyles(theme?: ArticleTheme): Styles {
   if (t.bodyBg) {
     s.root += `background:${t.bodyBg};border-radius:${t.bodyRadius ?? 0}px;padding:${t.bodyPadding ?? '16px 18px'};`
   }
-  s.p = `font-size:${baseSize}px;line-height:${lh};color:${textColor};margin:${pGap}px 0;`
+  s.p = `font-size:${baseSize}px;line-height:${lh};color:${textColor};margin:${pGap}px 0;${pAlign}`
   s.quoteP = `margin:4px 0;font-size:${baseSize}px;line-height:${lh};color:${quoteColor};`
   s.quotePLast = `margin:4px 0;font-size:${baseSize}px;line-height:${lh};color:${quoteColor};`
   s.caption = `font-size:12px;color:${captionColor};line-height:1.6;margin-top:8px;text-align:center;`
@@ -137,15 +145,16 @@ function buildStyles(theme?: ArticleTheme): Styles {
 
   // H1 装饰：bar 经典短横 / pill 胶囊色块字底 / underline 下划线
   const h1Style = t.h1Style ?? 'bar'
+  const h1Size = headingBase + 6
   if (h1Style === 'pill') {
-    s.h1 = `font-size:26px;font-weight:bold;color:${contrastText(c)};line-height:1.375;letter-spacing:0.025em;margin:32px 0 0;display:inline-block;background:${c};border-radius:9999px;padding:6px 22px;`
+    s.h1 = `font-size:${h1Size}px;font-weight:bold;color:${contrastText(c)};line-height:1.375;letter-spacing:0.025em;margin:32px 0 0;display:inline-block;background:${c};border-radius:9999px;padding:6px 22px;`
     s.h1Bar = 'display:none;'
   } else if (h1Style === 'underline') {
-    s.h1 = `font-size:26px;font-weight:bold;color:${headingColor};line-height:1.375;letter-spacing:0.025em;margin:32px 0 0;border-bottom:3px solid ${c};padding-bottom:10px;`
+    s.h1 = `font-size:${h1Size}px;font-weight:bold;color:${headingColor};line-height:1.375;letter-spacing:0.025em;margin:32px 0 0;border-bottom:3px solid ${c};padding-bottom:10px;`
     if (t.headingAlign === 'left') s.h1 += 'display:inline-block;'
     s.h1Bar = 'display:none;'
   } else {
-    s.h1 = `font-size:26px;font-weight:bold;color:${headingColor};line-height:1.375;letter-spacing:0.025em;margin:32px 0 0;`
+    s.h1 = `font-size:${h1Size}px;font-weight:bold;color:${headingColor};line-height:1.375;letter-spacing:0.025em;margin:32px 0 0;`
     const barMargin = t.headingAlign === 'left' ? 'margin:12px 0 0;' : 'margin:12px auto 0;'
     s.h1Bar = `width:48px;height:3px;border-radius:9999px;${barMargin}background:${c};`
   }
@@ -156,17 +165,17 @@ function buildStyles(theme?: ArticleTheme): Styles {
     const h2Bg = t.h2Bg && isHexColor(t.h2Bg) ? t.h2Bg : c
     // display:table 块级收缩 + margin auto 居中（公众号 webview 兼容）
     const h2Margin = t.headingAlign === 'center' ? '40px auto 16px' : '40px 0 16px'
-    s.h2 = `font-size:20px;font-weight:bold;color:${contrastText(h2Bg)};line-height:1.375;margin:${h2Margin};display:table;background:${h2Bg};border-radius:6px;padding:3px 14px;`
+    s.h2 = `font-size:${headingBase}px;font-weight:bold;color:${contrastText(h2Bg)};line-height:1.375;margin:${h2Margin};display:table;background:${h2Bg};border-radius:6px;padding:3px 14px;`
   } else if (h2Style === 'underline') {
-    s.h2 = `font-size:20px;font-weight:bold;color:${subColor};line-height:1.375;margin:40px 0 16px;border-bottom:2px solid ${c};padding-bottom:8px;`
+    s.h2 = `font-size:${headingBase}px;font-weight:bold;color:${subColor};line-height:1.375;margin:40px 0 16px;border-bottom:2px solid ${c};padding-bottom:8px;`
   } else if (h2Style === 'plain') {
-    s.h2 = `font-size:20px;font-weight:bold;color:${subColor};line-height:1.375;margin:40px 0 16px;`
+    s.h2 = `font-size:${headingBase}px;font-weight:bold;color:${subColor};line-height:1.375;margin:40px 0 16px;`
   } else {
-    s.h2 = `font-size:20px;font-weight:bold;color:${subColor};line-height:1.375;margin:40px 0 16px;border-left:4px solid ${c};padding-left:12px;`
+    s.h2 = `font-size:${headingBase}px;font-weight:bold;color:${subColor};line-height:1.375;margin:40px 0 16px;border-left:4px solid ${c};padding-left:12px;`
   }
 
   // H3 前缀：diamond 菱形 / dot 圆点 / none 无
-  s.h3 = `font-size:17px;font-weight:600;color:${subColor};line-height:1.375;margin:32px 0 12px;`
+  s.h3 = `font-size:${Math.max(12, headingBase - 3)}px;font-weight:600;color:${subColor};line-height:1.375;margin:32px 0 12px;`
   const mark = t.h3Mark ?? 'diamond'
   if (mark === 'dot') {
     s.h3Diamond = `display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:8px;vertical-align:middle;background:${c};`

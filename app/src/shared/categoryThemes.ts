@@ -49,6 +49,7 @@ export const DEFAULT_THEME: ArticleTheme = {
   lineHeight: 2.13,
   letterSpacing: '0.02em',
   fontSize: 16,
+  headingFontSize: 20,
   headingAlign: 'center'
 }
 
@@ -152,26 +153,42 @@ export const CATEGORY_THEMES: Record<string, ArticleTheme> = {
 }
 
 /**
- * 解析工程最终排版调性：分类调性打底，项目显式强调色覆盖颜色。
+ * 解析工程最终排版调性：分类调性打底，项目显式设置覆盖。
  * custom 为运行时加载的自定义主题库（settings/customThemes.json，优先级高于预设分类）。
- * 用户手动选强调色 = 全文主强调色换色：标题文字色（headingColor）与加粗色（strongColor）
- * 同源联动跟随（v2 主题的独立色也一并覆盖，恢复「强调色一键换全文主色」的直觉）；
+ * 覆盖字段（meta）：accent 强调色（标题/加粗色同源联动）、bodyFontSize 正文字号、
+ * headingFontSize 标题字号、bodyAlign 正文排列、headingAlign 标题排列。
  * 正文阅读色（bodyText）、块背景（h2Bg 黑块等）属排版形态，保持主题原值。
  */
 export function resolveArticleTheme(
-  meta: Pick<ProjectMeta, 'accent' | 'category'> | null | undefined,
+  meta: Pick<
+    ProjectMeta,
+    'accent' | 'category' | 'bodyFontSize' | 'headingFontSize' | 'bodyAlign' | 'headingAlign'
+  > | null | undefined,
   custom?: Record<string, ArticleTheme>
 ): ArticleTheme {
   const cat = meta?.category
   const base = (cat && (custom?.[cat] ?? CATEGORY_THEMES[cat])) || DEFAULT_THEME
   const accent = meta?.accent && isHexColor(meta.accent) ? meta.accent.trim() : base.accent
+  // 项目显式覆盖 → 覆盖主题；未设置 → 跟随主题（主题缺字段回退默认 16/20）
+  const fontSize =
+    meta?.bodyFontSize && isFinite(meta.bodyFontSize) ? meta.bodyFontSize : base.fontSize ?? DEFAULT_THEME.fontSize
+  const headingFontSize =
+    meta?.headingFontSize && isFinite(meta.headingFontSize)
+      ? meta.headingFontSize
+      : base.headingFontSize ?? DEFAULT_THEME.headingFontSize
+  const bodyAlign = meta?.bodyAlign ?? base.bodyAlign
+  const headingAlign = meta?.headingAlign ?? base.headingAlign
   if (meta?.accent && isHexColor(meta.accent)) {
     return {
       ...base,
       accent,
       ...(base.headingColor ? { headingColor: accent } : {}),
-      ...(base.strongColor ? { strongColor: accent } : {})
+      ...(base.strongColor ? { strongColor: accent } : {}),
+      fontSize,
+      headingFontSize,
+      bodyAlign,
+      headingAlign
     }
   }
-  return { ...base, accent }
+  return { ...base, accent, fontSize, headingFontSize, bodyAlign, headingAlign }
 }

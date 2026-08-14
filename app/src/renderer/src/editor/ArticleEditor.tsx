@@ -61,6 +61,22 @@ const BG_COLORS: { color: string; name: string }[] = [
 /** 选区字号预设（px）：公众号正文 14-16 常规，17+ 强调 */
 const FONT_SIZES = [12, 13, 14, 15, 16, 17, 18, 20, 22, 24]
 
+/** 工具栏正文字号预设（px）：正文基准 14-18，缺省 16 */
+const BODY_FONT_SIZES = [14, 15, 16, 17, 18]
+/** 工具栏标题字号预设（px）：标题基准 17-24，缺省 20（H1=+6 H2=+0 H3=-3） */
+const HEADING_FONT_SIZES = [17, 18, 20, 22, 24]
+/** 正文排列三态：indent 首行缩进 / flush 定格两端对齐 / center 居中 */
+const BODY_ALIGNS: { value: 'indent' | 'flush' | 'center'; label: string }[] = [
+  { value: 'indent', label: '缩进' },
+  { value: 'flush', label: '定格' },
+  { value: 'center', label: '居中' }
+]
+/** 标题排列两态：center 居中 / left 左对齐 */
+const HEADING_ALIGNS: { value: 'center' | 'left'; label: string }[] = [
+  { value: 'center', label: '居中' },
+  { value: 'left', label: '左' }
+]
+
 /** 选区样式弹层：全屏透明层点击关闭 + 绝对定位面板（相对 BubbleMenu 容器） */
 function StylePanel({
   title,
@@ -74,7 +90,7 @@ function StylePanel({
   return (
     <>
       <div className="fixed inset-0 z-10" onClick={onClose} />
-      <div className="absolute left-0 top-full z-20 mt-1 w-52 rounded-lg border border-slate-700 bg-slate-900 p-2 shadow-2xl">
+      <div className="absolute left-0 top-full z-20 mt-1 w-56 rounded-lg border border-slate-700 bg-slate-900 p-2 shadow-2xl">
         <p className="mb-1.5 text-[10px] text-slate-500">{title}</p>
         {children}
       </div>
@@ -123,6 +139,20 @@ interface ArticleEditorProps {
   onEditFigureSource?: (figureSource: string, desc: string) => void
   /** 工具栏快速换强调色：null = 恢复默认蓝 */
   onAccentChange?: (color: string | null) => void
+  /** 项目显式排版覆盖（meta 同名字段）：正文字号/标题字号/正文排列/标题排列，undefined = 跟随主题 */
+  typography?: {
+    bodyFontSize?: number
+    headingFontSize?: number
+    bodyAlign?: 'indent' | 'flush' | 'center'
+    headingAlign?: 'center' | 'left'
+  }
+  /** 工具栏排版设置：patch 值 null = 恢复默认（跟随主题） */
+  onTypographyChange?: (patch: {
+    bodyFontSize?: number | null
+    headingFontSize?: number | null
+    bodyAlign?: 'indent' | 'flush' | 'center' | null
+    headingAlign?: 'center' | 'left' | null
+  }) => void
 }
 
 /**
@@ -131,13 +161,15 @@ interface ArticleEditorProps {
  * - lastEmitted 防止 onChange → props.markdown 回流时循环 setContent
  */
 const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(function ArticleEditor(
-  { markdown, project, projectDir, accent, theme, uiDark, onChange, onAiModify, onAiReview, onFigAction, onEditFigureSource, onAccentChange },
+  { markdown, project, projectDir, accent, theme, uiDark, typography, onChange, onAiModify, onAiReview, onFigAction, onEditFigureSource, onAccentChange, onTypographyChange },
   ref
 ): ReactElement {
   const lastEmitted = useRef(markdown)
   const [accentOpen, setAccentOpen] = useState(false)
   /** 选区样式弹层：color 字色 / bg 背景高亮 / size 字号 */
   const [stylePop, setStylePop] = useState<'color' | 'bg' | 'size' | null>(null)
+  /** 工具栏排版弹层：bodySize 正文字号 / headingSize 标题字号 / bodyAlign 正文排列 / headingAlign 标题排列 */
+  const [typePop, setTypePop] = useState<'bodySize' | 'headingSize' | 'bodyAlign' | 'headingAlign' | null>(null)
 
   const editor = useEditor({
     extensions: [
@@ -389,6 +421,101 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
             </div>
           )}
         </div>
+        {/* 排版：正文字号 / 标题字号 / 正文排列 / 标题排列（meta 覆盖主题，编辑器与导出同源） */}
+        {(() => {
+          const t = theme ?? DEFAULT_THEME
+          const bodySize = typography?.bodyFontSize ?? t.fontSize ?? 16
+          const headingSize = typography?.headingFontSize ?? t.headingFontSize ?? 20
+          const bodyAlign = typography?.bodyAlign ?? t.bodyAlign ?? 'flush'
+          const headingAlign = typography?.headingAlign ?? t.headingAlign ?? 'center'
+          const bodyAlignLabel = BODY_ALIGNS.find((a) => a.value === bodyAlign)?.label ?? '定格'
+          const headingAlignLabel = HEADING_ALIGNS.find((a) => a.value === headingAlign)?.label ?? '居中'
+          const typeBtn = 'flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[11px] text-slate-300 hover:bg-slate-700'
+          const typePanel =
+            'absolute left-0 top-full z-50 mt-1 w-36 rounded-lg border border-slate-700 bg-slate-900 p-1.5 shadow-xl'
+          const typeReset =
+            'mt-1 block w-full rounded border border-slate-600 px-2 py-1 text-left text-[10px] text-slate-400 hover:bg-slate-700'
+          return (
+            <>
+              <div className="relative">
+                <button type="button" title="正文字号（覆盖主题，导出同步）" onClick={() => setTypePop(typePop === 'bodySize' ? null : 'bodySize')} className={typeBtn}>
+                  正文 {bodySize} <span className="text-[8px] text-slate-500">▾</span>
+                </button>
+                {typePop === 'bodySize' && (
+                  <div className={typePanel}>
+                    {BODY_FONT_SIZES.map((n) => (
+                      <button key={n} type="button" onClick={() => { onTypographyChange?.({ bodyFontSize: n }); setTypePop(null) }}
+                        className={`block w-full rounded px-2 py-1 text-left text-xs ${bodySize === n ? 'bg-sky-600 text-white' : 'text-slate-300 hover:bg-slate-700'}`}>
+                        {n}px
+                      </button>
+                    ))}
+                    <button type="button" onClick={() => { onTypographyChange?.({ bodyFontSize: null }); setTypePop(null) }} className={typeReset}>
+                      恢复默认（跟随主题）
+                    </button>
+                  </div>
+                )}
+              </div>
+              <div className="relative">
+                <button type="button" title="标题字号（H1/H2/H3 整体缩放）" onClick={() => setTypePop(typePop === 'headingSize' ? null : 'headingSize')} className={typeBtn}>
+                  标题 {headingSize} <span className="text-[8px] text-slate-500">▾</span>
+                </button>
+                {typePop === 'headingSize' && (
+                  <div className={typePanel}>
+                    {HEADING_FONT_SIZES.map((n) => (
+                      <button key={n} type="button" onClick={() => { onTypographyChange?.({ headingFontSize: n }); setTypePop(null) }}
+                        className={`block w-full rounded px-2 py-1 text-left text-xs ${headingSize === n ? 'bg-sky-600 text-white' : 'text-slate-300 hover:bg-slate-700'}`}>
+                        {n}px
+                      </button>
+                    ))}
+                    <button type="button" onClick={() => { onTypographyChange?.({ headingFontSize: null }); setTypePop(null) }} className={typeReset}>
+                      恢复默认（跟随主题）
+                    </button>
+                  </div>
+                )}
+              </div>
+              <div className="relative">
+                <button type="button" title="正文排列：缩进 / 定格 / 居中" onClick={() => setTypePop(typePop === 'bodyAlign' ? null : 'bodyAlign')} className={typeBtn}>
+                  正文·{bodyAlignLabel} <span className="text-[8px] text-slate-500">▾</span>
+                </button>
+                {typePop === 'bodyAlign' && (
+                  <div className={typePanel}>
+                    <div className="grid grid-cols-3 gap-1">
+                      {BODY_ALIGNS.map((a) => (
+                        <button key={a.value} type="button" onClick={() => { onTypographyChange?.({ bodyAlign: a.value }); setTypePop(null) }}
+                          className={`rounded px-1 py-1 text-xs ${bodyAlign === a.value ? 'bg-sky-600 text-white' : 'text-slate-300 hover:bg-slate-700'}`}>
+                          {a.label}
+                        </button>
+                      ))}
+                    </div>
+                    <button type="button" onClick={() => { onTypographyChange?.({ bodyAlign: null }); setTypePop(null) }} className={typeReset}>
+                      恢复默认（跟随主题）
+                    </button>
+                  </div>
+                )}
+              </div>
+              <div className="relative">
+                <button type="button" title="标题排列：居中 / 左对齐" onClick={() => setTypePop(typePop === 'headingAlign' ? null : 'headingAlign')} className={typeBtn}>
+                  标题·{headingAlignLabel} <span className="text-[8px] text-slate-500">▾</span>
+                </button>
+                {typePop === 'headingAlign' && (
+                  <div className={typePanel}>
+                    <div className="grid grid-cols-2 gap-1">
+                      {HEADING_ALIGNS.map((a) => (
+                        <button key={a.value} type="button" onClick={() => { onTypographyChange?.({ headingAlign: a.value }); setTypePop(null) }}
+                          className={`rounded px-1 py-1 text-xs ${headingAlign === a.value ? 'bg-sky-600 text-white' : 'text-slate-300 hover:bg-slate-700'}`}>
+                          {a.label}
+                        </button>
+                      ))}
+                    </div>
+                    <button type="button" onClick={() => { onTypographyChange?.({ headingAlign: null }); setTypePop(null) }} className={typeReset}>
+                      恢复默认（跟随主题）
+                    </button>
+                  </div>
+                )}
+              </div>
+            </>
+          )
+        })()}
         <span className="ml-auto text-[10px] text-slate-500">Ctrl+Z 撤销 · Ctrl+Y 重做 · Ctrl+B 加粗</span>
       </div>
       <div className="min-h-0 flex-1 overflow-auto">
@@ -398,7 +525,7 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
             <button
               type="button"
               onClick={() => editor.chain().focus().toggleBold().run()}
-              className={`rounded px-2 py-0.5 text-xs font-bold ${
+              className={`flex h-6 min-w-6 items-center justify-center rounded px-1.5 text-xs font-bold ${
                 editor.isActive('bold')
                   ? 'bg-sky-600 text-white'
                   : 'text-slate-300 hover:bg-slate-700'
@@ -412,7 +539,7 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
                 type="button"
                 onClick={() => setStylePop(stylePop === 'color' ? null : 'color')}
                 title="字体颜色"
-                className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-slate-300 hover:bg-slate-700"
+                className="flex h-6 items-center justify-center gap-1 rounded px-1.5 text-xs text-slate-300 hover:bg-slate-700"
               >
                 <span
                   className="inline-block h-3 w-3 rounded-full border border-slate-500"
@@ -456,6 +583,16 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
                       className="h-5 w-8 cursor-pointer border-0 bg-transparent p-0"
                     />
                   </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      editor.chain().focus().setTextStyle({ color: null }).run()
+                      setStylePop(null)
+                    }}
+                    className="mt-2 w-full rounded border border-slate-600 px-2 py-1 text-[10px] text-slate-400 hover:bg-slate-700"
+                  >
+                    恢复默认（跟随主题色）
+                  </button>
                 </StylePanel>
               )}
             </div>
@@ -465,7 +602,7 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
                 type="button"
                 onClick={() => setStylePop(stylePop === 'bg' ? null : 'bg')}
                 title="背景高亮"
-                className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-slate-300 hover:bg-slate-700"
+                className="flex h-6 items-center justify-center gap-1 rounded px-1.5 text-xs text-slate-300 hover:bg-slate-700"
               >
                 <span
                   className="inline-block h-3 w-3 rounded-sm border border-slate-500"
@@ -509,6 +646,16 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
                       className="h-5 w-8 cursor-pointer border-0 bg-transparent p-0"
                     />
                   </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      editor.chain().focus().setTextStyle({ bg: null }).run()
+                      setStylePop(null)
+                    }}
+                    className="mt-2 w-full rounded border border-slate-600 px-2 py-1 text-[10px] text-slate-400 hover:bg-slate-700"
+                  >
+                    清除高亮
+                  </button>
                 </StylePanel>
               )}
             </div>
@@ -518,13 +665,23 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
                 type="button"
                 onClick={() => setStylePop(stylePop === 'size' ? null : 'size')}
                 title="字号"
-                className="rounded px-1.5 py-0.5 text-xs text-slate-300 hover:bg-slate-700"
+                className="flex h-6 min-w-6 items-center justify-center rounded px-1.5 text-xs text-slate-300 hover:bg-slate-700"
               >
                 {(editor.getAttributes('textStyle').fontSize as number | undefined) ?? '字号'}
               </button>
               {stylePop === 'size' && (
                 <StylePanel title="字号（px）" onClose={() => setStylePop(null)}>
                   <div className="flex max-h-56 flex-col gap-0.5 overflow-auto">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        editor.chain().focus().setTextStyle({ fontSize: null }).run()
+                        setStylePop(null)
+                      }}
+                      className="mb-1 rounded border border-slate-600 px-2 py-0.5 text-left text-[10px] text-slate-400 hover:bg-slate-700"
+                    >
+                      跟随正文默认
+                    </button>
                     {FONT_SIZES.map((n) => (
                       <button
                         key={n}
@@ -551,8 +708,8 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
             <button
               type="button"
               onClick={() => editor.chain().focus().unsetTextStyle().run()}
-              title="清除字色/高亮/字号"
-              className="rounded px-1.5 py-0.5 text-xs text-slate-400 hover:bg-slate-700 hover:text-slate-200"
+              title="清除全部手动样式（字色/高亮/字号，保留加粗）"
+              className="flex h-6 min-w-6 items-center justify-center rounded px-1.5 text-xs text-slate-400 hover:bg-red-900/60 hover:text-red-200"
             >
               ×
             </button>
@@ -560,14 +717,14 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
             <button
               type="button"
               onClick={() => onAiModify?.()}
-              className="rounded px-2 py-0.5 text-xs text-slate-300 hover:bg-slate-700"
+              className="flex h-6 items-center rounded px-2 text-xs text-slate-300 hover:bg-slate-700"
             >
               AI 修改
             </button>
             <button
               type="button"
               onClick={() => onAiReview?.()}
-              className="rounded px-2 py-0.5 text-xs text-slate-300 hover:bg-slate-700"
+              className="flex h-6 items-center rounded px-2 text-xs text-slate-300 hover:bg-slate-700"
             >
               AI 审阅
             </button>
@@ -601,6 +758,13 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
               '--article-p-gap': `${t.pGap ?? 16}px`,
               '--article-img-radius': `${t.imgRadius ?? 4}px`,
               '--article-font-size': `${t.fontSize ?? 16}px`,
+              // 标题字号：H1=基准+6 / H2=基准 / H3=基准-3（与导出 26/20/17 同源）
+              '--article-h1-size': `${(t.headingFontSize ?? 20) + 6}px`,
+              '--article-h2-size': `${t.headingFontSize ?? 20}px`,
+              '--article-h3-size': `${Math.max(12, (t.headingFontSize ?? 20) - 3)}px`,
+              // 正文排列：indent 首行缩进 / flush 定格两端对齐 / center 居中
+              '--article-p-align': t.bodyAlign === 'center' ? 'center' : t.bodyAlign === 'flush' ? 'justify' : 'left',
+              '--article-p-indent': t.bodyAlign === 'indent' ? '2em' : '0',
               '--article-heading-color': headingColor,
               // 图注：深底浅字 / 浅底深字（不用灰字）
               '--article-caption-color': darkBg ? '#cbd5e1' : '#555'

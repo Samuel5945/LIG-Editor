@@ -59,6 +59,40 @@ describe('手动样式导出（span 字色/背景/字号）', () => {
     const html = docToExportHtml(mdToDoc('正文一行'), (src) => src, DEFAULT_THEME)
     expect(html).toContain('font-size:16px')
   })
+
+  it('正文排列：indent 首行缩进 2em / flush 两端对齐 / center 居中', () => {
+    const indent = docToExportHtml(mdToDoc('段落'), (src) => src, {
+      ...DEFAULT_THEME,
+      bodyAlign: 'indent'
+    })
+    expect(indent).toContain('text-indent:2em')
+    expect(indent).toContain('text-align:justify')
+    const flush = docToExportHtml(mdToDoc('段落'), (src) => src, {
+      ...DEFAULT_THEME,
+      bodyAlign: 'flush'
+    })
+    expect(flush).toContain('text-align:justify')
+    expect(flush).not.toContain('text-indent')
+    const center = docToExportHtml(mdToDoc('段落'), (src) => src, {
+      ...DEFAULT_THEME,
+      bodyAlign: 'center'
+    })
+    expect(center).toContain('text-align:center')
+    // 默认不输出排列样式（保持左对齐现状）
+    const plain = docToExportHtml(mdToDoc('段落'), (src) => src, DEFAULT_THEME)
+    expect(plain).not.toContain('text-align:justify')
+    expect(plain).not.toContain('text-indent')
+  })
+
+  it('标题字号缩放：headingFontSize 24 → H1 30 / H2 24 / H3 21', () => {
+    const html = docToExportHtml(mdToDoc('# 大标题\n\n## 小节\n\n### 子节'), (src) => src, {
+      ...DEFAULT_THEME,
+      headingFontSize: 24
+    })
+    expect(html).toContain('font-size:30px') // H1 = 24+6
+    expect(html).toContain('font-size:24px') // H2 = 24
+    expect(html).toContain('font-size:21px') // H3 = 24-3
+  })
 })
 
 

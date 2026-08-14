@@ -43,4 +43,26 @@ describe('resolveArticleTheme（强调色联动）', () => {
     expect(t.accent).toBe('#ff6b35')
     expect(t.headingColor).toBe('#ff6b35') // 分类主题的独立标题色也跟随
   })
+
+  it('meta 排版覆盖：正文字号/标题字号/正文排列/标题排列', () => {
+    const t = resolveArticleTheme({
+      category: '科技数码',
+      bodyFontSize: 18,
+      headingFontSize: 24,
+      bodyAlign: 'indent',
+      headingAlign: 'left'
+    })
+    expect(t.fontSize).toBe(18)
+    expect(t.headingFontSize).toBe(24)
+    expect(t.bodyAlign).toBe('indent')
+    expect(t.headingAlign).toBe('left')
+  })
+
+  it('meta 未覆盖时跟随主题默认（不覆盖也不丢失）', () => {
+    const t = resolveArticleTheme({ category: '科技数码' })
+    expect(t.fontSize).toBe(16) // 主题无 fontSize → 回退 DEFAULT_THEME
+    expect(t.headingFontSize).toBe(20)
+    expect(t.bodyAlign).toBeUndefined() // 默认无排列设置
+    expect(t.headingAlign).toBe('left') // 科技数码主题自带左对齐
+  })
 })

@@ -35,6 +35,10 @@ export interface ArticleTheme {
   bodyText?: string
   /** 正文基准字号（px，缺省 16；AI 排版正文默认偏小，留白与节奏靠行高/字距撑） */
   fontSize?: number
+  /** 标题基准字号（px，缺省 20；H1=+6 H2=+0 H3=-3，与经典导出 26/20/17 一致） */
+  headingFontSize?: number
+  /** 正文排列：indent 首行缩进 2em / flush 定格两端对齐 / center 居中；缺省左对齐不缩进 */
+  bodyAlign?: 'indent' | 'flush' | 'center'
   /** 标题文字色（卡片底色不同需显式指定，缺省按 bodyBg 深/浅自适应） */
   headingColor?: string
   /** 正文容器圆角 */
@@ -106,6 +110,14 @@ export interface ProjectMeta {
   category?: string
   /** 文章强调色（十六进制）：编辑器排版装饰与导出 HTML 同步跟随；缺省 = 默认蓝 */
   accent?: string
+  /** 正文字号覆盖（px）：覆盖主题 fontSize；缺省跟随主题 */
+  bodyFontSize?: number
+  /** 标题字号覆盖（px）：覆盖主题 headingFontSize；缺省跟随主题 */
+  headingFontSize?: number
+  /** 正文排列覆盖：indent 缩进 / flush 定格 / center 居中；缺省跟随主题 */
+  bodyAlign?: 'indent' | 'flush' | 'center'
+  /** 标题排列覆盖：center 居中 / left 左对齐；缺省跟随主题 */
+  headingAlign?: 'center' | 'left'
   style_skill?: string
   created_at: string
   updated_at: string

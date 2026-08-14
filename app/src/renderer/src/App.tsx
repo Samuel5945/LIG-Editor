@@ -430,6 +430,26 @@ export default function App(): JSX.Element {
     setMeta(m)
   }, [])
 
+  /** 排版设置落 meta：正文字号/标题字号/正文排列/标题排列；null = 删除覆盖恢复主题默认 */
+  const handleApplyTypography = useCallback(
+    async (patch: {
+      bodyFontSize?: number | null
+      headingFontSize?: number | null
+      bodyAlign?: 'indent' | 'flush' | 'center' | null
+      headingAlign?: 'center' | 'left' | null
+    }) => {
+      if (!currentRef.current) throw new Error('先打开工程')
+      const m = await window.api.invoke('project:readMeta', currentRef.current)
+      if ('bodyFontSize' in patch) m.bodyFontSize = patch.bodyFontSize ?? undefined
+      if ('headingFontSize' in patch) m.headingFontSize = patch.headingFontSize ?? undefined
+      if ('bodyAlign' in patch) m.bodyAlign = patch.bodyAlign ?? undefined
+      if ('headingAlign' in patch) m.headingAlign = patch.headingAlign ?? undefined
+      await window.api.invoke('project:writeMeta', currentRef.current, m)
+      setMeta(m)
+    },
+    []
+  )
+
   /** 源码图「改源码重渲染」→ 代码绘图弹窗编辑模式；完成后只刷图不插节点 */
   const handleEditFigureSource = useCallback((figureSource: string, desc: string) => {
     setFigRequest({
@@ -903,6 +923,7 @@ export default function App(): JSX.Element {
                     projectDir={currentDir}
                     accent={articleTheme.accent}
                     theme={articleTheme}
+                    typography={meta ?? undefined}
                     uiDark={theme === 'dark'}
                     onChange={setArticle}
                     onAiModify={handleAiModify}
@@ -910,6 +931,7 @@ export default function App(): JSX.Element {
                     onFigAction={handleFigAction}
                     onEditFigureSource={handleEditFigureSource}
                     onAccentChange={handleApplyArticleAccent}
+                    onTypographyChange={handleApplyTypography}
                   />
                 </div>
               )

@@ -12,11 +12,16 @@ export interface TextStyleAttrs {
   fontSize?: number
 }
 
+/** setTextStyle 入参：值为 null 表示清除该属性（其他属性保持）；undefined 保持原值 */
+export type TextStylePatch = {
+  [K in keyof TextStyleAttrs]?: TextStyleAttrs[K] | null
+}
+
 declare module '@tiptap/core' {
   interface Commands<ReturnType> {
     textStyle: {
-      /** 合并设置选中文本的手动样式（多次调用各属性累积，不改动的保持） */
-      setTextStyle: (attrs: TextStyleAttrs) => ReturnType
+      /** 合并设置选中文本的手动样式（多次调用各属性累积，不改动的保持；null 清除该属性） */
+      setTextStyle: (attrs: TextStylePatch) => ReturnType
       /** 清除选中文本的手动样式（color/bg/fontSize 全清） */
       unsetTextStyle: () => ReturnType
     }
@@ -83,7 +88,7 @@ export const TextStyleMark = Mark.create<Record<string, never>, TextStyleAttrs>(
   addCommands() {
     return {
       setTextStyle:
-        (attrs: TextStyleAttrs) =>
+        (patch: TextStylePatch) =>
         ({ editor, tr, state }: CommandProps) => {
           const { from, to } = state.selection
           if (from === to) return false
@@ -102,17 +107,20 @@ export const TextStyleMark = Mark.create<Record<string, never>, TextStyleAttrs>(
             }
             return true
           })
-          const merged: TextStyleAttrs = {
-            ...(existing.color ? { color: existing.color } : {}),
-            ...(existing.bg ? { bg: existing.bg } : {}),
-            ...(existing.fontSize ? { fontSize: existing.fontSize } : {}),
-            ...(attrs.color ? { color: attrs.color } : {}),
-            ...(attrs.bg ? { bg: attrs.bg } : {}),
-            ...(attrs.fontSize ? { fontSize: attrs.fontSize } : {})
+          // patch 语义：有值覆盖 / null 清除 / undefined 保持
+          const merged: TextStyleAttrs = {}
+          if (patch.color !== null && (patch.color || existing.color)) merged.color = patch.color ?? existing.color
+          if (patch.bg !== null && (patch.bg || existing.bg)) merged.bg = patch.bg ?? existing.bg
+          if (patch.fontSize !== null && (patch.fontSize || existing.fontSize))
+            merged.fontSize = patch.fontSize ?? existing.fontSize
+          if (!merged.color && !merged.bg && !merged.fontSize) {
+            // 全部清空 → 移除 mark
+            tr.removeMark(from, to, state.schema.marks.textStyle)
+          } else {
+            const mark = state.schema.marks.textStyle.create(merged)
+            tr.removeMark(from, to, state.schema.marks.textStyle)
+            tr.addMark(from, to, mark)
           }
-          const mark = state.schema.marks.textStyle.create(merged)
-          tr.removeMark(from, to, state.schema.marks.textStyle)
-          tr.addMark(from, to, mark)
           editor.view.dispatch(tr)
           return true
         },
