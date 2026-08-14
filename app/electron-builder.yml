@@ -37,5 +37,7 @@ nsis:
   perMachine: false
   artifactName: "tuwen-editor-setup-${version}.${ext}"
   shortcutName: 图文编辑器
+  # 自定义安装脚本：customInit 里自动关闭运行中的旧版图文编辑器（exe 被占用会阻止覆盖升级）
+  include: build/installer.nsh
 portable:
   artifactName: "tuwen-editor-portable-${version}.exe"
