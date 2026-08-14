@@ -14,7 +14,7 @@ import StarterKit from '@tiptap/starter-kit'
 import type { JSONContent } from '@tiptap/react'
 import { mdToDoc, docToMd, type ArticleDoc } from '@shared/markdown'
 import { isHexColor } from '@shared/cards'
-import { DEFAULT_THEME, contrastText, isDarkColor, type ArticleTheme } from '@shared/categoryThemes'
+import { DEFAULT_THEME, contrastText, isDarkColor, resolveEditorTheme, type ArticleTheme } from '@shared/categoryThemes'
 import { FigureImage, type FigureImageStorage } from './FigureImage'
 import { FigSuggest, type FigSuggestStorage } from './FigSuggest'
 import { FigureGallery } from './FigureGallery'
@@ -738,17 +738,9 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
           style={(() => {
             const t = theme ?? DEFAULT_THEME
             const accent = isHexColor(t.accent) ? t.accent : DEFAULT_THEME.accent
-            // 背景卡片实际亮度：有卡片看卡片明暗；无卡片（设计鉴赏/情感回忆/哲学思考等）
-            // 跟随编辑器 UI 主题——深色面板浅字、日间浅面板深字，杜绝日间浅底灰字看不清
-            const darkBg = t.bodyBg ? isDarkColor(t.bodyBg) : uiDark !== false
-            // 正文/标题色：有卡片按亮度给明确深/浅字；无卡片也按 UI 主题显式给色，
-            // 不再留空落到 CSS 硬编码浅灰白（rgb 226 232 240）在日间面板上不可读
-            // 深浅兜底：背景与文字亮度不匹配（浅底浅字/深底深字，历史导入脏数据）时强制修正
-            const bodyTv = t.bodyText ?? (darkBg ? '#cbd5e1' : '#333')
-            const bodyText = t.bodyBg && isDarkColor(bodyTv) === darkBg ? (darkBg ? '#cbd5e1' : '#333') : bodyTv
-            const headTv = t.headingColor ?? (darkBg ? '#eef2f7' : '#1a1a1a')
-            const headingColor =
-              t.bodyBg && isDarkColor(headTv) === darkBg ? (darkBg ? '#eef2f7' : '#1a1a1a') : headTv
+            // 昼夜配色解析（纯函数）：带卡片主题按 UI 深浅选变体（bodyBgLight/Dark），
+            // 无变体回退基础色；无卡片主题跟随 UI 深浅给字色；内置深浅兜底防脏数据
+            const c = resolveEditorTheme(t, uiDark !== false)
             const vars: Record<string, string> = {
               '--article-accent': accent,
               '--article-font': t.fontFamily,
@@ -756,8 +748,8 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
               '--article-ls': t.letterSpacing,
               '--article-h-align': t.headingAlign,
               // 结构级：背景卡片 / 段距 / 图片圆角 / 标题色
-              '--article-body-bg': t.bodyBg ?? 'transparent',
-              '--article-body-text': bodyText,
+              '--article-body-bg': c.bodyBg ?? 'transparent',
+              '--article-body-text': c.bodyText,
               '--article-body-radius': `${t.bodyRadius ?? 0}px`,
               '--article-body-pad': t.bodyPadding ?? '',
               '--article-p-gap': `${t.pGap ?? 16}px`,
@@ -770,9 +762,9 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
               // 正文排列：indent 首行缩进 / flush 顶格两端对齐 / center 居中
               '--article-p-align': t.bodyAlign === 'center' ? 'center' : t.bodyAlign === 'flush' ? 'justify' : 'left',
               '--article-p-indent': t.bodyAlign === 'indent' ? '2em' : '0',
-              '--article-heading-color': headingColor,
+              '--article-heading-color': c.headingColor,
               // 图注：深底浅字 / 浅底深字（不用灰字）
-              '--article-caption-color': darkBg ? '#cbd5e1' : '#555'
+              '--article-caption-color': c.darkBg ? '#cbd5e1' : '#555'
             }
             if (t.headingAlign === 'left') vars['--article-bar-left'] = '0'
             // H1 装饰：pill 胶囊色块 / underline 下划线（bar 用 CSS 默认短横）
@@ -817,7 +809,7 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
             // 引用：card 圆角卡片 / quotes 引号（leftbar 用 CSS 默认左条）
             const quote = t.quoteStyle ?? 'leftbar'
             // 引用文字色按背景实际亮度：深底 → 浅字；浅色卡片 → 深字（不用灰字）
-            vars['--article-quote-color'] = darkBg ? '#cbd5e1' : '#333'
+            vars['--article-quote-color'] = c.darkBg ? '#cbd5e1' : '#333'
             if (quote === 'card') {
               vars['--article-quote-left'] = 'none'
               vars['--article-quote-radius'] = '12px'
@@ -839,7 +831,7 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
             if (strong === 'highlight') {
               vars['--article-strong-bg'] = t.strongBg && isHexColor(t.strongBg) ? t.strongBg : '#fef3c7'
               // 高亮底上的字色按背景亮度：深底浅字 / 浅底深字（浅卡不再白字混底）
-              vars['--article-strong-color'] = darkBg ? '#f5f5f4' : '#333'
+              vars['--article-strong-color'] = c.darkBg ? '#f5f5f4' : '#333'
               vars['--article-strong-pad'] = '1px 6px'
               vars['--article-strong-radius'] = '4px'
             } else if (strong === 'plain') {
@@ -850,9 +842,9 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
             }
             // 表格：边框 / 表头背景 / 表头字色（按表头背景亮度）
             if (t.tableStyle) {
-              const border = t.tableBorder && isHexColor(t.tableBorder) ? t.tableBorder : darkBg ? '#3a4a5e' : '#e5e7eb'
+              const border = t.tableBorder && isHexColor(t.tableBorder) ? t.tableBorder : c.darkBg ? '#3a4a5e' : '#e5e7eb'
               const hbg =
-                t.tableHeaderBg && isHexColor(t.tableHeaderBg) ? t.tableHeaderBg : darkBg ? '#1e2b3d' : '#f3f4f6'
+                t.tableHeaderBg && isHexColor(t.tableHeaderBg) ? t.tableHeaderBg : c.darkBg ? '#1e2b3d' : '#f3f4f6'
               vars['--article-table-border'] = border
               vars['--article-table-header-bg'] = hbg
               vars['--article-table-header-text'] =

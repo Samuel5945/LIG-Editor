@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { parseThemeFromHtml, trimHtmlForTheme } from '../themeParse'
-import { contrastText, isDarkColor, CATEGORY_THEMES } from '../categoryThemes'
+import { contrastText, isDarkColor, resolveEditorTheme, CATEGORY_THEMES, DEFAULT_THEME } from '../categoryThemes'
 
 describe('parseThemeFromHtml（公众号 HTML → 排版调性）', () => {
   const HTML = `<!DOCTYPE html><html><head><title>科技美学：深空黑</title></head>
@@ -111,6 +111,48 @@ describe('isDarkColor（背景亮度判断：暖白浅卡 ≠ 深色卡）', () 
     // 导出端：生活常识卡片是暖白 → dark=false → 引用深字
     expect(CATEGORY_THEMES['生活常识'].bodyBg).toBeTruthy()
     expect(isDarkColor(CATEGORY_THEMES['生活常识'].bodyBg as string)).toBe(false)
+  })
+})
+
+describe('resolveEditorTheme（昼夜版：编辑器按 UI 深浅切卡片配色）', () => {
+  it('科技数码：日间（浅 UI）切浅蓝白卡 + 深字；夜间保持深卡浅字', () => {
+    const tech = CATEGORY_THEMES['科技数码']
+    const day = resolveEditorTheme(tech, false)
+    expect(day.bodyBg).toBe('#eef3fb') // 浅 UI 用 bodyBgLight
+    expect(day.darkBg).toBe(false)
+    expect(day.bodyText).toBe('#333')
+    const night = resolveEditorTheme(tech, true)
+    expect(night.bodyBg).toBe('#0d1526') // 深 UI 回退基础深卡
+    expect(night.darkBg).toBe(true)
+    expect(night.bodyText).toBe('#cbd5e1')
+  })
+
+  it('生活常识：夜间（深 UI）切深暖卡 + 浅字；日间保持暖白卡深字', () => {
+    const life = CATEGORY_THEMES['生活常识']
+    const night = resolveEditorTheme(life, true)
+    expect(night.bodyBg).toBe('#262016')
+    expect(night.darkBg).toBe(true)
+    expect(night.bodyText).toBe('#e7e0d4')
+    const day = resolveEditorTheme(life, false)
+    expect(day.bodyBg).toBe('#fffaf2')
+    expect(day.darkBg).toBe(false)
+    expect(day.bodyText).toBe('#3d3a34')
+  })
+
+  it('无变体主题回退基础色；无卡片主题跟随 UI 深浅给字色', () => {
+    const design = CATEGORY_THEMES['设计鉴赏'] // 无 bodyBg
+    const day = resolveEditorTheme(design, false)
+    expect(day.bodyBg).toBeUndefined()
+    expect(day.darkBg).toBe(false)
+    expect(day.bodyText).toBe('#333')
+    const night = resolveEditorTheme(design, true)
+    expect(night.bodyText).toBe('#cbd5e1')
+  })
+
+  it('脏数据兜底仍生效：浅底显式浅字被修正为深字', () => {
+    const dirty = { ...DEFAULT_THEME, bodyBg: '#fff0f0', bodyText: '#cbd5e1' }
+    const c = resolveEditorTheme(dirty, false)
+    expect(c.bodyText).toBe('#333')
   })
 })
 

@@ -42,6 +42,38 @@ export function contrastText(bg: string): string {
   return isDarkColor(bg) ? '#ffffff' : '#2b2b2b'
 }
 
+export interface EditorThemeColors {
+  /** 实际卡片背景色（变体优先；无卡片为 undefined → 编辑器透明白底） */
+  bodyBg?: string
+  /** 实际正文文字色（已做深浅兜底，杜绝浅底浅字看不清） */
+  bodyText: string
+  /** 实际标题文字色（同上兜底） */
+  headingColor: string
+  /** 卡片/面板是否偏深（无卡片时按 UI 深浅） */
+  darkBg: boolean
+}
+
+/**
+ * 编辑器昼夜配色解析（纯函数，ArticleEditor 注入 CSS 变量用）：
+ * - 带背景卡片的主题：UI 深色优先 bodyBgDark、UI 浅色优先 bodyBgLight，无变体回退基础色
+ * - 深浅兜底：背景与文字亮度不匹配（浅底浅字/深底深字，历史导入脏数据）时强制修正
+ * - 无卡片主题（设计鉴赏/情感回忆/哲学思考等）：跟随 UI 主题——深色面板浅字、日间深字
+ * 导出/公众号不受影响：buildStyles 固定用基础色（bodyBg），公众号文章不可能昼夜切换。
+ */
+export function resolveEditorTheme(theme: ArticleTheme, uiDark: boolean): EditorThemeColors {
+  const bg = uiDark ? theme.bodyBgDark ?? theme.bodyBg : theme.bodyBgLight ?? theme.bodyBg
+  const darkBg = bg ? isDarkColor(bg) : uiDark
+  const bodyTv =
+    (uiDark ? theme.bodyTextDark : theme.bodyTextLight) ?? theme.bodyText ?? (darkBg ? '#cbd5e1' : '#333')
+  const bodyText = bg && isDarkColor(bodyTv) === darkBg ? (darkBg ? '#cbd5e1' : '#333') : bodyTv
+  const headTv =
+    (uiDark ? theme.headingColorDark : theme.headingColorLight) ??
+    theme.headingColor ??
+    (darkBg ? '#eef2f7' : '#1a1a1a')
+  const headingColor = bg && isDarkColor(headTv) === darkBg ? (darkBg ? '#eef2f7' : '#1a1a1a') : headTv
+  return { bodyBg: bg, bodyText, headingColor, darkBg }
+}
+
 /** 默认调性：与编辑器/导出历史排版完全一致（蓝强调色、黑体、2.13 行高、居中大标题） */
 export const DEFAULT_THEME: ArticleTheme = {
   accent: '#4f8cff',
@@ -72,6 +104,10 @@ export const CATEGORY_THEMES: Record<string, ArticleTheme> = {
     bodyBg: '#0d1526',
     bodyText: '#cbd5e1',
     headingColor: '#eef2f7',
+    // 昼夜版：日间（浅 UI）编辑器自动切浅蓝白卡 + 深字，不刺眼；导出固定深卡保持科技感
+    bodyBgLight: '#eef3fb',
+    bodyTextLight: '#333',
+    headingColorLight: '#1a1a1a',
     bodyRadius: 14,
     bodyPadding: '20px 22px',
     h1Style: 'underline',
@@ -107,6 +143,10 @@ export const CATEGORY_THEMES: Record<string, ArticleTheme> = {
     bodyBg: '#fffaf2',
     bodyText: '#3d3a34',
     headingColor: '#1a1a1a',
+    // 昼夜版：夜间（深 UI）编辑器自动切深暖卡 + 浅字，深色面板不再亮一块；导出固定暖白保持温馨
+    bodyBgDark: '#262016',
+    bodyTextDark: '#e7e0d4',
+    headingColorDark: '#f5efe3',
     bodyRadius: 18,
     bodyPadding: '16px 18px',
     h1Style: 'pill',

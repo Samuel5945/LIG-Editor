@@ -33,6 +33,19 @@ export interface ArticleTheme {
   bodyBg?: string
   /** 正文文字色（深底卡片需浅色文字） */
   bodyText?: string
+  // ---- 昼夜版变体（可选）：编辑器按 UI 深浅自动切换卡片配色，导出/公众号固定基础色 ----
+  /** 浅色 UI（日间）下的正文容器背景色；缺省用 bodyBg */
+  bodyBgLight?: string
+  /** 浅色 UI（日间）下的正文文字色；缺省用 bodyText */
+  bodyTextLight?: string
+  /** 浅色 UI（日间）下的标题文字色；缺省用 headingColor */
+  headingColorLight?: string
+  /** 深色 UI（夜间）下的正文容器背景色；缺省用 bodyBg */
+  bodyBgDark?: string
+  /** 深色 UI（夜间）下的正文文字色；缺省用 bodyText */
+  bodyTextDark?: string
+  /** 深色 UI（夜间）下的标题文字色；缺省用 headingColor */
+  headingColorDark?: string
   /** 正文基准字号（px，缺省 16；AI 排版正文默认偏小，留白与节奏靠行高/字距撑） */
   fontSize?: number
   /** 标题基准字号（px，缺省 20；H1=+6 H2=+0 H3=-3，与经典导出 26/20/17 一致） */
