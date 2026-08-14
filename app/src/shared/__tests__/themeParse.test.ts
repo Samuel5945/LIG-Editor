@@ -176,4 +176,36 @@ describe('parseThemeFromHtml v2（细节提取）', () => {
     expect(r.theme.strongStyle).toBe('highlight')
     expect(r.theme.strongBg).toBe('#fef3c7')
   })
+
+  it('微信默认透明背景的 h2 不误判为 block 色块（保留文字色形态）', () => {
+    const html = `<section>
+<h2 style="background:none 0% 0% / auto no-repeat scroll padding-box border-box transparent;color:#2bae85;border-left:4px solid #2bae85;">小节标题</h2>
+<p style="color:#666;">正文</p>
+</section>`
+    const r = parseThemeFromHtml(html)
+    expect(r.theme.h2Style).not.toBe('block') // 透明背景 → 非色块
+    expect(r.theme.h2Style).toBe('leftbar') // 有 border-left → 左竖条
+    expect(r.theme.headingColor).toBe('#2bae85') // 标题文字色保留
+  })
+
+  it('无 h1 只有 h2 时，headingAlign 认 h2 的 text-align', () => {
+    const html = `<section>
+<h2 style="text-align:left;color:#2bae85;">左对齐小节</h2>
+<p style="color:#666;">正文</p>
+</section>`
+    const r = parseThemeFromHtml(html)
+    expect(r.theme.headingAlign).toBe('left')
+  })
+
+  it('h2 内部 span 色块（微信习惯）→ block + h2Bg，居中看 justify-content', () => {
+    const html = `<section>
+<h2 style="display:flex;justify-content:center;text-align:left;color:#2bae85;background:none 0% 0% / auto no-repeat scroll padding-box border-box transparent;"><span style="color:rgb(255,255,255);background:none 0% 0% / auto no-repeat scroll padding-box border-box rgb(0,0,0);padding:2px 10px;">色块标题</span></h2>
+<p style="color:#666;">正文</p>
+</section>`
+    const r = parseThemeFromHtml(html)
+    expect(r.theme.h2Style).toBe('block') // 色块在内部 span 上
+    expect(r.theme.h2Bg).toBe('#000000') // 块背景是黑色
+    expect(r.theme.headingAlign).toBe('center') // justify-content:center → 居中
+    expect(r.theme.headingColor).toBe('#2bae85')
+  })
 })

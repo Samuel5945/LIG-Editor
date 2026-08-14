@@ -43,6 +43,8 @@ export interface ArticleTheme {
   h1Style?: H1Style
   /** H2 装饰：leftbar 左竖条 / block 色块标签 / underline 下划线 / plain 纯文字 */
   h2Style?: H2Style
+  /** H2 色块标签的背景色（配 h2Style: 'block'；缺省=accent） */
+  h2Bg?: string
   /** H3 前缀：diamond 菱形 / dot 圆点 / none 无 */
   h3Mark?: H3Mark
   /** 引用形态：leftbar 左条浅底 / card 圆角卡片 / quotes 引号 */

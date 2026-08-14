@@ -415,12 +415,15 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
             // H2 装饰：block 色块标签 / underline 下划线 / plain 纯文字（leftbar 用 CSS 默认竖条）
             const h2 = t.h2Style ?? 'leftbar'
             if (h2 === 'block') {
-              vars['--article-h2-bg'] = accent
-              vars['--article-h2-color'] = contrastText(accent)
+              const h2Bg = t.h2Bg && isHexColor(t.h2Bg) ? t.h2Bg : accent
+              vars['--article-h2-bg'] = h2Bg
+              vars['--article-h2-color'] = contrastText(h2Bg)
               vars['--article-h2-left'] = 'none'
               vars['--article-h2-pad'] = '3px 14px'
               vars['--article-h2-radius'] = '6px'
-              vars['--article-h2-display'] = 'inline-block'
+              // display:table 块级收缩，配合 margin auto 实现居中（公众号最稳方案）
+              vars['--article-h2-display'] = 'table'
+              vars['--article-h2-margin'] = t.headingAlign === 'center' ? '40px auto 16px' : '40px 0 16px'
             } else if (h2 === 'underline') {
               vars['--article-h2-border'] = `2px solid ${accent}`
               vars['--article-h2-left'] = 'none'

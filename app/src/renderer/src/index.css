@@ -145,7 +145,8 @@ body {
 }
 /* H2 小节标题：左竖条 / 色块标签 / 下划线 / 纯文字，一眼区分层级 */
 .article-editor .ProseMirror h2 {
-  @apply mb-4 mt-10 text-xl font-bold leading-snug;
+  @apply text-xl font-bold leading-snug;
+  margin: var(--article-h2-margin, 2.5rem 0 1rem);
   display: var(--article-h2-display, block);
   color: var(--article-h2-color, var(--article-heading-color, rgb(var(--ink))));
   background: var(--article-h2-bg, transparent);

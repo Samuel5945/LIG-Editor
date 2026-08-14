@@ -160,14 +160,19 @@ export default function ThemeImportDialog({ onClose, onSaved, onToast }: Props):
             )}
           </div>
 
-          {/* 右：手机宽度迷你预览 */}
+          {/* 右：手机宽度迷你预览（高度撑满右栏，不再是一小片） */}
           <div className="flex w-[380px] shrink-0 flex-col border-l border-slate-700">
             <p className="shrink-0 border-b border-slate-700 px-3 py-1.5 text-[11px] text-slate-500">
-              预览（375px）
+              预览（375px 手机宽度）
             </p>
-            <div className="flex min-h-0 flex-1 items-start justify-center overflow-auto bg-slate-950/60 p-2">
+            <div className="flex min-h-0 flex-1 items-stretch justify-center overflow-auto bg-slate-950/60 p-2">
               {previewHtml ? (
-                <iframe title="排版预览" srcDoc={previewHtml} sandbox="" className="w-[375px] shrink-0 rounded border border-slate-700 bg-white" />
+                <iframe
+                  title="排版预览"
+                  srcDoc={previewHtml}
+                  sandbox=""
+                  className="h-full w-[375px] shrink-0 rounded border border-slate-700 bg-white"
+                />
               ) : (
                 <p className="mt-8 text-xs text-slate-600">解析后这里显示排版效果</p>
               )}

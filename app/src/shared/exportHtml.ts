@@ -151,7 +151,10 @@ function buildStyles(theme?: ArticleTheme): Styles {
   // H2 装饰：leftbar 左竖条 / block 色块标签 / underline 下划线 / plain 纯文字
   const h2Style = t.h2Style ?? 'leftbar'
   if (h2Style === 'block') {
-    s.h2 = `font-size:20px;font-weight:bold;color:${contrastText(c)};line-height:1.375;margin:40px 0 16px;display:inline-block;background:${c};border-radius:6px;padding:3px 14px;`
+    const h2Bg = t.h2Bg && isHexColor(t.h2Bg) ? t.h2Bg : c
+    // display:table 块级收缩 + margin auto 居中（公众号 webview 兼容）
+    const h2Margin = t.headingAlign === 'center' ? '40px auto 16px' : '40px 0 16px'
+    s.h2 = `font-size:20px;font-weight:bold;color:${contrastText(h2Bg)};line-height:1.375;margin:${h2Margin};display:table;background:${h2Bg};border-radius:6px;padding:3px 14px;`
   } else if (h2Style === 'underline') {
     s.h2 = `font-size:20px;font-weight:bold;color:${subColor};line-height:1.375;margin:40px 0 16px;border-bottom:2px solid ${c};padding-bottom:8px;`
   } else if (h2Style === 'plain') {

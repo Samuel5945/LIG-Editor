@@ -87,7 +87,8 @@ function toHex(color: string): string | null {
  * 背景值是否为「单一背景色」：微信编辑器常生成多图层复合背景
  * （`rgba(0,0,0,0.4) rgba(0,0,0,0.4) rgb(53,179,120)`），此时不能当 highlight 底色
  */
-function singleBgColor(v: string): string | null {
+function singleBgColor(v: string | undefined): string | null {
+  if (!v) return null
   const colorCount = (v.match(/#[0-9a-f]{3,8}\b|rgba?\([^)]*\)/gi) || []).length
   if (colorCount > 1) return null
   const hex = toHex(v)
@@ -95,6 +96,31 @@ function singleBgColor(v: string): string | null {
   // 透明/全透明背景不算
   if (/rgba\(\s*0\s*,\s*0\s*,\s*0\s*,\s*0\s*\)/.test(v)) return null
   return hex
+}
+
+/** 取首个 h2 内部首个 span 的单一背景色（微信色块标签常落在 span 上，h2 本身透明）；无则 null */
+function h2InnerSpanBg(html: string): string | null {
+  const m = /<h2[^>]*>([\s\S]*?)<\/h2>/i.exec(html)
+  if (!m) return null
+  const sm = /<span[^>]*style=["']([^"']*)["']/i.exec(m[1])
+  if (!sm) return null
+  const st = parseStyle(sm[1])
+  return singleBgColor(st['background'] ?? st['background-color'])
+}
+
+/**
+ * 标题排列：优先看 flex 的 justify-content（微信居中标题常 display:flex + justify-content:center，
+ * text-align 是默认 left，不能只信它）；其次 text-align 显式值。
+ */
+function alignOf(
+  h1s: Record<string, string>,
+  h2s: Record<string, string>
+): ArticleTheme['headingAlign'] {
+  const s = { ...h1s, ...h2s }
+  if (/center/.test(s['justify-content'] ?? '')) return 'center'
+  if (/center/.test(s['text-align'] ?? '')) return 'center'
+  if ((s['text-align'] ?? '').startsWith('left')) return 'left'
+  return 'center'
 }
 
 /** 是否「接近黑白灰」：三通道极差 < 40 视为中性色 */
@@ -270,7 +296,11 @@ export function parseThemeFromHtml(html: string): ParsedTheme {
       : h1s['border-bottom']
         ? 'underline'
         : 'bar'
-  const h2Style: ArticleTheme['h2Style'] = h2s['background']
+  // h2 色块常落在内部首个 span 上（微信编辑器习惯：h2 透明 + span 白字色块），
+  // 因此 h2 自身背景和内部 span 背景都算；色块背景单独记 h2Bg（可能不是强调色）
+  const h2InnerBg = h2InnerSpanBg(html)
+  const h2Bg = singleBgColor(h2s['background']) ?? h2InnerBg
+  const h2Style: ArticleTheme['h2Style'] = h2Bg
     ? 'block'
     : h2s['border-bottom']
       ? 'underline'
@@ -341,7 +371,7 @@ export function parseThemeFromHtml(html: string): ParsedTheme {
     fontFamily: kind === 'serif' ? SERIF : kind === 'mono' ? MONO : SANS,
     lineHeight: Number.isFinite(lineHeight) && lineHeight >= 1 ? lineHeight : DEFAULT_THEME.lineHeight,
     letterSpacing: letterSpacing ?? DEFAULT_THEME.letterSpacing,
-    headingAlign: h1s['text-align'] === 'left' ? 'left' : 'center',
+    headingAlign: alignOf(h1s, h2s),
     ...(bodyBg
       ? {
           bodyBg,
@@ -355,6 +385,7 @@ export function parseThemeFromHtml(html: string): ParsedTheme {
     ...(headingColor ? { headingColor } : {}),
     h1Style,
     h2Style,
+    ...(h2Bg ? { h2Bg } : {}),
     quoteStyle,
     hrStyle,
     strongStyle,
@@ -372,7 +403,7 @@ export function parseThemeFromHtml(html: string): ParsedTheme {
     bodyBg ? `背景卡片 ${bodyBg}` : '白底',
     headingColor && headingColor !== accent ? `标题色 ${headingColor}` : `标题随强调色`,
     strongColor && strongColor !== accent ? `加粗色 ${strongColor}` : '',
-    `大标题 ${h1Style} / 小节 ${h2Style}`,
+    `大标题 ${h1Style} / 小节 ${h2Style}${h2Bg ? `（底 ${h2Bg}）` : ''}`,
     `引用 ${quoteStyle} / 分隔线 ${hrStyle}`,
     `加粗 ${strongStyle}${strongBg ? `（底 ${strongBg}）` : ''}`,
     hasTable ? `表格 ${tableStyle}${thBg ? `（表头 ${thBg}）` : ''}` : ''

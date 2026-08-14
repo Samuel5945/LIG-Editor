@@ -82,11 +82,31 @@ export async function fetchUrlHtml(url: string): Promise<string> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), 30_000)
   try {
-    const res = await net.fetch(url, { redirect: 'follow', signal: controller.signal })
+    // 必须带完整浏览器 UA：Electron net.fetch 默认 UA 会被微信反爬拦截，
+    // 返回「环境异常，完成验证后即可继续访问」验证页而非文章正文
+    const res = await net.fetch(url, {
+      redirect: 'follow',
+      signal: controller.signal,
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+        'Cache-Control': 'no-cache'
+      }
+    })
     if (!res.ok) throw new Error(`抓取失败：HTTP ${res.status}`)
     const text = await res.text()
     if (text.length > 30_000_000) throw new Error('页面过大（>30MB），请改用复制正文 HTML')
-    return trimHtmlForTheme(text)
+    const trimmed = trimHtmlForTheme(text)
+    // 微信风控验证页检测：无 js_content 正文容器 + 验证特征 → 明确提示改用粘贴 HTML
+    if (
+      !trimmed.includes('js_content') &&
+      /环境异常|完成验证|去验证|访问过于频繁/.test(trimmed)
+    ) {
+      throw new Error('被微信验证拦截（抓取到验证页）。请用浏览器打开文章，复制正文 HTML 后直接粘贴解析')
+    }
+    return trimmed
   } finally {
     clearTimeout(timer)
   }
