@@ -133,7 +133,7 @@ export const TOOLS: ToolDef[] = [
   {
     name: 'write_article',
     description:
-      '整体覆写 article.md 正文。markdown 子集：#/##/### 标题、段落、**加粗**、> 引用、--- 分隔线、![alt](assets/x.png) 图片（后跟 <!-- caption: 图注 -->）、<!-- fig-suggest: 详细画面描述 | 简短图注 --> 配图占位（画面描述 30-60 字写清主体/场景/构图/情绪，图注 10 字内）',
+      '整体覆写 article.md 正文。markdown 子集：#/##/### 标题、段落、**加粗**、> 引用、--- 分隔线、![alt](assets/x.png) 图片（后跟 <!-- caption: 图注 -->）、<!-- fig-suggest: 详细画面描述 | 简短图注 --> 配图占位。手动样式（与编辑器选中片段设置同源）：<span style="color:#e63946;background-color:#fef3c7;font-size:18px">文本</span>——color 字色 / background-color 背景高亮 / font-size 字号（12-24px），可叠加 **加粗**，编辑器与公众号导出均渲染',
     inputSchema: {
       type: 'object',
       properties: { project: P.project, content: { type: 'string', description: '正文 markdown 全文' } },
@@ -365,6 +365,40 @@ export const TOOLS: ToolDef[] = [
       }
       const meta = store.readMeta(project)
       store.writeMeta(project, { ...meta, titles })
+      notifyChange(project, 'project.json')
+      return { ok: true }
+    }
+  },
+  {
+    name: 'set_theme',
+    description:
+      '设置工程排版覆盖（写入 project.json，编辑器/导出/推送同源生效，与顶栏控件一致）。字段独立可传：accent 强调色 / bodyFontSize 正文字号 / headingFontSize 标题字号（H1=+6 H2=+0 H3=-3）/ bodyAlign 正文排列（indent 首行缩进 / flush 顶格两端对齐 / center 居中）/ headingAlign 标题排列（center 居中 / left 左）。传 null = 恢复默认（跟随分类主题）',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project: P.project,
+        accent: { type: ['string', 'null'], description: '强调色十六进制（#rrggbb）；null 恢复默认' },
+        bodyFontSize: { type: ['number', 'null'], description: '正文字号 px（10-40）；null 跟随主题' },
+        headingFontSize: { type: ['number', 'null'], description: '标题字号 px（12-40）；null 跟随主题' },
+        bodyAlign: { type: ['string', 'null'], enum: ['indent', 'flush', 'center', null], description: '正文排列；null 跟随主题' },
+        headingAlign: { type: ['string', 'null'], enum: ['center', 'left', null], description: '标题排列；null 跟随主题' }
+      },
+      required: ['project']
+    },
+    handler: (a) => {
+      const project = str(a, 'project')
+      const meta = store.readMeta(project)
+      // 有值覆盖 / null 恢复默认（写 undefined，JSON 序列化自动省略）/ 未传不动
+      if (a.accent !== undefined) meta.accent = a.accent === null ? undefined : (a.accent as string)
+      if (a.bodyFontSize !== undefined)
+        meta.bodyFontSize = a.bodyFontSize === null ? undefined : (a.bodyFontSize as number)
+      if (a.headingFontSize !== undefined)
+        meta.headingFontSize = a.headingFontSize === null ? undefined : (a.headingFontSize as number)
+      if (a.bodyAlign !== undefined)
+        meta.bodyAlign = a.bodyAlign === null ? undefined : (a.bodyAlign as 'indent' | 'flush' | 'center')
+      if (a.headingAlign !== undefined)
+        meta.headingAlign = a.headingAlign === null ? undefined : (a.headingAlign as 'center' | 'left')
+      store.writeMeta(project, meta)
       notifyChange(project, 'project.json')
       return { ok: true }
     }
