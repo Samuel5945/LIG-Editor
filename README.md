@@ -1,0 +1,66 @@
+# 图文编辑器（tuwen-editor）
+
+> 本地优先的公众号图文创作工作台 · @LIG人生如戏
+
+一个 **Windows 桌面应用**（Electron），把公众号图文创作全链路——脑暴选题、AI 初稿、逐段修改、审阅把关、配图封面、标题打磨、排版导出——收进同一个工作台。
+
+## 特性
+
+- **本地优先**：工程、素材、密钥全在本机，不上传任何内容到自有服务器
+- **AI 副驾驶**：右侧对话面板驱动全流程，接入任意 OpenAI 兼容 API，Skill 体系挂载写作风格
+- **Agent 可操控**：MCP + 本地 HTTP 桥，外部编程 Agent（Codex / Qoder 等）可直接操控编辑器
+- **三栏工作台**：左栏工程列表 · 中栏所见即所得编辑器（TipTap）· 右栏 AI 副驾驶
+- **三种配图管线**：代码绘图（HTML→PNG）、AI 文生图、真图抠图，产物统一进 `assets/`
+- **一键推送公众号**：正文本地图片自动上传微信 CDN，草稿直推公众号后台
+- **排版主题**：6 种分类自带主题色 + 9 种排版风格，支持自定义
+
+## 下载
+
+[📥 最新版本下载（夸克网盘）](https://pan.quark.cn/s/ddbcdaaaa634)
+
+## 技术栈
+
+| 层 | 技术 |
+|---|---|
+| 桌面框架 | Electron 31 |
+| 前端 | React 18 + Vite 5 + Tailwind CSS 3 |
+| 富文本编辑器 | TipTap（ProseMirror） |
+| 图像处理 | sharp + 自研抠图算法 |
+| 代码绘图 | Electron offscreen BrowserWindow（HTML→PNG） |
+| MCP | `@modelcontextprotocol/sdk`（stdio + 本地 HTTP） |
+| 文件监听 | chokidar（工程文件热载） |
+
+## 开发
+
+```bash
+cd app
+npm install
+npm run dev      # 启动开发模式（热重载）
+npm run build    # 仅构建
+npm run dist     # 构建 + 打包 Windows 安装包
+```
+
+## 架构
+
+```
+┌─ Electron 主进程 ───────────────────────────────┐
+│ · 工程文件存储 + chokidar 热载                    │
+│ · 模型调用代理（OpenAI 兼容，流式转发）            │
+│ · MCP 能力核（stdio + 本地 HTTP/SSE）             │
+│ · offscreen 渲染器（figures/*.html → assets/*.png）│
+│ · 图像处理（抠图/裁切/封面合成）                   │
+│ · 密钥 DPAPI 加密存储（safeStorage）               │
+└───────────────────────┬────────────────────────┘
+                     IPC
+┌─ 渲染进程：三栏工作台 ─┴──────────────────────────┐
+│ 左栏           │ 中栏               │ 右栏        │
+│ 项目列表        │ 富文本编辑器        │ AI 副驾驶    │
+│ 选题库          │ (TipTap 所见即所得   │ 对话面板     │
+│ 素材/配图树    │  公众号内联样式预览)  │ 指令→diff→  │
+│ Skill 管理     │ 标题/封面工作区      │  确认应用)   │
+└──────────────────────────────────────────────────┘
+```
+
+## License
+
+Apache-2.0 © Samuel Shi

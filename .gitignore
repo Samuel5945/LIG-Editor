@@ -8,3 +8,17 @@
 
 # logs
 *.log
+
+# OS
+desktop.ini
+__pycache__/
+
+# dev scripts (not part of the shipped product)
+tuwen.py
+tuwen-installed.py
+inspect-h2.mjs
+verify-v3.mjs
+dump-article.mjs
+article-dump.html
+fig-ai-glasses.html
+app/theme-preview.html
