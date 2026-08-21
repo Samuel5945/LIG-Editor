@@ -560,6 +560,13 @@ export default function App(): JSX.Element {
           >
             🔄 版本更新
           </button>
+          <button
+            onClick={() => window.open('https://github.com/Samuel5945/tuwen-editor')}
+            title="GitHub 开源仓库"
+            className="rounded px-2 py-1 hover:bg-panel-3"
+          >
+            ★ GitHub
+          </button>
         </div>
         <div className="flex h-full items-stretch">
           <button
