@@ -14,8 +14,8 @@ import { DEFAULT_NIGHT_BG, DEFAULT_THEME, contrastText, isDarkColor, resolveEdit
  *   默认调性输出与历史完全一致的经典排版
  */
 
-/** 默认强调色：与编辑器 --article-accent 缺省值一致（index.css），未设/非法色时推送不再变灰 */
-const DEFAULT_ACCENT = '#4f8cff'
+/** 默认强调色：与编辑器 --article-accent 缺省值一致（categoryThemes DEFAULT_THEME，日间换色后为青绿），未设/非法色时推送不再变灰 */
+const DEFAULT_ACCENT = '#0d9488'
 
 /**
  * 排版规格与编辑器 index.css 的 .article-editor .ProseMirror 对齐（字号/行高/间距/装饰同构）。
@@ -34,7 +34,7 @@ const S = {
   p: 'font-size:15px;line-height:2.13;color:#333;margin:16px 0;',
   strong: 'font-weight:bold;',
   blockquote:
-    'margin:20px 0;padding:8px 12px 8px 16px;border-left:4px solid #4f8cff;border-top-right-radius:8px;border-bottom-right-radius:8px;background:#f7f7f7;color:#777;font-size:15px;line-height:2.13;',
+    'margin:20px 0;padding:8px 12px 8px 16px;border-left:4px solid #0d9488;border-top-right-radius:8px;border-bottom-right-radius:8px;background:#f7f7f7;color:#777;font-size:15px;line-height:2.13;',
   quoteP: 'margin:4px 0;font-size:15px;line-height:2.13;color:#777;',
   quotePLast: 'margin:4px 0;font-size:15px;line-height:2.13;color:#777;',
   hr: 'margin:40px auto;border:0 none;border-top:2px solid #e8e8e8;width:64px;',
@@ -59,7 +59,7 @@ type Styles = { -readonly [K in keyof typeof S]: string } & {
 /** 强调色转淡色底（公众号客户端不认 color-mix，预计算 rgba；非法输入回默认蓝） */
 function tint(hex: string, alpha: number): string {
   const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim())
-  if (!m) return `rgba(79,140,255,${alpha})`
+  if (!m) return `rgba(13,148,136,${alpha})`
   const n = parseInt(m[1], 16)
   return `rgba(${n >> 16},${(n >> 8) & 0xff},${n & 0xff},${alpha})`
 }

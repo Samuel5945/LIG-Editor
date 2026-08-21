@@ -23,13 +23,14 @@ import { TextStyleMark } from './TextStyleMark'
 
 /** 工具栏快速换色预设：常用参考色，选不中用取色器自定义 */
 const ACCENT_PRESETS: { color: string; name: string }[] = [
-  { color: '#4f8cff', name: '默认蓝' },
+  { color: '#0d9488', name: '默认青绿' },
   { color: '#c9a227', name: '金' },
   { color: '#e63946', name: '红' },
   { color: '#ff6b35', name: '橙' },
   { color: '#16a085', name: '绿' },
   { color: '#7c5cff', name: '紫' },
   { color: '#e86fa4', name: '粉' },
+  { color: '#4f8cff', name: '蓝' },
   { color: '#5b6470', name: '灰' }
 ]
 
@@ -376,7 +377,7 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
           >
             <span
               className="inline-block h-3 w-3 rounded-full border border-slate-500"
-              style={{ background: accent && isHexColor(accent) ? accent : '#4f8cff' }}
+              style={{ background: accent && isHexColor(accent) ? accent : '#0d9488' }}
             />
             强调色
           </button>
@@ -393,7 +394,7 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
                       setAccentOpen(false)
                     }}
                     className={`h-5 w-5 rounded-full border border-slate-600 ${
-                      (accent ?? '#4f8cff').toLowerCase() === p.color ? 'ring-2 ring-white' : ''
+                      (accent ?? '#0d9488').toLowerCase() === p.color ? 'ring-2 ring-white' : ''
                     }`}
                     style={{ background: p.color }}
                   />
@@ -404,7 +405,7 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
                   自定义
                   <input
                     type="color"
-                    value={accent && isHexColor(accent) ? accent : '#4f8cff'}
+                    value={accent && isHexColor(accent) ? accent : '#0d9488'}
                     onChange={(e) => onAccentChange?.(e.target.value)}
                     className="h-6 w-8 cursor-pointer rounded border border-slate-600 bg-transparent"
                   />

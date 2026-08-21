@@ -53,7 +53,7 @@ describe('parseThemeFromHtml（公众号 HTML → 排版调性）', () => {
   it('空/无样式 HTML 回落默认调性', () => {
     const { theme } = parseThemeFromHtml('<html><body><p>只有文字</p></body></html>')
     expect(theme.bodyBg).toBeUndefined()
-    expect(theme.accent).toBe('#4f8cff')
+    expect(theme.accent).toBe('#0d9488')
     expect(theme.h1Style).toBe('bar')
   })
 

@@ -82,9 +82,10 @@ export function resolveEditorTheme(theme: ArticleTheme, uiDark: boolean): Editor
   return { bodyBg: bg, bodyText, headingColor, darkBg }
 }
 
-/** 默认调性：与编辑器/导出历史排版完全一致（蓝强调色、黑体、2.13 行高、居中大标题） */
+/** 默认调性：与编辑器/导出历史排版一致（青绿强调色、黑体、2.13 行高、居中大标题）；
+ * 2026-08-21 日间配色换色：默认蓝 #4f8cff → 青绿 #0d9488（深底 4.5:1 / 白底 3.7:1，昼夜同源跟色） */
 export const DEFAULT_THEME: ArticleTheme = {
-  accent: '#4f8cff',
+  accent: '#0d9488',
   fontFamily: SANS,
   lineHeight: 2.13,
   letterSpacing: '0.02em',

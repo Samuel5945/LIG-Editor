@@ -271,18 +271,18 @@ describe('docToExportHtml 强调色', () => {
     expect(out).toMatch(/<span style="[^"]*background:#e53935/) // H3 菱形
     expect(out).toContain('border-left:4px solid #e53935;') // 引用边线
     expect(out).toContain('color:#e53935') // 加粗词
-    expect(out).not.toContain('#4f8cff')
+    expect(out).not.toContain('#0d9488')
   })
 
-  it('非法色/缺省回默认蓝（与编辑器一致，不再变灰）', () => {
+  it('非法色/缺省回默认青绿（与编辑器一致，不再变灰）', () => {
     for (const bad of ['red', '#12345g']) {
       const out = docToExportHtml(mdToDoc(MD), (src) => src, { ...DEFAULT_THEME, accent: bad })
-      expect(out).toContain('border-left:4px solid #4f8cff;padding-left:12px;')
-      expect(out).toMatch(/<span style="[^"]*background:#4f8cff/)
+      expect(out).toContain('border-left:4px solid #0d9488;padding-left:12px;')
+      expect(out).toMatch(/<span style="[^"]*background:#0d9488/)
       expect(out).not.toContain('#d9d9d9')
     }
     const out = docToExportHtml(mdToDoc(MD), (src) => src)
-    expect(out).toContain('border-left:4px solid #4f8cff;padding-left:12px;')
+    expect(out).toContain('border-left:4px solid #0d9488;padding-left:12px;')
   })
 })
 
@@ -319,7 +319,7 @@ describe('docToExportHtml 分类排版调性（爆款范式）', () => {
   it('默认调性输出经典排版（结构字段缺省回退）', () => {
     const out = docToExportHtml(mdToDoc(MD), (src) => src, DEFAULT_THEME)
     expect(out).not.toContain('background:#0d1526')
-    expect(out).toContain('border-left:4px solid #4f8cff;padding-left:12px;')
+    expect(out).toContain('border-left:4px solid #0d9488;padding-left:12px;')
   })
 })
 
