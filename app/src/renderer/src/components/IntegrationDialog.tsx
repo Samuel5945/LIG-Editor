@@ -297,6 +297,14 @@ export default function IntegrationDialog({
         <div className="flex shrink-0 items-center justify-between border-t border-slate-700 px-4 py-2 text-[11px] text-slate-500">
           <span>图文编辑器 公测版 · @LIG人生如戏的图文创作平台</span>
           <div className="flex items-center gap-2">
+            <a
+              href="https://github.com/aqm857886159/Nomi"
+              target="_blank"
+              title="参考项目 Nomi：本地优先 + AI 副驾驶 + 无头能力核"
+              className="rounded px-2 py-1 text-slate-400 hover:bg-slate-800 hover:text-sky-300"
+            >
+              📖 Nomi
+            </a>
             <button
               onClick={() => window.open('https://github.com/Samuel5945/tuwen-editor')}
               className="rounded px-2 py-1 text-slate-300 hover:bg-slate-800 hover:text-sky-300"

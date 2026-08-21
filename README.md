@@ -64,3 +64,7 @@ npm run dist     # 构建 + 打包 Windows 安装包
 ## License
 
 Apache-2.0 © Samuel Shi
+
+## 参考项目
+
+- [Nomi](https://github.com/aqm857886159/Nomi) — 本地优先 + AI 副驾驶 + 无头能力核，本项目为其"图文版"适配
