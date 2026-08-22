@@ -7,6 +7,7 @@ import { getAppPaths } from './paths'
 import { startBridge, stopBridge } from './bridge'
 import { seedBundledSkills } from './skillStore'
 import { migrateWorkspaceLayout } from './projectStore'
+import { migrateSafeStorageKey } from './oscryptMigrate'
 import { ensureThemeCategoryDirs } from './themeStore'
 
 // --mcp：无头模式（由 resources/mcp-proxy.cjs 拉起）：只开 HTTP bridge 不开窗口
@@ -81,6 +82,7 @@ function createWindow(): BrowserWindow {
 }
 
 app.whenReady().then(() => {
+  migrateSafeStorageKey() // 改名首启：搬旧 userData 的 safeStorage 密钥，历史密文（API Key/公众号密钥）才能解开；须在任何 safeStorage 调用前
   seedBundledSkills() // 预装 Skill 铺入 <root>/skills（已存在不覆盖）；GUI 与无头模式都需要
   migrateWorkspaceLayout() // 一次性：历史平铺工程挪入「未分类」，分类目录内工程补齐 meta.category
   ensureThemeCategoryDirs() // 自愈：自定义主题对应的分类目录缺失时补建（历史误删空目录的恢复）
