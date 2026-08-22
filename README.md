@@ -4,6 +4,27 @@
 
 一个 **Windows 桌面应用**（Electron），把公众号图文创作全链路——脑暴选题、AI 初稿、逐段修改、审阅把关、配图封面、标题打磨、排版导出——收进同一个工作台。
 
+## 界面一览
+
+<p align="center">
+  <img src="docs/images/carousel.webp" width="820" alt="立格编辑器界面轮播：三栏工作台 / 选题库与审阅 / Agent MCP 接入 / 开放模型接口 / 小红书贴图 / 公众号贴图" />
+</p>
+<p align="center"><sub>三栏工作台 · 选题库与审阅 · Agent MCP 接入 · 开放模型接口 · 小红书贴图 · 公众号贴图</sub></p>
+
+<details>
+<summary>📸 查看全部高清截图</summary>
+<br>
+
+| 三栏工作台（主界面） | 选题库 ＆ 标题 / 审阅 |
+| :---: | :---: |
+| ![三栏工作台](docs/images/main-ui.png) | ![选题库与审阅](docs/images/ideas-titles-review.png) |
+| **Agent MCP 接入（WorkBuddy 等）** | **开放模型接口** |
+| ![Agent MCP 接入](docs/images/agent-mcp.png) | ![开放模型接口](docs/images/model-providers.png) |
+| **小红书贴图** | **公众号贴图** |
+| ![小红书贴图](docs/images/xhs-cards.png) | ![公众号贴图](docs/images/wechat-cards.png) |
+
+</details>
+
 ## 特性
 
 - **本地优先**：工程、素材、密钥全在本机，不上传任何内容到自有服务器
