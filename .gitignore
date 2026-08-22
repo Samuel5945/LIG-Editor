@@ -22,3 +22,6 @@ dump-article.mjs
 article-dump.html
 fig-ai-glasses.html
 app/theme-preview.html
+# runtime idea inbox (dev-mode root) & agent session data
+/idea-inbox.md
+/.zcode/

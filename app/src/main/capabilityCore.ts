@@ -492,7 +492,7 @@ export const TOOLS: ToolDef[] = [
   {
     name: 'export_html',
     description:
-      '把 article.md 导出为 article.html，返回绝对路径。variant 配色模式：auto 读者端自动昼夜（prefers-color-scheme 媒体查询，读者系统深色自动看夜间配色，适合部署自有网页/博客）/ day 固定日间配色（浅卡深字）/ night 固定夜间配色（深卡浅字）。公众号推送不支持媒体查询，若要复制到公众号请用 day/night 固定配色',
+      '把 article.md 导出为 article.html，返回绝对路径。variant 配色模式：auto 读者端自动昼夜（prefers-color-scheme 媒体查询，读者系统深色自动看夜间配色，适合部署自有网页/博客）/ day 固定日间配色（浅卡深字）/ night 固定夜间配色（日间排版按公众号夜间逻辑算法变深，深卡浅字）。公众号推送不支持媒体查询，若要复制到公众号请用 day/night 固定配色',
     inputSchema: {
       type: 'object',
       properties: {
@@ -508,7 +508,7 @@ export const TOOLS: ToolDef[] = [
   {
     name: 'push_draft',
     description:
-      '把工程推送到公众号草稿箱：正文本地图片自动上传微信 CDN，封面传永久素材，draft/add 入草稿。variant 配色（公众号读者统一看一套，二选一）：day 固定日间配色（浅卡深字，缺省）/ night 固定夜间配色（深卡浅字）。需先配置 AppID/AppSecret（settings/wechat.json）且本机公网 IP 已加入公众平台白名单',
+      '把工程推送到公众号草稿箱：正文本地图片自动上传微信 CDN，封面传永久素材，draft/add 入草稿。variant 配色（公众号读者统一看一套，二选一）：day 固定日间配色（浅卡深字，缺省；读者微信夜间会自动变深，推荐）/ night 固定夜间配色（算法变深深卡浅字，公众号夜间可能显示异常）。需先配置 AppID/AppSecret（settings/wechat.json）且本机公网 IP 已加入公众平台白名单',
     inputSchema: {
       type: 'object',
       properties: {

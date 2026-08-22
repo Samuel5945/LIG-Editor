@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { parseThemeFromHtml, trimHtmlForTheme } from '../themeParse'
-import { contrastText, isDarkColor, resolveEditorTheme, CATEGORY_THEMES, DEFAULT_THEME } from '../categoryThemes'
+import { contrastText, isDarkColor, resolveEditorTheme, wechatDarkColor, CATEGORY_THEMES, DEFAULT_THEME } from '../categoryThemes'
 
 describe('parseThemeFromHtml（公众号 HTML → 排版调性）', () => {
   const HTML = `<!DOCTYPE html><html><head><title>科技美学：深空黑</title></head>
@@ -114,32 +114,33 @@ describe('isDarkColor（背景亮度判断：暖白浅卡 ≠ 深色卡）', () 
   })
 })
 
-describe('resolveEditorTheme（昼夜版：编辑器按 UI 深浅切卡片配色）', () => {
-  it('科技数码：日间（浅 UI）切浅蓝白卡 + 深字；夜间保持深卡浅字', () => {
+describe('resolveEditorTheme（日间基础色 / 夜间公众号逻辑自动变深，无手调深色变体）', () => {
+  it('科技数码：日间浅蓝白卡 + 深字；夜间自动变深（深卡 + 浅字，保留色相）', () => {
     const tech = CATEGORY_THEMES['科技数码']
     const day = resolveEditorTheme(tech, false)
-    expect(day.bodyBg).toBe('#eef3fb') // 浅 UI 用 bodyBgLight
+    expect(day.bodyBg).toBe('#eef3fb') // 日间基础色
     expect(day.darkBg).toBe(false)
     expect(day.bodyText).toBe('#333')
     const night = resolveEditorTheme(tech, true)
-    expect(night.bodyBg).toBe('#0d1526') // 深 UI 回退基础深卡
+    expect(night.bodyBg).toBe(wechatDarkColor('#eef3fb')) // 公众号逻辑自动变深
     expect(night.darkBg).toBe(true)
-    expect(night.bodyText).toBe('#cbd5e1')
+    expect(night.bodyText).toBe(wechatDarkColor('#333', 'text')) // 深字翻转为近白浅字
+    expect(night.headingColor).toBe(wechatDarkColor('#1a1a1a', 'text'))
   })
 
-  it('生活常识：夜间（深 UI）切深暖卡 + 浅字；日间保持暖白卡深字', () => {
+  it('生活常识：日间保持暖白卡深字；夜间自动变深（深暖卡 + 浅字）', () => {
     const life = CATEGORY_THEMES['生活常识']
-    const night = resolveEditorTheme(life, true)
-    expect(night.bodyBg).toBe('#262016')
-    expect(night.darkBg).toBe(true)
-    expect(night.bodyText).toBe('#e7e0d4')
     const day = resolveEditorTheme(life, false)
     expect(day.bodyBg).toBe('#fffaf2')
     expect(day.darkBg).toBe(false)
     expect(day.bodyText).toBe('#3d3a34')
+    const night = resolveEditorTheme(life, true)
+    expect(night.bodyBg).toBe(wechatDarkColor('#fffaf2'))
+    expect(night.darkBg).toBe(true)
+    expect(night.bodyText).toBe(wechatDarkColor('#3d3a34', 'text'))
   })
 
-  it('无变体主题回退基础色；无卡片主题跟随 UI 深浅给字色', () => {
+  it('无卡片主题：日间透明白底深字；夜间默认深底浅字', () => {
     const design = CATEGORY_THEMES['设计鉴赏'] // 无 bodyBg
     const day = resolveEditorTheme(design, false)
     expect(day.bodyBg).toBeUndefined()
@@ -149,24 +150,51 @@ describe('resolveEditorTheme（昼夜版：编辑器按 UI 深浅切卡片配色
     expect(night.bodyText).toBe('#cbd5e1')
   })
 
-  it('夜间配色语义统一：无卡片/浅底主题给默认深底（防白底浅字不可读）', () => {
+  it('夜间配色语义统一：无卡片给默认深底；浅卡自动变深；深色基础卡保持（防白底浅字不可读）', () => {
     const design = CATEGORY_THEMES['设计鉴赏'] // 无 bodyBg
-    const night = resolveEditorTheme(design, true)
-    expect(night.bodyBg).toBe('#1e2126')
-    expect(night.darkBg).toBe(true)
-    // 浅粉底主题（导入排版）无 Dark 变体：夜间同样给默认深底
+    expect(resolveEditorTheme(design, true).bodyBg).toBe('#1e2126')
+    expect(resolveEditorTheme(design, true).darkBg).toBe(true)
+    // 浅粉底主题（导入排版）夜间自动变深（公众号逻辑）
     const lightCard = { ...DEFAULT_THEME, bodyBg: '#fff0f0', bodyText: '#333' }
     const c = resolveEditorTheme(lightCard, true)
-    expect(c.bodyBg).toBe('#1e2126')
+    expect(c.bodyBg).toBe(wechatDarkColor('#fff0f0'))
     expect(c.darkBg).toBe(true)
-    // 深色基础色主题（科技数码）夜间保持深卡（不套默认底）
-    expect(resolveEditorTheme(CATEGORY_THEMES['科技数码'], true).bodyBg).toBe('#0d1526')
+    // 深色基础色主题（自定义深卡导入）夜间保持深卡（不套默认底）
+    const darkCard = { ...DEFAULT_THEME, bodyBg: '#0d1526', bodyText: '#cbd5e1' }
+    expect(resolveEditorTheme(darkCard, true).bodyBg).toBe('#0d1526')
   })
 
   it('脏数据兜底仍生效：浅底显式浅字被修正为深字', () => {
     const dirty = { ...DEFAULT_THEME, bodyBg: '#fff0f0', bodyText: '#cbd5e1' }
     const c = resolveEditorTheme(dirty, false)
     expect(c.bodyText).toBe('#333')
+  })
+})
+
+describe('wechatDarkColor（公众号夜间逻辑：亮度翻转 + 降饱和，保留色相）', () => {
+  it('浅底变深底、深字变浅字，非法输入原样返回', () => {
+    const warmDark = wechatDarkColor('#fffaf2') // 暖白卡 → 深暖卡
+    expect(isDarkColor(warmDark)).toBe(true)
+    const coolDark = wechatDarkColor('#eef3fb') // 浅蓝白卡 → 深蓝黑卡
+    expect(isDarkColor(coolDark)).toBe(true)
+    expect(isDarkColor(wechatDarkColor('#3d3a34', 'text'))).toBe(false) // 深字 → 浅字
+    expect(wechatDarkColor('#fffaf2')).toBe(wechatDarkColor('#fffaf2')) // 纯函数稳定
+    expect(wechatDarkColor('not-a-color')).toBe('not-a-color') // 非法原样返回
+  })
+
+  it('文字方向反色到近白（线性翻转 #333 只会得 #ccc 偏灰看不清，公众号实际接近白）', () => {
+    expect(wechatDarkColor('#333', 'text')).toBe('#e0e0e0') // L 0.2 → 夹到 0.88
+    expect(wechatDarkColor('#1a1a1a', 'text')).toBe('#e5e5e5')
+    expect(wechatDarkColor('#3d3a34', 'text')).toBe('#e2e1df') // 暖字 → 近白微暖（保留色相）
+  })
+
+  it('3 位缩写按展开后的 6 位处理（#333 曾被当非法色原样返回，夜间深字看不清）', () => {
+    expect(isDarkColor('#333')).toBe(true)
+    expect(isDarkColor('#fff')).toBe(false)
+    expect(wechatDarkColor('#333', 'text')).toBe(wechatDarkColor('#333333', 'text'))
+    // 缩写深字夜间翻转成近白（回归：此前 #333 不翻转直接渲染在深卡上）
+    const night = resolveEditorTheme(CATEGORY_THEMES['科技数码'], true)
+    expect(night.bodyText).toBe('#e0e0e0')
   })
 })
 

@@ -1,4 +1,4 @@
-# PRD：图文编辑器（本地优先的公众号图文创作工作台）
+# PRD：立格编辑器（本地优先的公众号图文创作工作台，原名图文编辑器 tuwen-editor）
 
 - 版本：v1.0（2026-07-28）
 - 状态：待评审
@@ -234,7 +234,7 @@ status 取值：`ideating | drafting | reviewing | ready`。
 
 ### 10.1 接入方式
 
-- **MCP stdio**：`图文编辑器.exe --mcp` 以无头模式启动能力核（不开窗口也能干活）；GUI 运行时同一能力核在进程内共享
+- **MCP stdio**：`立格编辑器.exe --mcp` 以无头模式启动能力核（不开窗口也能干活）；GUI 运行时同一能力核在进程内共享
 - **本地 HTTP**：`http://127.0.0.1:<port>/api/*`，端口与 token 写入 `settings\bridge.json` 供本机工具发现
 - **「一键接入」卡片**：设置页生成 Codex（`config.toml`）/ Qoder / Claude Code 的 MCP 配置片段，一键复制
 

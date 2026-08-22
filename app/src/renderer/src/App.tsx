@@ -17,6 +17,7 @@ import FigureDialog, { type FigureRequest } from './components/FigureDialog'
 import ExportDialog from './components/ExportDialog'
 import ThemeImportDialog from './components/ThemeImportDialog'
 import CategoryManageDialog from './components/CategoryManageDialog'
+import HoverScrollName from './components/HoverScrollName'
 import ReviewPanel from './components/ReviewPanel'
 import CardsReviewPanel from './components/CardsReviewPanel'
 import TitleCoverPanel from './components/TitleCoverPanel'
@@ -88,6 +89,9 @@ export default function App(): JSX.Element {
   // 新建分类内联输入（Electron 不支持 window.prompt，用行内输入框代替）
   const [newCatFor, setNewCatFor] = useState<string | null>(null)
   const [newCatName, setNewCatName] = useState('')
+  // 工程重命名内联输入（左栏项目行悬停 ✏️ 展开；renamingFor = 正在改名的工程名）
+  const [renamingFor, setRenamingFor] = useState<string | null>(null)
+  const [renameVal, setRenameVal] = useState('')
   // 自定义排版主题库（settings/customThemes.json）：分类调性打底时的最高优先覆盖
   const [customThemes, setCustomThemes] = useState<Record<string, ArticleTheme>>({})
   // 导入排版弹窗（粘贴 HTML / 公众号链接复用排版）
@@ -245,6 +249,39 @@ export default function App(): JSX.Element {
         setToast(`已删除「${name}」`)
       } catch (err) {
         setToast(`删除失败：${err instanceof Error ? err.message : err}`)
+      }
+    },
+    [refreshProjects]
+  )
+
+  /** 重命名工程：目录原地改名 + meta 同步（主进程完成）。本地文件联动：
+   *  当前工程有未保存正文时先冲刷到旧目录再改名，改名后 current/meta/列表全部
+   *  切到新名接管，自动保存与监听（watcher）随 IPC 内部停挂重挂，不丢不串。 */
+  const renameProject = useCallback(
+    async (oldName: string, raw: string) => {
+      const trimmed = raw.trim()
+      if (!trimmed) return
+      try {
+        if (currentRef.current === oldName && articleRef.current !== savedRef.current) {
+          await window.api.invoke('project:writeFile', oldName, 'article.md', articleRef.current)
+          setSaved(articleRef.current)
+        }
+        const m = await window.api.invoke('project:rename', oldName, trimmed)
+        if (currentRef.current === oldName) {
+          setCurrent(m.name)
+          currentRef.current = m.name
+          setMeta(m)
+        }
+        // 乐观更新列表（目录末段即工程名），随后以主进程扫描结果校准
+        setProjects((prev) =>
+          prev.map((p) => (p.name === oldName ? { ...p, name: m.name, dir: p.dir.replace(/[^\\\/]+$/, m.name) } : p))
+        )
+        setRenamingFor(null)
+        setRenameVal('')
+        refreshProjects()
+        setToast(`工程已重命名：「${oldName}」→「${m.name}」，本地文件夹已同步改名`)
+      } catch (err) {
+        setToast(`重命名失败：${err instanceof Error ? err.message : err}`)
       }
     },
     [refreshProjects]
@@ -541,7 +578,7 @@ export default function App(): JSX.Element {
     <div className="flex h-full flex-col">
       {/* 顶栏（无边框自绘标题栏：整条可拖拽移动窗口，右侧窗口控制按钮） */}
       <header className="app-drag flex h-11 shrink-0 items-center gap-3 border-b border-panel-3 bg-panel-2 pl-4">
-        <span className="text-sm font-bold">图文编辑器</span>
+        <span className="text-sm font-bold">立格编辑器</span>
         <span className="text-xs text-ink-dim">@LIG人生如戏的图文创作平台公测版</span>
         <div className="ml-auto flex items-center gap-2 text-xs text-ink-dim">
           <button onClick={toggleTheme} title="切换深色 / 日间模式" className="rounded px-2 py-1 hover:bg-panel-3">
@@ -561,7 +598,7 @@ export default function App(): JSX.Element {
             🔄 版本更新
           </button>
           <button
-            onClick={() => window.open('https://github.com/Samuel5945/tuwen-editor')}
+            onClick={() => window.open('https://github.com/Samuel5945/LIG-Editor')}
             title="GitHub 开源仓库"
             className="rounded px-2 py-1 hover:bg-panel-3"
           >
@@ -652,30 +689,78 @@ export default function App(): JSX.Element {
                         isCurrent ? 'bg-panel-3 text-ink' : 'text-ink-dim hover:bg-panel-3'
                       }`}
                     >
-                      <div className="flex w-full items-center gap-2">
-                        <span className="min-w-0 flex-1 truncate">{p.name}</span>
-                        {cat !== UNCATEGORIZED && (
-                          <span
-                            className="shrink-0 rounded bg-panel px-1 py-0.5 text-[10px] text-accent"
-                            title={`分类：${cat}`}
+                      {renamingFor === p.name ? (
+                        // 行内重命名：确认后目录与 meta 由主进程同步改名
+                        <div className="flex w-full items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            autoFocus
+                            value={renameVal}
+                            onChange={(e) => setRenameVal(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') void renameProject(p.name, renameVal)
+                              if (e.key === 'Escape') {
+                                setRenamingFor(null)
+                                setRenameVal('')
+                              }
+                            }}
+                            placeholder="新工程名（文件夹同步改名）"
+                            className="min-w-0 flex-1 rounded bg-panel px-1.5 py-1 text-[11px] text-ink outline-none placeholder:text-ink-dim"
+                          />
+                          <button
+                            onClick={() => void renameProject(p.name, renameVal)}
+                            disabled={!renameVal.trim()}
+                            title="确认重命名"
+                            className="shrink-0 rounded bg-accent px-1.5 py-1 text-[11px] text-white disabled:opacity-40"
                           >
-                            {cat}
+                            改
+                          </button>
+                          <button
+                            onClick={() => {
+                              setRenamingFor(null)
+                              setRenameVal('')
+                            }}
+                            className="shrink-0 rounded bg-panel px-1.5 py-1 text-[11px] text-ink-dim hover:text-ink"
+                          >
+                            取消
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex w-full items-center gap-2">
+                          <HoverScrollName name={p.name} />
+                          {cat !== UNCATEGORIZED && (
+                            <span
+                              className="shrink-0 rounded bg-panel px-1 py-0.5 text-[10px] text-accent"
+                              title={`分类：${cat}`}
+                            >
+                              {cat}
+                            </span>
+                          )}
+                          <span className="shrink-0 rounded bg-panel px-1.5 py-0.5 text-[10px] group-hover:hidden">
+                            {STATUS_LABEL[p.status] ?? p.status}
                           </span>
-                        )}
-                        <span className="shrink-0 rounded bg-panel px-1.5 py-0.5 text-[10px] group-hover:hidden">
-                          {STATUS_LABEL[p.status] ?? p.status}
-                        </span>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            deleteProject(p.name)
-                          }}
-                          title="删除工程"
-                          className="hidden shrink-0 rounded px-1 text-ink-dim hover:text-red-400 group-hover:block"
-                        >
-                          🗑
-                        </button>
-                      </div>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setRenamingFor(p.name)
+                              setRenameVal(p.name)
+                            }}
+                            title="重命名工程（本地文件夹同步改名）"
+                            className="hidden shrink-0 rounded px-1 text-ink-dim hover:text-accent group-hover:block"
+                          >
+                            ✏️
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              deleteProject(p.name)
+                            }}
+                            title="删除工程"
+                            className="hidden shrink-0 rounded px-1 text-ink-dim hover:text-red-400 group-hover:block"
+                          >
+                            🗑
+                          </button>
+                        </div>
+                      )}
                       {isCurrent && (
                         <div className="mt-1.5 flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                           <select
@@ -898,12 +983,12 @@ export default function App(): JSX.Element {
                 📤 导出
               </button>
             )}
+            {/* 右侧只留字数与保存状态：项目名挪到左栏（悬停滚动显示全名，✏️ 改名） */}
             <span className="ml-auto">
               {current ? (
                 <>
                   {wordCount > 0 && <span className="mr-2">{wordCount} 字</span>}
-                  {current}
-                  <span className={dirty ? 'ml-2 text-amber-400' : 'ml-2 text-green-500'}>
+                  <span className={dirty ? 'text-amber-400' : 'text-green-500'}>
                     {dirty ? '● 未保存' : '✓ 已保存'}
                   </span>
                 </>
@@ -1169,7 +1254,6 @@ export default function App(): JSX.Element {
           projectDir={currentDir}
           markdown={article}
           theme={articleTheme}
-          uiDark={theme === 'dark'}
           onToast={setToast}
           onClose={() => setShowExport(false)}
         />

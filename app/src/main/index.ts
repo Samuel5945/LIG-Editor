@@ -55,7 +55,7 @@ function createWindow(): BrowserWindow {
     frame: false, // 无边框：去掉系统标题栏，顶栏由渲染层自绘（拖拽+窗口控制按钮）
     autoHideMenuBar: true,
     backgroundColor: '#1b1d23',
-    title: '图文编辑器',
+    title: '立格编辑器',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false

@@ -86,6 +86,20 @@ export function registerIpc(): void {
     }
     store.deleteProject(name)
   })
+  handle('project:rename', async (oldName, newName) => {
+    // 正在监听的工程目录被改名：先停监听，改完后按新目录重挂（同 setCategory 模式）
+    const rewatching = watchedProject === oldName
+    if (rewatching) {
+      await stopProjectWatch()
+      watchedProject = null
+    }
+    const meta = store.renameProject(oldName, newName)
+    if (rewatching) {
+      watchProject(newName, store.projectDir(newName))
+      watchedProject = newName
+    }
+    return meta
+  })
   handle('project:open', (name) => {
     const data = store.openProject(name)
     watchProject(name, store.projectDir(name))
@@ -199,12 +213,12 @@ function buildAccessCard(): McpAccessCard {
   const env = { ELECTRON_RUN_AS_NODE: '1' }
   // JSON 字符串转义与 TOML 基本字符串兼容（反斜杠路径安全）
   const codexToml = [
-    '[mcp_servers.tuwen]',
+    '[mcp_servers.lig-editor]',
     `command = ${JSON.stringify(command)}`,
     `args = [${args.map((a) => JSON.stringify(a)).join(', ')}]`,
     'env = { ELECTRON_RUN_AS_NODE = "1" }'
   ].join('\n')
-  const qoderJson = JSON.stringify({ mcpServers: { tuwen: { command, args, env } } }, null, 2)
+  const qoderJson = JSON.stringify({ mcpServers: { 'lig-editor': { command, args, env } } }, null, 2)
   return { command, args, env, codexToml, qoderJson, bridgeFile: join(getAppPaths().settings, 'bridge.json') }
 }
 

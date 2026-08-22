@@ -295,7 +295,7 @@ export default function IntegrationDialog({
 
         {/* 关于 / 版本更新：任意标签页底部常驻 */}
         <div className="flex shrink-0 items-center justify-between border-t border-slate-700 px-4 py-2 text-[11px] text-slate-500">
-          <span>图文编辑器 公测版 · @LIG人生如戏的图文创作平台</span>
+          <span>立格编辑器 公测版 · @LIG人生如戏的图文创作平台</span>
           <div className="flex items-center gap-2">
             <a
               href="https://github.com/aqm857886159/Nomi"
@@ -306,7 +306,7 @@ export default function IntegrationDialog({
               📖 Nomi
             </a>
             <button
-              onClick={() => window.open('https://github.com/Samuel5945/tuwen-editor')}
+              onClick={() => window.open('https://github.com/Samuel5945/LIG-Editor')}
               className="rounded px-2 py-1 text-slate-300 hover:bg-slate-800 hover:text-sky-300"
             >
               ☆ GitHub ↗

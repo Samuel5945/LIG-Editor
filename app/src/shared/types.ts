@@ -33,19 +33,8 @@ export interface ArticleTheme {
   bodyBg?: string
   /** 正文文字色（深底卡片需浅色文字） */
   bodyText?: string
-  // ---- 昼夜版变体（可选）：编辑器按 UI 深浅自动切换卡片配色，导出/公众号固定基础色 ----
-  /** 浅色 UI（日间）下的正文容器背景色；缺省用 bodyBg */
-  bodyBgLight?: string
-  /** 浅色 UI（日间）下的正文文字色；缺省用 bodyText */
-  bodyTextLight?: string
-  /** 浅色 UI（日间）下的标题文字色；缺省用 headingColor */
-  headingColorLight?: string
-  /** 深色 UI（夜间）下的正文容器背景色；缺省用 bodyBg */
-  bodyBgDark?: string
-  /** 深色 UI（夜间）下的正文文字色；缺省用 bodyText */
-  bodyTextDark?: string
-  /** 深色 UI（夜间）下的标题文字色；缺省用 headingColor */
-  headingColorDark?: string
+  // 昼夜变体字段（bodyBgLight/bodyBgDark 等）已删除：只有一套日间排版，
+  // 夜间由 resolveEditorTheme 按公众号逻辑自动变深（公众号夜间无法显示手调深色排版）
   /** 正文基准字号（px，缺省 16；AI 排版正文默认偏小，留白与节奏靠行高/字距撑） */
   fontSize?: number
   /** 标题基准字号（px，缺省 20；H1=+6 H2=+0 H3=-3，与经典导出 26/20/17 一致） */
@@ -343,6 +332,8 @@ export interface IpcApi {
   'project:create': (name: string, category?: string) => ProjectSummary
   /** 删除整个工程目录（渲染层需先确认；删当前工程前先 project:close） */
   'project:delete': (name: string) => void
+  /** 重命名工程：目录原地改名（留在原分类下）+ meta.name 同步，返回新 meta */
+  'project:rename': (oldName: string, newName: string) => ProjectMeta
   /** 切换分类：工程目录迁移到 workspace/<分类>/ 下并更新 meta，返回新 meta */
   'project:setCategory': (project: string, category: string) => ProjectMeta
   /** 全部可用分类：预设 + 未分类 + workspace 顶层自定义分类文件夹（不含已删除/隐藏的） */

@@ -5,11 +5,11 @@
 #   workspace/skills/settings 落在 exe 旁边（paths.ts resolveRoot）
 # - portable 版运行时解压临时目录，paths.ts 用 PORTABLE_EXECUTABLE_DIR 定位真实目录；
 #   MCP 接入建议用安装版（portable 的 execPath 每次运行都在临时目录，接入卡片路径不稳定）
-appId: com.tuwen.editor
-productName: 图文编辑器
+appId: com.lig.editor
+productName: 立格编辑器
 directories:
   # NSIS 要求纯 ASCII 输出路径（中文路径会被 GBK 转码搞乱 Can't open output file），
-  # 工程已改名 tuwen-editor 全路径 ASCII，输出直接放工程根的 releases
+  # 本地工程目录名 tuwen-editor 不变（改名只动应用标识），输出仍放工程根的 releases
   output: C:/Users/PC/Desktop/tuwen-editor/releases
 files:
   - out/**
@@ -29,15 +29,15 @@ win:
   target:
     - nsis
     - portable
-  artifactName: "tuwen-editor-${version}-${arch}.${ext}"
+  artifactName: "LIG-Editor-${version}-${arch}.${ext}"
 nsis:
   # 向导式安装：可选安装目录、有确认页（oneClick 会无反馈直接装进 AppData）
   oneClick: false
   allowToChangeInstallationDirectory: true
   perMachine: false
-  artifactName: "tuwen-editor-setup-${version}.${ext}"
-  shortcutName: 图文编辑器
-  # 自定义安装脚本：customInit 里自动关闭运行中的旧版图文编辑器（exe 被占用会阻止覆盖升级）
+  artifactName: "LIG-Editor-setup-${version}.${ext}"
+  shortcutName: 立格编辑器
+  # 自定义安装脚本：customInit 里自动关闭运行中的旧版应用（exe 被占用会阻止覆盖升级）
   include: build/installer.nsh
 portable:
-  artifactName: "tuwen-editor-portable-${version}.exe"
+  artifactName: "LIG-Editor-portable-${version}.exe"

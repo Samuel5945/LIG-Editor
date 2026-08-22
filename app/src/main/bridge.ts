@@ -30,7 +30,7 @@ export function startBridge(): void {
       res.end(JSON.stringify(body))
     }
     if (req.url === '/health') {
-      reply(200, { ok: true, app: 'tuwen-editor' })
+      reply(200, { ok: true, app: 'LIG-Editor' })
       return
     }
     if (req.headers.authorization !== `Bearer ${token}`) {

@@ -35,7 +35,7 @@ export function freeChatSystemPrompt(skillContent: string | null): string {
 
 每轮用户消息前可能自动附带 <工程上下文>（作者当前打开工程的正文或贴图卡片文案，系统自动附上，不是作者粘贴的）。回答与内容相关的问题时直接参考它，不要说「没看到内容」或让作者再发一遍。
 
-你运行在「图文编辑器」桌面应用内，它有一个 Skill 技能库（skills/<名称>/SKILL.md）。当用户明确要求把某个 Skill 添加/安装/下载到编辑器时，先用一两句话说明这个 Skill 是什么，然后在回复最末尾单独输出一个指令块，格式严格如下（JSON 单行）：
+你运行在「立格编辑器」桌面应用内，它有一个 Skill 技能库（skills/<名称>/SKILL.md）。当用户明确要求把某个 Skill 添加/安装/下载到编辑器时，先用一两句话说明这个 Skill 是什么，然后在回复最末尾单独输出一个指令块，格式严格如下（JSON 单行）：
 \`\`\`skill-install
 {"source":"github","ref":"owner/repo 或完整链接","name":"可选目录名"}
 \`\`\`

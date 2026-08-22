@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { mdToDoc, type ArticleDoc } from '../markdown'
 import { docToExportHtml, extractTitle, wrapExportPage, wrapExportPageDayNight } from '../exportHtml'
-import { DEFAULT_THEME, CATEGORY_THEMES } from '../categoryThemes'
+import { DEFAULT_THEME, CATEGORY_THEMES, wechatDarkColor } from '../categoryThemes'
 
 const TABLE_MD = `| 功能 | 免费版 |
 | --- | --- |
@@ -137,14 +137,14 @@ describe('手动样式导出（span 字色/背景/字号）', () => {
     expect(html).toContain('color:#cbd5e1')
   })
 
-  it('配色变体：uiDark 传参切换昼夜配色（导出预览跟随 UI）', () => {
+  it('配色变体：uiDark 传参切换昼夜配色（夜间=公众号逻辑自动变深）', () => {
     const life = CATEGORY_THEMES['生活常识']
     const day = docToExportHtml(mdToDoc('正文'), (src) => src, life, false)
     const night = docToExportHtml(mdToDoc('正文'), (src) => src, life, true)
     expect(day).toContain('background:#fffaf2') // 日间基础色
     expect(day).toContain('color:#3d3a34')
-    expect(night).toContain('background:#262016') // 夜间变体深暖卡
-    expect(night).toContain('color:#e7e0d4')
+    expect(night).toContain(`background:${wechatDarkColor('#fffaf2')}`) // 夜间算法变深深暖卡
+    expect(night).toContain(`color:${wechatDarkColor('#3d3a34', 'text')}`) // 深字翻转为近白浅字
   })
 
   it('读者端自动昼夜：双份配色 + prefers-color-scheme 切换', () => {
@@ -157,7 +157,7 @@ describe('手动样式导出（span 字色/背景/字号）', () => {
     expect(page).toContain('art-night')
     expect(page).toContain('@media (prefers-color-scheme: dark)')
     expect(page).toContain('background:#fffaf2') // 日间份
-    expect(page).toContain('background:#262016') // 夜间份
+    expect(page).toContain(`background:${wechatDarkColor('#fffaf2')}`) // 夜间份（算法变深）
     // 默认显示日间，深色系统切夜间
     expect(page).toContain('.art-day{display:block}')
     expect(page).toContain('.art-night{display:none}')
@@ -166,7 +166,7 @@ describe('手动样式导出（span 字色/背景/字号）', () => {
   it('高亮加粗字色按高亮底色亮度：淡黄底恒为深字（深卡夜间版不出现淡黄底白字）', () => {
     const life = CATEGORY_THEMES['生活常识'] // strongStyle=highlight, strongBg=#fef3c7 淡黄
     const night = docToExportHtml(mdToDoc('**重点**内容'), (src) => src, life, true)
-    // 夜间版卡片深暖 #262016，但高亮底仍是淡黄 #fef3c7 → 字色必须深色
+    // 夜间版卡片算法变深，但高亮底仍是淡黄 #fef3c7 → 字色必须深色
     expect(night).toContain('background:#fef3c7')
     expect(night).toContain('color:#333')
     expect(night).not.toContain('background:#fef3c7;padding:1px 6px;border-radius:4px;font-weight:bold;color:#f5f5f4')
@@ -289,10 +289,10 @@ describe('docToExportHtml 强调色', () => {
 describe('docToExportHtml 分类排版调性（爆款范式）', () => {
   const MD = '# 标题\n\n## 小节\n\n### 子节\n\n**重点**正文。\n\n> 引用一句。\n\n---\n'
 
-  it('科技数码：深色卡片 + 荧光青 + 色块 H2 + 等宽字体', () => {
+  it('科技数码：浅蓝白卡片 + 荧光青 + 色块 H2 + 等宽字体', () => {
     const out = docToExportHtml(mdToDoc(MD), (src) => src, CATEGORY_THEMES['科技数码'])
-    expect(out).toContain('background:#0d1526') // 深色容器
-    expect(out).toContain('color:#cbd5e1') // 浅色正文
+    expect(out).toContain('background:#eef3fb') // 浅蓝白容器
+    expect(out).toContain('color:#333') // 深色正文
     expect(out).toContain('border-radius:14px') // 容器圆角
     expect(out).toContain('border-bottom:3px solid #22d3ee') // H1 下划线
     expect(out).toContain('background:#22d3ee;border-radius:6px;padding:3px 14px') // H2 色块

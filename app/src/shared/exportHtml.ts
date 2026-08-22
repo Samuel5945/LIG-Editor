@@ -65,12 +65,12 @@ function tint(hex: string, alpha: number): string {
 }
 
 /** 按排版调性着色与造型（与编辑器同源同构）；缺省/非法值回默认调性。
- * uiDark 提供时按昼夜变体（bodyBgLight/Dark 等）覆盖配色——导出预览跟随 UI；
+ * uiDark 提供时按公众号夜间逻辑自动变深（wechatDarkColor，编辑器深色 UI 同源）；
  * 不传则固定主题基础色——导出文件/公众号草稿静态，不随读者昼夜切换。 */
 function buildStyles(theme?: ArticleTheme, uiDark?: boolean): Styles {
   let t = theme ?? DEFAULT_THEME
   if (uiDark !== undefined) {
-    // 昼夜变体覆盖：编辑器预览所见 = 编辑器正文区配色
+    // 公众号夜间逻辑覆盖：编辑器预览所见 = 编辑器正文区配色
     const c = resolveEditorTheme(t, uiDark)
     t = { ...t, bodyBg: c.bodyBg, bodyText: c.bodyText, headingColor: c.headingColor }
   }

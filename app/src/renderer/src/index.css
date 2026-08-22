@@ -287,3 +287,26 @@ body {
   content: '开始写作，或让右栏副驾驶帮你起草…';
   @apply pointer-events-none float-left h-0 text-slate-600;
 }
+
+/* 左栏项目名：超长截断，悬停按实际溢出量滚动显示全名
+   （--scroll-dist / --scroll-dur 由 HoverScrollName 组件测量注入，不溢出时为 0 不动） */
+.name-scroll-box {
+  overflow: hidden;
+}
+.name-scroll-text {
+  display: inline-block;
+  white-space: nowrap;
+}
+.group:hover .name-scroll-text {
+  animation: name-scroll var(--scroll-dur, 4s) linear infinite;
+}
+@keyframes name-scroll {
+  0%,
+  12% {
+    transform: translateX(0);
+  }
+  88%,
+  100% {
+    transform: translateX(var(--scroll-dist, 0px));
+  }
+}

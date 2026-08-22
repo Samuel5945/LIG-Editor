@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * MCP stdio 代理（M8）：外部 Agent（Codex/Qoder）→ 本代理 → 图文编辑器 HTTP bridge
+ * MCP stdio 代理（M8）：外部 Agent（Codex/Qoder）→ 本代理 → 立格编辑器 HTTP bridge
  *
  * 为什么需要代理：Windows 下 Electron 主进程拿不到管道 stdin/stdout（Chromium 接管句柄，
  * electron#4218），stdio MCP 无法直接跑在 Electron 里。本脚本用
@@ -11,7 +11,7 @@
  */
 'use strict'
 const { spawn, execFileSync } = require('child_process')
-const { existsSync, readFileSync } = require('fs')
+const { existsSync, readFileSync, renameSync } = require('fs')
 const { dirname, join, resolve } = require('path')
 const { homedir } = require('os')
 const http = require('http')
@@ -39,9 +39,22 @@ function documentsDir() {
   return join(homedir(), 'Documents')
 }
 
-// 应用根：打包态 = 「文档\图文编辑器」（不能用安装目录，覆盖安装会清空）；dev 态 = app 目录的上级（与 paths.ts 一致）
+// 应用根：打包态 = 「文档\立格编辑器」（不能用安装目录，覆盖安装会清空）；dev 态 = app 目录的上级（与 paths.ts 一致）。
+// 2026-08 应用改名（图文编辑器 → 立格编辑器）：与 paths.ts 同步做一次性数据目录迁移，搬不动（旧实例占用）就继续用旧目录
+function packagedRoot() {
+  const next = join(documentsDir(), '立格编辑器')
+  const prev = join(documentsDir(), '图文编辑器')
+  if (!existsSync(next) && existsSync(prev)) {
+    try {
+      renameSync(prev, next)
+    } catch {
+      return prev
+    }
+  }
+  return next
+}
 const root =
-  process.env.TUWEN_ROOT || (packaged ? join(documentsDir(), '图文编辑器') : resolve(appDir, '..'))
+  process.env.LIG_ROOT || process.env.TUWEN_ROOT || (packaged ? packagedRoot() : resolve(appDir, '..'))
 const bridgeFile = join(root, 'settings', 'bridge.json')
 
 // ---- bridge 发现 / 拉起 ----
@@ -166,7 +179,7 @@ async function handle(req) {
         result: {
           protocolVersion: (req.params && req.params.protocolVersion) || '2024-11-05',
           capabilities: { tools: {} },
-          serverInfo: { name: 'tuwen-editor', version: '0.1.0' }
+          serverInfo: { name: 'LIG-Editor', version: '0.2.0' }
         }
       })
       return
@@ -233,4 +246,4 @@ rl.on('close', shutdown)
 process.on('SIGTERM', shutdown)
 process.on('SIGINT', shutdown)
 
-log(`tuwen-editor MCP proxy ready (root=${root})`)
+log(`LIG-Editor MCP proxy ready (root=${root})`)

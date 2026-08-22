@@ -747,8 +747,8 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
           style={(() => {
             const t = theme ?? DEFAULT_THEME
             const accent = isHexColor(t.accent) ? t.accent : DEFAULT_THEME.accent
-            // 昼夜配色解析（纯函数）：带卡片主题按 UI 深浅选变体（bodyBgLight/Dark），
-            // 无变体回退基础色；无卡片主题跟随 UI 深浅给字色；内置深浅兜底防脏数据
+            // 昼夜配色解析（纯函数）：日间=主题基础色；夜间=公众号逻辑自动变深
+            // （浅卡变深卡、深字变浅字，无卡片主题给默认深底；内置深浅兜底防脏数据）
             const c = resolveEditorTheme(t, uiDark !== false)
             const vars: Record<string, string> = {
               '--article-accent': accent,

@@ -1,4 +1,4 @@
-# 图文编辑器（tuwen-editor）
+# 立格编辑器（LIG-Editor）
 
 > 本地优先的公众号图文创作工作台 · @LIG人生如戏
 
@@ -16,7 +16,7 @@
 
 ## 下载
 
-[📥 最新版本下载（夸克网盘）](https://pan.quark.cn/s/ddbcdaaaa634)
+[📥 最新版本下载（夸克网盘）](https://pan.quark.cn/s/ddbcdaaaa634) · [⭐ GitHub 源码仓库](https://github.com/Samuel5945/LIG-Editor)
 
 ## 技术栈
 

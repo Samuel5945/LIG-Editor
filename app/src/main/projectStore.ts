@@ -349,6 +349,27 @@ export function setProjectCategory(name: string, category: string): ProjectMeta 
   return next
 }
 
+/** 重命名工程：目录留在原分类下改名 + meta.name 同步。工程名全局唯一；
+ * 仅大小写变化的改名放行（Windows 同目录不同大小写视为同一目录，不算冲突）。 */
+export function renameProject(oldName: string, newName: string): ProjectMeta {
+  newName = sanitizeProjectName(newName)
+  assertSafeName(newName)
+  const dir = resolveDir(oldName)
+  if (!dir) throw new Error(`工程不存在：${oldName}`)
+  if (oldName === newName) return readMeta(oldName)
+  const target = join(dir, '..', newName)
+  const caseOnly = normalize(target).toLowerCase() === normalize(dir).toLowerCase()
+  if (!caseOnly && (existsSync(target) || resolveDir(newName))) {
+    throw new Error(`工程已存在：${newName}`)
+  }
+  renameSync(dir, target)
+  dirCache.delete(oldName)
+  dirCache.set(newName, target)
+  const next: ProjectMeta = { ...readMeta(newName), name: newName }
+  writeMeta(newName, next)
+  return next
+}
+
 /** 启动时一次性布局迁移：
  * - 历史平铺在 workspace 根的工程挪进「未分类」目录
  * - 已在分类目录里但 meta 没写 category 的工程按所在目录补齐 */

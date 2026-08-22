@@ -21,9 +21,11 @@ const MONO = '"Cascadia Code", "JetBrains Mono", Consolas, monospace'
  * 非法输入按浅色处理（导出默认白底、编辑器默认深底由调用方按场景兜底）。
  */
 export function isDarkColor(bg: string): boolean {
-  const m = /^#?([0-9a-f]{6})$/i.exec(bg.trim())
+  const m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(bg.trim())
   if (!m) return false
-  const n = parseInt(m[1], 16)
+  // 3 位缩写（#333）展开为 6 位再判
+  const hex = m[1].length === 3 ? m[1].replace(/./g, (c) => c + c) : m[1]
+  const n = parseInt(hex, 16)
   const r = ((n >> 16) & 0xff) / 255
   const g = ((n >> 8) & 0xff) / 255
   const b = (n & 0xff) / 255
@@ -37,13 +39,66 @@ export function isDarkColor(bg: string): boolean {
  * 深蓝/紫/红等低亮度用白字。用于 pill 胶囊 / block 色块标题等色块场景。
  */
 export function contrastText(bg: string): string {
-  // 非法输入回白（向后兼容）；合法色按亮度选深/浅字
-  if (!/^#?[0-9a-f]{6}$/i.test(bg.trim())) return '#ffffff'
+  // 非法输入回白（向后兼容）；合法色（含 3 位缩写）按亮度选深/浅字
+  if (!/^#?[0-9a-f]{3}([0-9a-f]{3})?$/i.test(bg.trim())) return '#ffffff'
   return isDarkColor(bg) ? '#ffffff' : '#2b2b2b'
 }
 
+/**
+ * 公众号夜间逻辑（算法模拟）：把日间排版的颜色自动变深——色相保留、亮度翻转 + 降饱和。
+ * - 背景（浅底→深底）：L' = 1 - L 夹在 [0.09, 0.16]，S' = S × 0.35（暖白卡→深暖卡、
+ *   浅蓝白卡→深蓝黑卡）；
+ * - 文字（深字→浅字）：贴近日间反色的「近白」观感——线性翻转 #333 只会得到 #ccc 偏灰
+ *   看不清，公众号实际反色接近白，故夹在 [0.88, 0.94]（#333→#e0e0e0），S' = S × 0.5。
+ * 强调色不走此函数（微信夜间对中亮度色基本保持原样）。非法输入原样返回，
+ * 由调用方的深浅兜底修正。
+ */
+export function wechatDarkColor(hex: string, kind: 'bg' | 'text' = 'bg'): string {
+  const m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(hex.trim())
+  if (!m) return hex
+  // 3 位缩写（#333）展开为 6 位再变换（否则会被当非法色原样返回，夜间出深字看不清）
+  const full = m[1].length === 3 ? m[1].replace(/./g, (c) => c + c) : m[1]
+  const n = parseInt(full, 16)
+  const r = ((n >> 16) & 0xff) / 255
+  const g = ((n >> 8) & 0xff) / 255
+  const b = (n & 0xff) / 255
+  const max = Math.max(r, g, b)
+  const min = Math.min(r, g, b)
+  const l = (max + min) / 2
+  const d = max - min
+  let h = 0
+  let s = 0
+  if (d > 0) {
+    s = d / (1 - Math.abs(2 * l - 1))
+    if (max === r) h = ((g - b) / d) % 6
+    else if (max === g) h = (b - r) / d + 2
+    else h = (r - g) / d + 4
+    h *= 60
+    if (h < 0) h += 360
+  }
+  const l2 =
+    kind === 'text'
+      ? Math.min(0.94, Math.max(0.88, 1 - l))
+      : Math.min(0.16, Math.max(0.09, 1 - l))
+  const s2 = s * (kind === 'text' ? 0.5 : 0.35)
+  const c = (1 - Math.abs(2 * l2 - 1)) * s2
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1))
+  const mo = l2 - c / 2
+  let rgb: [number, number, number]
+  if (h < 60) rgb = [c, x, 0]
+  else if (h < 120) rgb = [x, c, 0]
+  else if (h < 180) rgb = [0, c, x]
+  else if (h < 240) rgb = [0, x, c]
+  else if (h < 300) rgb = [x, 0, c]
+  else rgb = [c, 0, x]
+  const to255 = (v: number) => Math.round((v + mo) * 255)
+  return (
+    '#' + rgb.map((v) => to255(v).toString(16).padStart(2, '0')).join('')
+  )
+}
+
 export interface EditorThemeColors {
-  /** 实际卡片背景色（变体优先；夜间配色无卡片主题给默认深底；日间无卡片为 undefined → 透明白底） */
+  /** 实际卡片背景色（夜间=公众号逻辑自动变深；无卡片主题夜间给默认深底；日间无卡片为 undefined → 透明白底） */
   bodyBg?: string
   /** 实际正文文字色（已做深浅兜底，杜绝浅底浅字看不清） */
   bodyText: string
@@ -58,27 +113,30 @@ export const DEFAULT_NIGHT_BG = '#1e2126'
 
 /**
  * 编辑器昼夜配色解析（纯函数，ArticleEditor 注入 CSS 变量用）：
- * - 带背景卡片的主题：UI 深色优先 bodyBgDark、UI 浅色优先 bodyBgLight，无变体回退基础色
- * - 夜间配色语义统一 = 深色卡片 + 浅字：无卡片主题或基础色为浅底时给默认深底 DEFAULT_NIGHT_BG，
- *   避免「白底浅字」不可读；日间配色保持无卡片主题透明白底深字
+ * - 日间 = 主题基础色（浅卡保持浅卡、自定义深卡保持深卡、无卡片透明白底）
+ * - 夜间 = 公众号逻辑：不再有手调深色排版，把日间基础色经 wechatDarkColor
+ *   自动变深（浅底→深底、深字→浅字）；深色基础色保持原样；无卡片主题给
+ *   默认深底 DEFAULT_NIGHT_BG，避免「白底浅字」不可读
  * - 深浅兜底：背景与文字亮度不匹配（浅底浅字/深底深字，历史导入脏数据）时强制修正
  * 导出/公众号同源：buildStyles 传 uiDark 时走同一解析，预览/复制/推送与编辑器一致。
  */
 export function resolveEditorTheme(theme: ArticleTheme, uiDark: boolean): EditorThemeColors {
-  // 夜间：Dark 变体 → 深色基础色 → 默认深底；日间：Light 变体 → 基础色（浅底保留、深底用 Light）
   const baseBg = theme.bodyBg
   const bg = uiDark
-    ? theme.bodyBgDark ?? (baseBg && isDarkColor(baseBg) ? baseBg : DEFAULT_NIGHT_BG)
-    : theme.bodyBgLight ?? baseBg
+    ? !baseBg
+      ? DEFAULT_NIGHT_BG
+      : isDarkColor(baseBg)
+        ? baseBg
+        : wechatDarkColor(baseBg)
+    : baseBg
   const darkBg = bg ? isDarkColor(bg) : uiDark
-  const bodyTv =
-    (uiDark ? theme.bodyTextDark : theme.bodyTextLight) ?? theme.bodyText ?? (darkBg ? '#cbd5e1' : '#333')
-  const bodyText = bg && isDarkColor(bodyTv) === darkBg ? (darkBg ? '#cbd5e1' : '#333') : bodyTv
-  const headTv =
-    (uiDark ? theme.headingColorDark : theme.headingColorLight) ??
-    theme.headingColor ??
-    (darkBg ? '#eef2f7' : '#1a1a1a')
-  const headingColor = bg && isDarkColor(headTv) === darkBg ? (darkBg ? '#eef2f7' : '#1a1a1a') : headTv
+  const bodyTv = theme.bodyText ?? (darkBg ? '#cbd5e1' : '#333')
+  // 夜间把日间卡片的深字翻转成近白浅字（公众号反色观感）；无卡片主题用兜底浅字，不翻转
+  const bodyInverted = uiDark && baseBg && isDarkColor(bodyTv) ? wechatDarkColor(bodyTv, 'text') : bodyTv
+  const bodyText = bg && isDarkColor(bodyInverted) === darkBg ? (darkBg ? '#cbd5e1' : '#333') : bodyInverted
+  const headTv = theme.headingColor ?? (darkBg ? '#eef2f7' : '#1a1a1a')
+  const headInverted = uiDark && baseBg && isDarkColor(headTv) ? wechatDarkColor(headTv, 'text') : headTv
+  const headingColor = bg && isDarkColor(headInverted) === darkBg ? (darkBg ? '#eef2f7' : '#1a1a1a') : headInverted
   return { bodyBg: bg, bodyText, headingColor, darkBg }
 }
 
@@ -96,8 +154,9 @@ export const DEFAULT_THEME: ArticleTheme = {
 
 /**
  * 预设分类调性（按分类名索引；未收录的分类回落默认）。
- * 每套都参考了对应领域的公众号爆款排版范式：
- * - 科技数码：黑科技深色卡片 + 荧光青点缀 + 等宽数字感（135 编辑器「科技感」爆款范式）
+ * 每套都参考了对应领域的公众号爆款排版范式（只有一套日间排版，夜间由
+ * resolveEditorTheme 按公众号逻辑自动变深，不再手调深色变体）：
+ * - 科技数码：浅蓝白卡片 + 荧光青点缀 + 等宽数字感（135 编辑器「科技感」爆款范式）
  * - 设计鉴赏：杂志极简留白 + 直角图片 + 细下划线小节（设计美学号常见范式）
  * - 生活常识：暖色圆角卡片 + 胶囊标题 + 高亮加粗（生活科普爆款范式）
  * - 情感回忆：文艺信笺 + 引号引用 + 衬线疏朗（深夜情感号范式）
@@ -110,13 +169,10 @@ export const CATEGORY_THEMES: Record<string, ArticleTheme> = {
     lineHeight: 1.95,
     letterSpacing: '0.01em',
     headingAlign: 'left',
-    bodyBg: '#0d1526',
-    bodyText: '#cbd5e1',
-    headingColor: '#eef2f7',
-    // 昼夜版：日间（浅 UI）编辑器自动切浅蓝白卡 + 深字，不刺眼；导出固定深卡保持科技感
-    bodyBgLight: '#eef3fb',
-    bodyTextLight: '#333',
-    headingColorLight: '#1a1a1a',
+    // 浅蓝白卡 + 深字（深色卡片排版在公众号夜间无法显示，夜间由公众号逻辑自动变深）
+    bodyBg: '#eef3fb',
+    bodyText: '#333',
+    headingColor: '#1a1a1a',
     bodyRadius: 14,
     bodyPadding: '20px 22px',
     h1Style: 'underline',
@@ -149,13 +205,10 @@ export const CATEGORY_THEMES: Record<string, ArticleTheme> = {
     lineHeight: 2.0,
     letterSpacing: '0.02em',
     headingAlign: 'center',
+    // 暖白卡 + 深字（手调深暖卡在公众号夜间无法显示，夜间由公众号逻辑自动变深）
     bodyBg: '#fffaf2',
     bodyText: '#3d3a34',
     headingColor: '#1a1a1a',
-    // 昼夜版：夜间（深 UI）编辑器自动切深暖卡 + 浅字，深色面板不再亮一块；导出固定暖白保持温馨
-    bodyBgDark: '#262016',
-    bodyTextDark: '#e7e0d4',
-    headingColorDark: '#f5efe3',
     bodyRadius: 18,
     bodyPadding: '16px 18px',
     h1Style: 'pill',
