@@ -348,3 +348,81 @@ describe('wrapExportPage / extractTitle', () => {
     expect(auto).toContain('body{background:#1e2126!important}')
   })
 })
+
+describe('小节标题序号渲染（h2Num）', () => {
+  const MD = '# 大标题\n\n## 第一节\n\n正文一\n\n## 第二节\n\n正文二\n'
+
+  it('h2Num 01 → 小节按文档顺序带 01/02 前缀', () => {
+    const out = docToExportHtml(mdToDoc(MD), (src) => src, { ...DEFAULT_THEME, h2Num: '01' })
+    expect(out).toContain('>01 第一节<')
+    expect(out).toContain('>02 第二节<')
+  })
+
+  it('h2Num 一、 → 中文序号（含十一以上进位）', () => {
+    const md = Array.from({ length: 11 }, (_, i) => `## 第${i + 1}节\n\n正文`).join('\n')
+    const out = docToExportHtml(mdToDoc(md), (src) => src, { ...DEFAULT_THEME, h2Num: '一、' })
+    expect(out).toContain('>一、第1节<')
+    expect(out).toContain('>十、第10节<')
+    expect(out).toContain('>十一、第11节<')
+  })
+
+  it('无 h2Num 不注入序号；居中标题 plain 小节文字居中', () => {
+    const out = docToExportHtml(mdToDoc(MD), (src) => src, DEFAULT_THEME)
+    expect(out).toContain('>第一节<')
+    const centered = docToExportHtml(mdToDoc(MD), (src) => src, { ...DEFAULT_THEME, h2Style: 'plain' })
+    expect(centered).toMatch(/<h2 style="[^"]*text-align:center[^"]*">第一节<\/h2>/)
+  })
+})
+
+describe('dashcard 引用渲染（虚线边框提示卡）', () => {
+  it('导出输出 1px dashed 边框 + 边框色', () => {
+    const theme = { ...DEFAULT_THEME, quoteStyle: 'dashcard' as const, quoteBorder: '#bbf7d0' }
+    const out = docToExportHtml(mdToDoc('> 提示卡内容'), (src) => src, theme)
+    expect(out).toContain('border:1px dashed #bbf7d0')
+    expect(out).toContain('border-radius:12px')
+  })
+
+  it('无边框色时回退强调色淡描边；非 dashcard 引用不受影响', () => {
+    const out = docToExportHtml(mdToDoc('> 引用'), (src) => src, { ...DEFAULT_THEME, quoteStyle: 'dashcard' as const })
+    expect(out).toMatch(/border:1px dashed rgba\(13,148,136,0\.55\)/)
+    const leftbar = docToExportHtml(mdToDoc('> 引用'), (src) => src, DEFAULT_THEME)
+    expect(leftbar).toContain('border-left:4px solid #0d9488')
+    expect(leftbar).not.toContain('dashed')
+  })
+})
+
+
+describe('小节序号：标题已自带序号时替换为主题序号格式', () => {
+  it('手写「一、」+ 主题 1、 → 输出 1、2、（替换而非保留/叠加）', () => {
+    const md = '# 标题\n\n## 一、开篇\n\n正文\n\n## 二、展开\n\n正文\n'
+    const out = docToExportHtml(mdToDoc(md), (src) => src, { ...DEFAULT_THEME, h2Num: '1、' })
+    expect(out).toContain('>1、开篇<')
+    expect(out).toContain('>2、展开<')
+    expect(out).not.toContain('一、开篇')
+    expect(out).not.toContain('>1、一、开篇<')
+  })
+
+  it('无序号标题正常编号；已带「01 」标题替换为自动编号', () => {
+    const md = '# 标题\n\n## 普通小节\n\n正文\n\n## 01 已编号\n\n正文\n'
+    const out = docToExportHtml(mdToDoc(md), (src) => src, { ...DEFAULT_THEME, h2Num: '01' })
+    expect(out).toContain('>01 普通小节<')
+    expect(out).toContain('>02 已编号<') // 手写 01 被剥掉，注入自动序号 02
+    expect(out).not.toContain('>01 01 已编号<')
+  })
+})
+
+describe('小节序号：符号序号（①②）也替换为主题格式', () => {
+  it('「① 标题」+ h2Num 01 → 输出 01/02（符号序号被替换，不再双重）', () => {
+    const md = '# 标题\n\n## ① 遮罩系统重构\n\n正文\n\n## ② 字母定位器\n\n正文\n'
+    const out = docToExportHtml(mdToDoc(md), (src) => src, { ...DEFAULT_THEME, h2Num: '01' })
+    expect(out).toContain('>01  遮罩系统重构<')
+    expect(out).toContain('>02  字母定位器<')
+    expect(out).not.toContain('①')
+  })
+
+  it('「✨ 图标开头」标题不误判为序号，正常自动编号', () => {
+    const md = '# 标题\n\n## ✨ 核心功能\n\n正文\n'
+    const out = docToExportHtml(mdToDoc(md), (src) => src, { ...DEFAULT_THEME, h2Num: '01' })
+    expect(out).toContain('>01 ✨ 核心功能<')
+  })
+})

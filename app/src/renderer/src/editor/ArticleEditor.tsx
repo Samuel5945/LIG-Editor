@@ -811,6 +811,37 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
               vars['--article-h2-left'] = 'none'
               vars['--article-h2-pl'] = '0'
             }
+            // H2 文字排列：plain/underline 跟随标题排列（block 自带居中、leftbar 竖条保持左）
+            if (t.headingAlign === 'center' && (h2 === 'plain' || h2 === 'underline')) {
+              vars['--article-h2-text-align'] = 'center'
+            }
+            // 小节序号（导入排版「01 标题」范式）：CSS counter 表达式按序号样式注入，
+            // 与导出端 h2NumText 同形（公众号剥伪元素，导出由 blockToHtml 注真实文本）。
+            // 标题已自带序号（「一、」「1. 」「01 」「3、」等）时跳过，避免手写 + 自动编号双重序号
+            const alreadyNumbered = (text: string): boolean =>
+              /^\s*(?:[一二三四五六七八九十]{1,3}、|[壹贰叁肆伍陆柒捌玖拾]{1,3}、|\d{1,2}[.、．]|\d{2}\s|[①-⑳])/.test(text)
+            const hasNumberedHeading = (): boolean => {
+              if (!editor) return false
+              let found = false
+              editor.state.doc.descendants((node) => {
+                if (found) return false
+                if (node.type.name === 'heading' && node.attrs.level === 2) {
+                  const text = node.textContent ?? ''
+                  if (alreadyNumbered(text)) found = true
+                }
+                return !found
+              })
+              return found
+            }
+            if (t.h2Num && !hasNumberedHeading()) {
+              vars['--article-h2-num'] = {
+                '01': 'counter(h2num, decimal-leading-zero) " "',
+                '1.': 'counter(h2num) ". "',
+                '1、': 'counter(h2num) "、"',
+                '一、': 'counter(h2num, simp-chinese-informal) "、"',
+                '壹、': 'counter(h2num, simp-chinese-formal) "、"'
+              }[t.h2Num]
+            }
             // H3 前缀：dot 圆点 / none 无（diamond 用 CSS 默认菱形）
             const mark = t.h3Mark ?? 'diamond'
             if (mark === 'dot') vars['--article-mark-radius'] = '50%'
@@ -824,6 +855,13 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
               vars['--article-quote-radius'] = '12px'
               vars['--article-quote-pad'] = '14px 16px'
               vars['--article-quote-bg'] = `color-mix(in srgb, ${accent} 12%, transparent)`
+            } else if (quote === 'dashcard') {
+              // 虚线边框提示卡：彩色 dashed 描边 + 透明底（导出端同形态）
+              vars['--article-quote-left'] = 'none'
+              vars['--article-quote-radius'] = '12px'
+              vars['--article-quote-pad'] = '14px 16px'
+              vars['--article-quote-border'] = `1px dashed ${t.quoteBorder && isHexColor(t.quoteBorder) ? t.quoteBorder : accent}`
+              vars['--article-quote-bg'] = 'transparent'
             } else if (quote === 'quotes') {
               vars['--article-quote-mark'] = '❝'
             }

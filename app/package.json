@@ -1,7 +1,7 @@
 {
   "name": "LIG-Editor",
   "productName": "立格编辑器",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "@LIG人生如戏的图文创作平台公测版",
   "main": "./out/main/index.js",
   "author": "Samuel Shi <sshi3525@gmail.com>",

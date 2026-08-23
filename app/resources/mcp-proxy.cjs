@@ -179,7 +179,7 @@ async function handle(req) {
         result: {
           protocolVersion: (req.params && req.params.protocolVersion) || '2024-11-05',
           capabilities: { tools: {} },
-          serverInfo: { name: 'LIG-Editor', version: '0.2.0' }
+          serverInfo: { name: 'LIG-Editor', version: '0.3.0' }
         }
       })
       return

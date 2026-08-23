@@ -2,7 +2,7 @@ import { basename, extname, join } from 'path'
 import { existsSync, readFileSync } from 'fs'
 import { mdToDoc } from '@shared/markdown'
 import { docToExportHtml, extractTitle } from '@shared/exportHtml'
-import { resolveArticleTheme } from '@shared/categoryThemes'
+import { resolveThemeForExport } from './exporter'
 import type { PushDraftResult, PublicIpResult } from '@shared/wechat'
 import { projectDir, readMeta, readTextFile } from './projectStore'
 import { getWechatSettings } from './wechatStore'
@@ -193,7 +193,7 @@ export async function pushDraft(project: string, variant: 'day' | 'night' = 'day
     const thumbMediaId = await uploadCoverMaterial(token, coverAbs)
 
     // 第二遍：本地图替换为 CDN URL，产出最终正文 HTML（跟随分类排版调性 + 指定配色变体）
-    const content = docToExportHtml(doc, (src) => urlMap.get(src) ?? src, resolveArticleTheme(meta), variant === 'night')
+    const content = docToExportHtml(doc, (src) => urlMap.get(src) ?? src, resolveThemeForExport(meta), variant === 'night')
 
     const title = extractTitle(doc, project).slice(0, 64)
     const data = await wxFetch<WxError & { media_id: string }>(`${API}/draft/add?access_token=${token}`, {

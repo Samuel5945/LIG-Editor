@@ -178,9 +178,11 @@ function buildStyles(theme?: ArticleTheme, uiDark?: boolean): Styles {
     const h2Margin = t.headingAlign === 'center' ? '40px auto 16px' : '40px 0 16px'
     s.h2 = `font-size:${headingBase}px;font-weight:bold;color:${contrastText(h2Bg)};line-height:1.375;margin:${h2Margin};display:table;background:${h2Bg};border-radius:6px;padding:3px 14px;`
   } else if (h2Style === 'underline') {
-    s.h2 = `font-size:${headingBase}px;font-weight:bold;color:${subColor};line-height:1.375;margin:40px 0 16px;border-bottom:2px solid ${c};padding-bottom:8px;`
+    const align = t.headingAlign === 'center' ? 'text-align:center;' : ''
+    s.h2 = `font-size:${headingBase}px;font-weight:bold;color:${subColor};line-height:1.375;margin:40px 0 16px;border-bottom:2px solid ${c};padding-bottom:8px;${align}`
   } else if (h2Style === 'plain') {
-    s.h2 = `font-size:${headingBase}px;font-weight:bold;color:${subColor};line-height:1.375;margin:40px 0 16px;`
+    const align = t.headingAlign === 'center' ? 'text-align:center;' : ''
+    s.h2 = `font-size:${headingBase}px;font-weight:bold;color:${subColor};line-height:1.375;margin:40px 0 16px;${align}`
   } else {
     s.h2 = `font-size:${headingBase}px;font-weight:bold;color:${subColor};line-height:1.375;margin:40px 0 16px;border-left:4px solid ${c};padding-left:12px;`
   }
@@ -201,6 +203,10 @@ function buildStyles(theme?: ArticleTheme, uiDark?: boolean): Styles {
   const quoteTint = tint(c, 0.1)
   if (quoteStyle === 'card') {
     s.blockquote = `margin:20px 0;padding:14px 16px;border-radius:12px;background:${quoteTint};color:${quoteColor};font-size:15px;line-height:${lh};`
+  } else if (quoteStyle === 'dashcard') {
+    // 虚线边框提示卡（导入设计稿常见范式）：白底 + 彩色 dashed 描边；边框色缺省用强调色淡描边
+    const qBorder = t.quoteBorder && isHexColor(t.quoteBorder) ? t.quoteBorder.trim() : tint(c, 0.55)
+    s.blockquote = `margin:20px 0;padding:14px 16px;border:1px dashed ${qBorder};border-radius:12px;background:${dark ? 'rgba(255,255,255,0.05)' : '#ffffff'};color:${quoteColor};font-size:15px;line-height:${lh};`
   } else if (quoteStyle === 'quotes') {
     s.blockquote = `margin:20px 0;padding:12px 16px 12px 20px;border-left:4px solid ${c};border-top-right-radius:8px;border-bottom-right-radius:8px;background:${quoteTint};color:${quoteColor};font-size:15px;line-height:${lh};`
     s.quoteMark = `font-size:28px;line-height:1;color:${c};margin:0 0 2px;`
@@ -303,7 +309,32 @@ function galleryToHtml(attrs: FigureGalleryAttrs, resolveImg: (src: string) => s
   return `<section style="${S.figure}"><section style="${S.swipeBox}">${items}</section><p style="${s.hint}">← 左右滑动查看 ${images.length} 张 →</p>${cap}</section>`
 }
 
-function blockToHtml(block: BlockNode, resolveImg: (src: string) => string, s: Styles): string {
+/** 中文数字（1-99）：upper=true 用大写「壹贰叁」，配 h2Num 序号渲染 */
+function toCnNum(n: number, upper: boolean): string {
+  const d = upper ? ['', '壹', '贰', '叁', '肆', '伍', '陆', '柒', '捌', '玖'] : ['', '一', '二', '三', '四', '五', '六', '七', '八', '九']
+  const t = upper ? '拾' : '十'
+  if (n < 10) return d[n]
+  if (n < 20) return n % 10 ? t + d[n % 10] : t
+  return d[Math.floor(n / 10)] + t + (n % 10 ? d[n % 10] : '')
+}
+
+/** 第 n 个小节标题的序号前缀文本（01 / 1. / 1、/ 一、/ 壹、） */
+function h2NumText(kind: NonNullable<ArticleTheme['h2Num']>, n: number): string {
+  switch (kind) {
+    case '01':
+      return `${String(n).padStart(2, '0')} `
+    case '1.':
+      return `${n}. `
+    case '1、':
+      return `${n}、`
+    case '一、':
+      return `${toCnNum(n, false)}、`
+    case '壹、':
+      return `${toCnNum(n, true)}、`
+  }
+}
+
+function blockToHtml(block: BlockNode, resolveImg: (src: string) => string, s: Styles, h2Prefix?: string): string {
   switch (block.type) {
     case 'heading': {
       const level = Math.min(Math.max(block.attrs.level, 1), 3)
@@ -316,7 +347,7 @@ function blockToHtml(block: BlockNode, resolveImg: (src: string) => string, s: S
         // 前缀标记：菱形 / 圆点 / 无
         return `<h3 style="${s.h3}"><span style="${s.h3Diamond}"></span>${inner}</h3>`
       }
-      return `<h2 style="${s.h2}">${inner}</h2>`
+      return `<h2 style="${s.h2}">${h2Prefix ?? ''}${inner}</h2>`
     }
     case 'paragraph': {
       const inner = inlineToHtml(block.content, s)
@@ -379,8 +410,34 @@ export function docToExportHtml(
   uiDark?: boolean
 ): string {
   const s = buildStyles(theme, uiDark)
+  // 小节序号：theme.h2Num 启用时按文档 h2 出现顺序生成「01 / 一、」前缀（导出/复制/推送同源）。
+  // 标题已自带序号（「一、」「1. 」「01 」「3、」等）时用主题序号格式【替换】它——
+  // 剥掉标题开头的手写序号文本，再注入主题序号，避免双重序号
+  let h2Seq = 0
+  const SEQ_PREFIX = /^\s*(?:[一二三四五六七八九十]{1,3}、|[壹贰叁肆伍陆柒捌玖拾]{1,3}、|\d{1,2}[.、．]|\d{2}\s|[①-⑳])/
   const body = (doc.content ?? [])
-    .map((b) => blockToHtml(b, resolveImg, s))
+    .map((b): typeof b => {
+      if (!(b.type === 'heading' && b.attrs.level === 2 && theme?.h2Num)) return b
+      const first = b.content?.[0]
+      const raw = first?.type === 'text' ? (first.text ?? '') : ''
+      const m = SEQ_PREFIX.exec(raw)
+      if (m && b.content?.every((n) => n.type === 'text')) {
+        // 剥掉手写序号（纯文本标题；marks 随 text 节点保留）
+        const len = m[0].length
+        b = { ...b, content: b.content.map((n, i) => (i === 0 ? { ...n, text: (n.text ?? '').slice(len) } : n)) }
+      }
+      return b
+    })
+    .map((b) =>
+      blockToHtml(
+        b,
+        resolveImg,
+        s,
+        b.type === 'heading' && b.attrs.level === 2 && theme?.h2Num
+          ? h2NumText(theme.h2Num as NonNullable<ArticleTheme['h2Num']>, ++h2Seq)
+          : undefined
+      )
+    )
     .filter(Boolean)
     .join('\n')
   return `<section style="${s.root}">\n${body}\n</section>`

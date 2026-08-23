@@ -318,3 +318,264 @@ describe('parseThemeFromHtml v2（细节提取）', () => {
     expect(r.theme.headingColor).toBe('#2bae85')
   })
 })
+
+describe('parseThemeFromHtml v3（单位折算 / 众数投票 / 新字段）', () => {
+  it('px 行高按字号折算倍率（28px + 16px 字号 → 1.75），不再被当成 28 倍行距', () => {
+    const html = `<section><p style="font-size:16px;line-height:28px;">正文</p></section>`
+    expect(parseThemeFromHtml(html).theme.lineHeight).toBeCloseTo(1.75)
+    // 无字号参考时按 16 兜底
+    const html2 = `<section><p style="line-height:32px;">正文</p></section>`
+    expect(parseThemeFromHtml(html2).theme.lineHeight).toBeCloseTo(2)
+    // 越界值（50px → 3.125 倍超出 [1.2,3]）回落默认
+    const html3 = `<section><p style="line-height:50px;">正文</p></section>`
+    expect(parseThemeFromHtml(html3).theme.lineHeight).toBe(DEFAULT_THEME.lineHeight)
+  })
+
+  it('letter-spacing px 折算为 em（2px ÷ 16px 字号 → 0.125em）', () => {
+    const html = `<section><p style="font-size:16px;letter-spacing:2px;">正文</p></section>`
+    expect(parseThemeFromHtml(html).theme.letterSpacing).toBe('0.13em') // 0.125 保留两位 → 0.13
+  })
+
+  it('近白色背景（#fefefe）不再被当成卡片背景', () => {
+    const html = `<html><body>
+<section style="background:#fefefe;"><p style="color:#333;">正文</p></section>
+</body></html>`
+    expect(parseThemeFromHtml(html).theme.bodyBg).toBeUndefined()
+  })
+
+  it('众数投票：装饰性首个 h2 无样式、后续色块 h2 占多数 → block', () => {
+    const html = `<section>
+<h2>关注我们（装饰性首元素）</h2>
+<h2 style="background:#2bae85;color:#fff;">小节一</h2>
+<h2 style="background:#2bae85;color:#fff;">小节二</h2>
+<p style="color:#333;">正文</p>
+</section>`
+    const r = parseThemeFromHtml(html)
+    expect(r.theme.h2Style).toBe('block')
+    expect(r.theme.h2Bg).toBe('#2bae85')
+  })
+
+  it('众数投票：首个 strong 是普通链接样式、后续多个高亮 → highlight 且底色取众数', () => {
+    const html = `<section><p style="color:#333;">
+<strong style="color:#888;">普通</strong>、<strong style="background:#fef3c7;">重点一</strong>、<strong style="background:#fef3c7;">重点二</strong>
+</p></section>`
+    const r = parseThemeFromHtml(html)
+    expect(r.theme.strongStyle).toBe('highlight')
+    expect(r.theme.strongBg).toBe('#fef3c7')
+  })
+
+  it('strong 高亮底色落在内部 span 上也能识别（与 h2 色块同套路）', () => {
+    const html = `<section><p style="color:#333;">正文<strong><span style="background:rgb(255,235,59);">内层高亮</span></strong></p></section>`
+    const r = parseThemeFromHtml(html)
+    expect(r.theme.strongStyle).toBe('highlight')
+    expect(r.theme.strongBg).toBe('#ffeb3b')
+  })
+
+  it('单引号 style 属性也能采集', () => {
+    const html = `<section style='background:#0d1526;'><p style='color:#cbd5e1;line-height:1.8;'>正文</p></section>`
+    const r = parseThemeFromHtml(html)
+    expect(r.theme.bodyBg).toBe('#0d1526')
+    expect(r.theme.bodyText).toBe('#cbd5e1')
+    expect(r.theme.lineHeight).toBeCloseTo(1.8)
+  })
+
+  it('新字段：正文字号 / 标题字号 / 卡片圆角与内边距随背景卡元素提取', () => {
+    const html = `<section style="background:#fffaf2;border-radius:18px;padding:16px 18px;">
+<h2 style="font-size:20px;">小节</h2>
+<p style="font-size:15px;line-height:2;">正文一</p>
+<p style="font-size:15px;">正文二</p>
+</section>`
+    const r = parseThemeFromHtml(html)
+    expect(r.theme.fontSize).toBe(15)
+    expect(r.theme.headingFontSize).toBe(20)
+    expect(r.theme.bodyBg).toBe('#fffaf2')
+    expect(r.theme.bodyRadius).toBe(18)
+    expect(r.theme.bodyPadding).toBe('16px 18px')
+  })
+
+  it('h3 前缀标记：● 系 → dot；无前缀符号 → none；无 h3 不设', () => {
+    const dot = `<section><h3><span style="color:#2bae85;">●</span> 子节</h3><p>正文</p></section>`
+    expect(parseThemeFromHtml(dot).theme.h3Mark).toBe('dot')
+    const plain = `<section><h3>纯文字子节</h3><h3>另一个</h3><p>正文</p></section>`
+    expect(parseThemeFromHtml(plain).theme.h3Mark).toBe('none')
+    const none = `<section><p>正文</p></section>`
+    expect(parseThemeFromHtml(none).theme.h3Mark).toBeUndefined()
+  })
+
+  it('图片圆角：忽略 % 值（防 50% 变 50px），取 px 众数', () => {
+    const html = `<section>
+<img style="border-radius:50%;" src="a.png">
+<img style="border-radius:8px;" src="b.png">
+<img style="border-radius:8px;" src="c.png">
+</section>`
+    expect(parseThemeFromHtml(html).theme.imgRadius).toBe(8)
+  })
+
+  it('建议名去掉站名后缀（- 公众号 等）', () => {
+    const html = `<html><head><title>深度好文标题 - 公众号</title></head><body><p>正文</p></body></html>`
+    expect(parseThemeFromHtml(html).name).toBe('深度好文标题')
+  })
+
+  it('段距取垂直上边距（margin:8px 24px → 8，不再误取水平 24）', () => {
+    const html = `<section><p style="margin:8px 24px;">正文</p></section>`
+    expect(parseThemeFromHtml(html).theme.pGap).toBe(8)
+  })
+})
+
+describe('parseThemeFromHtml v4（真机文章回归：淡染/覆盖率/字体误判）', () => {
+  it('低透明度淡染背景（rgba alpha 0.08）不当实心卡片——丢 alpha 会出「绿卡片绿字」', () => {
+    const html = `<section>
+<section style="background:rgba(0, 196, 152, 0.08);border-radius:12px;padding:14px;"><p>引用淡底</p></section>
+<p style="color:#333;">正文</p>
+</section>`
+    const r = parseThemeFromHtml(html)
+    expect(r.theme.bodyBg).toBeUndefined()
+  })
+
+  it('覆盖小段的装饰色块不当背景卡；包裹大半正文的 section 正常当卡', () => {
+    // 色块只包一小段（<35%）→ 不算
+    const deco = `<section><p style="color:#333;">第一段</p><p>第二段</p><p>第三段</p><p>第四段</p><p>第五段</p><p>第六段</p><p>第七段</p><p>第八段</p>
+<section style="background:#ffe4e6;">小装饰块</section>
+<p>第九段</p><p>第十段</p></section>`
+    expect(parseThemeFromHtml(deco).theme.bodyBg).toBeUndefined()
+    // 同样色块包裹大半正文 → 算
+    const card = `<section>
+<section style="background:#fff0f0;"><p style="color:#333;">第一段</p><p>第二段</p><p>第三段</p><p>第四段</p><p>第五段</p><p>第六段</p></section>
+<p>尾巴</p></section>`
+    expect(parseThemeFromHtml(card).theme.bodyBg).toBe('#fff0f0')
+  })
+
+  it('段距取上下边距较大者（微信常用 margin:0px 0px 24px 底边距撑段距）', () => {
+    const html = `<section><p style="margin: 0px 0px 24px;">正文一</p><p style="margin: 0px 0px 24px;">正文二</p></section>`
+    expect(parseThemeFromHtml(html).theme.pGap).toBe(24)
+  })
+
+  it('苹方（PingFangTC-light）判黑体：fangsong 全词匹配，裸 fang 曾误判衬线', () => {
+    const html = `<section>
+<p style="color:#333;">正文若干文字正文若干文字</p><p>更多正文</p><p>更多正文</p><p>更多正文</p><p>更多正文</p><p>更多正文</p><p>更多正文</p><p>更多正文</p>
+<section style="font-family:Optima-Regular, PingFangTC-light;">尾部区块</section>
+</section>`
+    const family = parseThemeFromHtml(html).theme.fontFamily
+    expect(family).toContain('Microsoft YaHei') // sans，不再是衬线
+  })
+
+  it('无 p 色时正文色回退取 span 中性灰（品牌绿 span 不再整篇导成绿字）', () => {
+    const html = `<section>
+<p><span style="color:rgb(0, 177, 137);">绿色强调一</span>普通文字</p>
+<p><span style="color:rgb(0, 177, 137);">绿色强调二</span>普通文字</p>
+<p><span style="color:rgb(117, 117, 117);">灰色说明文字</span></p>
+</section>`
+    expect(parseThemeFromHtml(html).theme.bodyText).toBe('#757575')
+  })
+})
+
+describe('parseThemeFromHtml v5（小节标题序号范式检测）', () => {
+  it('「01 标题」两位数字序号 ×3 → h2Num 01（原文 01-08 序号小节的复刻）', () => {
+    const html = `<section>
+<p><strong>01 选择模式</strong></p><p>正文若干</p>
+<p><strong>02 先聊灵感</strong></p><p>正文若干</p>
+<p><strong>03 让页面活起来</strong></p><p>正文若干</p>
+</section>`
+    expect(parseThemeFromHtml(html).theme.h2Num).toBe('01')
+  })
+
+  it('「一、二、」中文序号 → h2Num 一、', () => {
+    const html = `<section>
+<p style="font-size:20px;"><strong>一、开篇</strong></p><p>正文</p>
+<p style="font-size:20px;"><strong>二、展开</strong></p><p>正文</p>
+</section>`
+    expect(parseThemeFromHtml(html).theme.h2Num).toBe('一、')
+  })
+
+  it('正文普通列表「3、4、5」（不从 1 开始）不误判为序号', () => {
+    const html = `<section><p>3、项目模块展示</p><p>4、个人优势卡片</p><p>5、底部联系方式</p></section>`
+    expect(parseThemeFromHtml(html).theme.h2Num).toBeUndefined()
+  })
+
+  it('孤立序号（仅一个）不设 h2Num', () => {
+    const html = `<section><p><strong>01 唯一标题</strong></p><p>正文</p></section>`
+    expect(parseThemeFromHtml(html).theme.h2Num).toBeUndefined()
+  })
+})
+
+describe('parseThemeFromHtml v6（无标题标签的大字块标题）', () => {
+  it('section 大字号 + 品牌色的小节范式 → 标题色与标题字号都能提取（不再是默认黑 20px）', () => {
+    const html = `<section>
+<section style="font-size:22px;color:rgb(0, 177, 137);"><p><strong>01 选择模式</strong></p></section><p>正文若干</p>
+<section style="font-size:22px;color:rgb(0, 177, 137);"><p><strong>02 灵感</strong></p></section><p>正文若干</p>
+<section style="font-size:22px;color:rgb(0, 177, 137);"><p><strong>03 高级</strong></p></section>
+</section>`
+    const r = parseThemeFromHtml(html)
+    expect(r.theme.headingColor).toBe('#00b189') // 品牌绿标题
+    expect(r.theme.headingFontSize).toBe(22) // 大字号跟到
+    expect(r.theme.h2Num).toBe('01')
+  })
+
+  it('黑色大字标题（中性色）不设 headingColor（保持默认渲染与强调色联动行为）', () => {
+    const html = `<section>
+<section style="font-size:20px;color:#333;"><p><strong>一、开头</strong></p></section><p>正文</p>
+<section style="font-size:20px;color:#333;"><p><strong>二、展开</strong></p></section>
+</section>`
+    expect(parseThemeFromHtml(html).theme.headingColor).toBeUndefined()
+    expect(parseThemeFromHtml(html).theme.headingFontSize).toBe(20)
+  })
+})
+
+describe('parseThemeFromHtml v7（js_content 配对健壮性 / 渐变与灰阶设计）', () => {
+  it('正文里不带斜杠的 <img>（void 元素）不再破坏 js_content 深度配对', () => {
+    const raw = `<html><body><div id="js_content"><section>
+<p style="color:#333;"><img src="a.png">正文一</p><p><img src="b.png">正文二</p><img src="c.png">
+</section></div><div id="js_tags">垃圾区</div><script>var junk=1</script></body></html>`
+    const t = trimHtmlForTheme(raw)
+    expect(t).toContain('正文')
+    expect(t).not.toContain('js_tags')
+    expect(t).not.toContain('junk')
+    expect(parseThemeFromHtml(t).theme.bodyText).toBe('#333333')
+  })
+
+  it('渐变标题卡取首色近似为色块（linear-gradient(135deg, rgb(5,150,105), ...) → #059669）', () => {
+    const html = `<section>
+<section style="background:linear-gradient(135deg, rgb(5, 150, 105), rgb(16, 185, 129));padding:12px;"><p style="font-size:24px;color:#fff;">核心亮点</p></section>
+<section style="background:linear-gradient(135deg, rgb(5, 150, 105), rgb(16, 185, 129));padding:12px;"><p style="font-size:24px;color:#fff;">次要亮点</p></section>
+<p style="color:#9ca3af;">正文若干文字</p>
+</section>`
+    const r = parseThemeFromHtml(html)
+    expect(r.theme.h2Style).toBe('block')
+    expect(r.theme.h2Bg).toBe('#059669')
+  })
+
+  it('灰阶设计文：卡内浅灰字不顶掉页面正文色（上下文区间排除）', () => {
+    const html = `<section>
+<p style="color:rgb(17, 24, 39);font-size:15px;">页面正文一</p>
+<section style="background:rgb(5, 150, 105);padding:10px;"><p style="color:rgb(156, 163, 175);font-size:13px;">卡内浅灰文字</p></section>
+<p style="color:rgb(17, 24, 39);font-size:15px;">页面正文二</p>
+<section style="background:rgb(5, 150, 105);padding:10px;"><p style="color:rgb(156, 163, 175);font-size:13px;">卡内浅灰文字二</p></section>
+</section>`
+    const r = parseThemeFromHtml(html)
+    expect(r.theme.bodyText).toBe('#111827') // 页面深灰正文，不是卡内浅灰
+    expect(r.theme.fontSize).toBe(15)
+  })
+})
+
+describe('parseThemeFromHtml v8（虚线边框提示卡 → dashcard 引用）', () => {
+  it('1px dashed 彩色描边 + 圆角 + 内边距的文本卡 → 引用 dashcard 且取到边框色', () => {
+    const html = `<section>
+<p style="color:#9ca3af;font-size:12px;">正文若干</p>
+<section style="background: rgb(255, 255, 255);border: 1px dashed rgb(187, 247, 208);border-radius: 12px;padding: 12px 14px;">
+<p style="font-size:13px;color:#374151;">提示卡内容：打开 → 点复制 → 粘贴公众号。</p>
+</section>
+<p style="color:#9ca3af;font-size:12px;">更多正文若干文字文字</p>
+</section>`
+    const r = parseThemeFromHtml(html)
+    expect(r.theme.quoteStyle).toBe('dashcard')
+    expect(r.theme.quoteBorder).toBe('#bbf7d0')
+  })
+
+  it('语义引用（blockquote 带左条/引号）优先，不被虚线卡抢占', () => {
+    const html = `<section>
+<blockquote style="border-left:4px solid #e53935;background:#f7f7f7;">❝ 真正的引用</blockquote>
+<section style="border: 1px dashed rgb(187, 247, 208);border-radius: 12px;padding: 12px;"><p>提示卡</p></section>
+</section>`
+    expect(parseThemeFromHtml(html).theme.quoteStyle).toBe('quotes')
+  })
+})

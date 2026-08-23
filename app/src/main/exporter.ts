@@ -4,7 +4,15 @@ import { clipboard } from 'electron'
 import { mdToDoc } from '@shared/markdown'
 import { docToExportHtml, exportPageBg, extractTitle, wrapExportPage, wrapExportPageDayNight } from '@shared/exportHtml'
 import { resolveArticleTheme } from '@shared/categoryThemes'
+import { listCustomThemes } from './themeStore'
 import { projectDir, readMeta, readTextFile, writeTracked } from './projectStore'
+
+/** 解析工程最终排版调性：与渲染层一致地传入自定义主题库——曾漏传导致
+ *  导入分类（预设表查不到）静默回落默认调性，推送/复制/导出的标题色、
+ *  序号、居中、字号全部失效（编辑器预览却是对的，预览/导出不同源） */
+export function resolveThemeForExport(meta: ReturnType<typeof readMeta>): ReturnType<typeof resolveArticleTheme> {
+  return resolveArticleTheme(meta, listCustomThemes())
+}
 
 /**
  * M7 导出：article.md（唯一事实源）→ article.html 生成物 / 剪贴板富文本
@@ -36,7 +44,7 @@ export type ExportVariant = 'auto' | 'day' | 'night'
 /** 导出独立 article.html 到工程目录（图片保持相对路径，文件夹整体可迁移），返回绝对路径 */
 export function exportArticleHtml(project: string, variant: ExportVariant = 'auto'): string {
   const doc = mdToDoc(readTextFile(project, 'article.md'))
-  const theme = resolveArticleTheme(readMeta(project))
+  const theme = resolveThemeForExport(readMeta(project))
   const title = extractTitle(doc, project)
   let page: string
   if (variant === 'auto') {
@@ -58,6 +66,6 @@ export function copyArticleRich(project: string, variant: 'day' | 'night' = 'day
   const dir = projectDir(project)
   const md = readTextFile(project, 'article.md')
   const doc = mdToDoc(md)
-  const html = docToExportHtml(doc, (src) => toDataUrl(dir, src), resolveArticleTheme(readMeta(project)), variant === 'night')
+  const html = docToExportHtml(doc, (src) => toDataUrl(dir, src), resolveThemeForExport(readMeta(project)), variant === 'night')
   clipboard.write({ html, text: md })
 }

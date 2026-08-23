@@ -11,7 +11,7 @@ export type H2Style = 'leftbar' | 'block' | 'underline' | 'plain'
 /** H3 子标题前缀标记 */
 export type H3Mark = 'diamond' | 'dot' | 'none'
 /** 引用形态 */
-export type QuoteStyle = 'leftbar' | 'card' | 'quotes'
+export type QuoteStyle = 'leftbar' | 'card' | 'quotes' | 'dashcard'
 /** 分隔线形态 */
 export type HrStyle = 'line' | 'dot' | 'long'
 /** 加粗强调方式 */
@@ -51,12 +51,16 @@ export interface ArticleTheme {
   h1Style?: H1Style
   /** H2 装饰：leftbar 左竖条 / block 色块标签 / underline 下划线 / plain 纯文字 */
   h2Style?: H2Style
+  /** H2 序号样式（导入排版复刻「01 标题」「一、标题」等范式；渲染按文档 h2 顺序自动编号） */
+  h2Num?: '01' | '1.' | '1、' | '一、' | '壹、'
   /** H2 色块标签的背景色（配 h2Style: 'block'；缺省=accent） */
   h2Bg?: string
   /** H3 前缀：diamond 菱形 / dot 圆点 / none 无 */
   h3Mark?: H3Mark
-  /** 引用形态：leftbar 左条浅底 / card 圆角卡片 / quotes 引号 */
+  /** 引用形态：leftbar 左条浅底 / card 圆角卡片 / quotes 引号 / dashcard 虚线边框卡 */
   quoteStyle?: QuoteStyle
+  /** dashcard 引用的边框色（虚线提示卡的彩色描边） */
+  quoteBorder?: string
   /** 分隔线：line 居中短横 / dot 圆点列 / long 通栏细线 */
   hrStyle?: HrStyle
   /** 加粗强调：color 着色 / highlight 底色高亮 / plain 纯黑加粗 */

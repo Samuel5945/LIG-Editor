@@ -4,7 +4,7 @@
  * 分类可 AI 推荐或手动切换，切换时工程目录随分类迁移。
  */
 
-export const PROJECT_CATEGORIES = ['科技数码', '设计鉴赏', '生活常识', '情感回忆', '哲学思考'] as const
+export const PROJECT_CATEGORIES = ['科技数码', '设计鉴赏', '生活常识', '情感回忆', '哲学思考', 'workbuddy'] as const
 
 export type ProjectCategory = (typeof PROJECT_CATEGORIES)[number]
 

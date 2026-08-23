@@ -251,6 +251,22 @@ export const CATEGORY_THEMES: Record<string, ArticleTheme> = {
     imgRadius: 0,
     pGap: 24
   },
+  workbuddy: {
+    accent: '#00b189',
+    fontFamily: SERIF,
+    lineHeight: 2.0,
+    letterSpacing: '0.02em',
+    headingAlign: 'center',
+    // 小节：品牌绿纯文字居中 + 「01」序号（与导入的 workbuddy 排版同源）
+    h1Style: 'bar',
+    h2Style: 'plain',
+    h2Num: '01',
+    headingFontSize: 22,
+    quoteStyle: 'card',
+    hrStyle: 'line',
+    strongStyle: 'color',
+    pGap: 24
+  },
   [UNCATEGORIZED]: DEFAULT_THEME
 }
 

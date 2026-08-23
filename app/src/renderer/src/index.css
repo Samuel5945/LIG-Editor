@@ -147,6 +147,7 @@ body {
   @apply min-h-full text-[15px] outline-none;
   max-width: 760px;
   margin: 0 auto;
+  counter-reset: h2num;
   padding: var(--article-body-pad, 2.5rem 4rem);
   background: var(--article-body-bg, transparent);
   border-radius: var(--article-body-radius, 0);
@@ -179,6 +180,7 @@ body {
 /* H2 小节标题：左竖条 / 色块标签 / 下划线 / 纯文字，一眼区分层级 */
 .article-editor .ProseMirror h2 {
   @apply font-bold leading-snug;
+  counter-increment: h2num;
   font-size: var(--article-h2-size, 20px);
   margin: var(--article-h2-margin, 2.5rem 0 1rem);
   display: var(--article-h2-display, block);
@@ -188,6 +190,11 @@ body {
   padding: var(--article-h2-pad, 0 0 0 12px);
   border-left: var(--article-h2-left, 4px solid var(--article-accent, #0d9488));
   border-bottom: var(--article-h2-border, none);
+  text-align: var(--article-h2-text-align, left);
+}
+/* 小节序号（导入排版「01 标题」范式）：counter 表达式由 ArticleEditor 按主题注入，缺省不显示 */
+.article-editor .ProseMirror h2::before {
+  content: var(--article-h2-num, none);
 }
 /* H3 子标题：菱形 / 圆点 / 无前缀 */
 .article-editor .ProseMirror h3 {
@@ -217,8 +224,9 @@ body {
 .article-editor .ProseMirror blockquote {
   @apply my-5 py-2 pr-3;
   padding: var(--article-quote-pad, 0.5rem 0.75rem 0.5rem 1rem);
-  border-radius: var(--article-quote-radius, 0 8px 8px 0);
+  border: var(--article-quote-border, none);
   border-left: var(--article-quote-left, 4px solid color-mix(in srgb, var(--article-accent, #0d9488) 60%, transparent));
+  border-radius: var(--article-quote-radius, 0 8px 8px 0);
   background: var(--article-quote-bg, rgb(30 41 59 / 0.6));
   color: var(--article-quote-color, #cbd5e1);
 }

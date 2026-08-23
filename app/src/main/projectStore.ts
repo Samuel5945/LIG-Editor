@@ -243,7 +243,10 @@ function metaPath(name: string): string {
 
 export function readMeta(name: string): ProjectMeta {
   const raw = JSON.parse(readFileSync(metaPath(name), 'utf-8')) as Partial<ProjectMeta>
-  // 容错：外部工具可能写出缺字段的 project.json
+  // 容错：外部工具可能写出缺字段的 project.json。
+  // 字段必须全量透传：排版覆盖四项（正文字号/标题字号/两排列）曾被白名单漏掉——
+  // 改标题字号时 readMeta→writeMeta 往返会把盘上的正文字号覆盖值清空，
+  // 界面上表现为「正文字号和标题字号互相牵连/被重置」，导出也读不到覆盖值
   return {
     name: raw.name ?? name,
     status: raw.status ?? 'ideating',
@@ -253,6 +256,10 @@ export function readMeta(name: string): ProjectMeta {
     format: raw.format ?? 'article',
     category: raw.category ?? UNCATEGORIZED,
     accent: raw.accent,
+    bodyFontSize: raw.bodyFontSize,
+    headingFontSize: raw.headingFontSize,
+    bodyAlign: raw.bodyAlign,
+    headingAlign: raw.headingAlign,
     style_skill: raw.style_skill,
     created_at: raw.created_at ?? new Date().toISOString(),
     updated_at: raw.updated_at ?? new Date().toISOString()
