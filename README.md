@@ -7,7 +7,7 @@
 ## 界面一览
 
 <p align="center">
-  <img src="docs/images/carousel.webp" width="820" alt="立格编辑器界面轮播：三栏工作台 / 选题库与审阅 / Agent MCP 接入 / 开放模型接口 / 小红书贴图 / 公众号贴图" />
+  <img src="docs/images/carousel-release.webp" width="820" alt="立格编辑器界面轮播：三栏工作台 / 选题库与审阅 / Agent MCP 接入 / 开放模型接口 / 各分类排版 / WorkBuddy 排版" />
 </p>
 <p align="center"><sub>三栏工作台 · 选题库与审阅 · Agent MCP 接入 · 开放模型接口 · 小红书贴图 · 公众号贴图</sub></p>
 
