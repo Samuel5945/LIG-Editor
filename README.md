@@ -37,7 +37,8 @@
 
 ## 下载
 
-[📥 最新版本下载（夸克网盘）](https://pan.quark.cn/s/ddbcdaaaa634) · [⭐ 最新版本 GitHub Release](https://github.com/Samuel5945/LIG-Editor/releases/latest)
+[📥 最新版本下载（夸克网盘）](https://pan.quark.cn/s/1cb400aa407b) [📥 最新版本（百度网盘）](https://pan.baidu.com/s/1Y1tbciVySYOEd2gcwivqrw?pwd=35c8)
+· [⭐ 最新版本 GitHub Release](https://github.com/Samuel5945/LIG-Editor/releases/latest)
 
 ## 技术栈
 
