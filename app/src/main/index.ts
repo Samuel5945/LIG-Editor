@@ -1,7 +1,7 @@
 import { app, BrowserWindow, Menu, net, protocol, shell } from 'electron'
 import { join, normalize } from 'path'
 import { pathToFileURL } from 'url'
-import { registerIpc } from './ipc'
+import { registerIpc, extractMdPaths, queueOrBroadcastMd } from './ipc'
 import { watchWorkspace } from './watcher'
 import { getAppPaths } from './paths'
 import { startBridge, stopBridge } from './bridge'
@@ -14,19 +14,26 @@ import { ensureThemeCategoryDirs } from './themeStore'
 // Windows 下 Electron 主进程拿不到管道 stdin/stdout（electron#4218），MCP stdio 由纯 Node 代理承接后转 HTTP 进来
 const MCP_MODE = process.argv.includes('--mcp')
 
+// ---------- 拖拽/关联打开 .md ----------
+// Windows 把 md 拖到应用图标 / 双击关联文件时，文件绝对路径作为命令行参数进入主进程。
+// 首实例从 process.argv 提取；二次实例（应用已在运行）从 second-instance 的 argv 提取。
+// 队列/去重/转发逻辑在 ipc.ts（渲染层挂载后来拉取积压，之后走事件推送）。
+
 // 单实例锁：双击快捷方式重复启动时不新建主程序，把已打开的窗口置顶聚焦
 // （MCP 无头模式可多开，不抢锁）
 const gotSingleInstanceLock = MCP_MODE || app.requestSingleInstanceLock()
 if (!gotSingleInstanceLock) {
   app.quit()
 } else {
-  app.on('second-instance', () => {
+  app.on('second-instance', (_event, argv) => {
     const win = BrowserWindow.getAllWindows()[0]
     if (win) {
       if (win.isMinimized()) win.restore()
       win.show()
       win.focus()
     }
+    // 二次实例带来的拖拽/关联 .md：交给渲染层打开（窗口未就绪时自动入队）
+    for (const p of extractMdPaths(argv)) queueOrBroadcastMd(p)
   })
 
 // asset://file/<encodeURIComponent(绝对路径)> —— 渲染进程加载本地图片用（http 源不能直接读 file://）
@@ -109,6 +116,8 @@ app.whenReady().then(() => {
   startBridge()
   // 只保留编辑/视图菜单的快捷键（菜单栏不显示）：复制粘贴、撤销、开发者工具等照常可用
   Menu.setApplicationMenu(Menu.buildFromTemplate([{ role: 'editMenu' }, { role: 'viewMenu' }]))
+  // 首实例启动参数里拖拽/关联的 .md：入队等窗口加载完成后统一放行
+  for (const p of extractMdPaths(process.argv)) queueOrBroadcastMd(p)
   createWindow()
 
   app.on('activate', () => {

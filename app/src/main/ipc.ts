@@ -1,6 +1,6 @@
 import { ipcMain, BrowserWindow, shell, app } from 'electron'
 import { existsSync } from 'fs'
-import { join } from 'path'
+import { join, resolve } from 'path'
 import type { IpcApi, IpcEvents, IpcEventChannel, McpAccessCard } from '@shared/types'
 import { getAppPaths } from './paths'
 import * as store from './projectStore'
@@ -17,6 +17,7 @@ import { exportArticleHtml, copyArticleRich } from './exporter'
 import { getWechatSettings, setWechatSettings } from './wechatStore'
 import { pushDraft, pushCards, invalidateToken, getPublicIp } from './wechatPublish'
 import { listCustomThemes, saveCustomTheme, deleteCustomTheme, fetchUrlHtml } from './themeStore'
+import { openMdFile } from './projectStore'
 
 /** 类型安全的 handle 注册：通道名与出入参由 IpcApi 单一来源约束 */
 function handle<C extends keyof IpcApi>(
@@ -26,12 +27,48 @@ function handle<C extends keyof IpcApi>(
   ipcMain.handle(channel, (_evt, ...args) => fn(...(args as Parameters<IpcApi[C]>)))
 }
 
+// ---------- 拖拽/关联打开 .md 的转发队列 ----------
+// 队列放在这里而不是 index.ts：md:takePending 通道要读它，放 index 会形成循环依赖。
+// 渲染层挂载后先 invoke md:takePending 拉取积压（启动参数带来的文件），此后
+// second-instance 的文件直接走 md:open-request 事件推送，两头都不丢。
+
+/** 从命令行参数里筛出真实存在的 .md 文件路径（去重保序） */
+export function extractMdPaths(argv: string[]): string[] {
+  const out: string[] = []
+  for (const arg of argv) {
+    const p = resolve(arg)
+    if (!/\.md$/i.test(p) || !existsSync(p)) continue
+    if (!out.some((x) => x.toLowerCase() === p.toLowerCase())) out.push(p)
+  }
+  return out
+}
+
+const pendingOpen = new Set<string>()
+let rendererReady = false
+
+/** 窗口就绪前入队，就绪后直接广播给渲染层打开 */
+export function queueOrBroadcastMd(p: string): void {
+  if (rendererReady) {
+    broadcast('md:open-request', { absPath: p })
+  } else {
+    pendingOpen.add(p)
+  }
+}
+
 export function registerIpc(): void {
   // 当前被 watcher 监听的工程（删工程时判断是否需要先停监听）
   let watchedProject: string | null = null
 
   handle('app:ping', () => 'pong')
   handle('app:getPaths', () => getAppPaths())
+  // 拉取启动期间积压的拖拽/关联 .md：调用即视为渲染层已就绪，后续改走事件推送
+  handle('md:takePending', () => {
+    rendererReady = true
+    const out = [...pendingOpen]
+    pendingOpen.clear()
+    return out
+  })
+  handle('md:openFile', (absPath) => openMdFile(absPath))
 
   // ---- 窗口控制（无边框自绘标题栏）----
   const targetWin = (): BrowserWindow | null =>

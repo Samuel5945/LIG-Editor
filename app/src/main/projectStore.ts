@@ -1,4 +1,4 @@
-import { join, normalize } from 'path'
+import { join, normalize, basename } from 'path'
 import {
   existsSync,
   mkdirSync,
@@ -15,6 +15,7 @@ import type {
   ChatSessionMeta,
   IdeaCard,
   IdeaEntry,
+  OpenMdResult,
   ProjectData,
   ProjectMeta,
   ProjectSummary,
@@ -418,6 +419,42 @@ export function openProject(name: string): ProjectData {
     if (!existsSync(join(dir, f))) writeTracked(join(dir, f), '')
   }
   return { meta: readMeta(name), article: readTextFile(name, 'article.md') }
+}
+
+// ---------- 拖拽/关联打开 .md（文件→工程） ----------
+
+/** 工程内直接可编辑的 md 文件名（拖拽到图标时这些文件会定位到所属工程） */
+const PROJECT_MD_FILES = ['article.md', 'ideas.md', 'review.md', 'cards-review.md']
+
+/** 把拖拽/关联打开的 .md 定位到工程：workspace 内命中已有工程则直接打开，
+ * 外部 md 导入为新工程（article.md 内容拷贝进 workspace/未分类/<同名>/）。
+ * Windows 下拖到图标 / 双击关联文件时，路径经命令行参数进入主进程。 */
+export function openMdFile(absPath: string): OpenMdResult {
+  const mdPath = normalize(absPath)
+  if (!/\.md$/i.test(mdPath)) throw new Error('只支持打开 Markdown（.md）文件')
+  if (!existsSync(mdPath)) throw new Error(`文件不存在：${absPath}`)
+
+  // 1) 按真实扫描结果定位工程（兼容分类/平铺两种布局，名字取目录原始大小写）
+  const fileName = basename(mdPath)
+  if (PROJECT_MD_FILES.includes(fileName)) {
+    for (const [name, dir] of refreshDirCache()) {
+      if (normalize(join(dir, fileName)).toLowerCase() === mdPath.toLowerCase()) {
+        return { kind: 'open', name }
+      }
+    }
+  }
+
+  // 2) 未命中现有工程：导入成新工程（同名冲突自动追加序号 `-2`、`-3`…）
+  const base = basename(mdPath, '.md').slice(0, 30).replace(/[. ]+$/, '') || '未命名'
+  let name = sanitizeProjectName(base) || '未命名'
+  if (resolveDir(name)) {
+    let i = 2
+    while (resolveDir(`${name}-${i}`)) i++
+    name = `${name}-${i}`
+  }
+  const summary = createProject(name, UNCATEGORIZED)
+  writeTracked(join(summary.dir, 'article.md'), readFileSync(mdPath, 'utf-8'))
+  return { kind: 'import', name }
 }
 
 // ---------- 文本文件读写 ----------

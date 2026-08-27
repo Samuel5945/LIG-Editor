@@ -30,6 +30,13 @@ win:
     - nsis
     - portable
   artifactName: "LIG-Editor-${version}-${arch}.${ext}"
+# 双击 / 拖拽 .md 到应用图标直接打开（NSIS 安装时写注册表关联；portable 无安装环节，
+# 需在资源管理器对 md 文件「打开方式 → 选择其他应用」手动指定一次 exe）
+fileAssociations:
+  - ext: md
+    name: Markdown 文档
+    description: 用立格编辑器打开 Markdown 文章
+    icon: build/icon.png
 nsis:
   # 向导式安装：可选安装目录、有确认页（oneClick 会无反馈直接装进 AppData）
   oneClick: false

@@ -379,6 +379,41 @@ export default function App(): JSX.Element {
     return () => clearTimeout(t)
   }, [toast])
 
+  // ---- 拖拽/关联打开 .md：双击 md 文件或拖到应用图标，主进程经此转交路径 ----
+  // 先注册监听再拉取积压：takePending 触发后主进程的二次实例改走推送，两段不能有空窗
+  useEffect(() => {
+    const openedRecently = new Map<string, number>()
+    const openExternal = async (absPath: string): Promise<void> => {
+      try {
+        // 积压拉取与实时推送可能在启动瞬间交叠：同路径 5 秒内只打开一次，防外部 md 被导入成多份
+        const key = absPath.toLowerCase()
+        const now = Date.now()
+        if (now - (openedRecently.get(key) ?? 0) < 5000) return
+        openedRecently.set(key, now)
+        // 切走前先冲刷当前工程的未保存正文，避免丢稿（与导出前冲刷同一模式）
+        const cur = currentRef.current
+        if (cur && articleRef.current !== savedRef.current) {
+          await window.api.invoke('project:writeFile', cur, 'article.md', articleRef.current)
+          setSaved(articleRef.current)
+        }
+        const r = await window.api.invoke('md:openFile', absPath)
+        if (r.kind === 'import') {
+          // 新工程先落进左栏列表（currentDir 由列表派生），再打开
+          setProjects(await window.api.invoke('project:list'))
+          setToast(`已导入为工程「${r.name}」`)
+        }
+        await openProject(r.name)
+      } catch (err) {
+        setToast(`打开失败：${err instanceof Error ? err.message : err}`)
+      }
+    }
+    const off = window.api.on('md:open-request', ({ absPath }) => void openExternal(absPath))
+    void window.api
+      .invoke('md:takePending')
+      .then((paths) => paths.reduce((chain, p) => chain.then(() => openExternal(p)), Promise.resolve()))
+    return off
+  }, [openProject])
+
   const resolveKeepLocal = useCallback(async () => {
     if (!current || !conflict) return
     await window.api.invoke('project:writeFile', current, 'article.md', articleRef.current)

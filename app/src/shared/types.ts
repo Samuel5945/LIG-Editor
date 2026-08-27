@@ -147,6 +147,13 @@ export interface ProjectData {
   article: string
 }
 
+/** 拖拽/关联打开的 .md → 工程定位结果 */
+export interface OpenMdResult {
+  /** open = 命中工程目录内已有工程；import = 已导入为新工程 */
+  kind: 'open' | 'import'
+  name: string
+}
+
 /** 应用根目录布局（workspace/skills/settings 与 docs 同级） */
 export interface AppPaths {
   root: string
@@ -327,6 +334,10 @@ export interface WebSearchResult {
 export interface IpcApi {
   'app:getPaths': () => AppPaths
   'app:ping': () => string
+  /** 拖拽/关联打开的 .md：workspace 内命中已有工程则打开，外部 md 导入为新工程 */
+  'md:openFile': (absPath: string) => OpenMdResult
+  /** 渲染层挂载后拉取启动期积压的 .md 路径（此后改走 md:open-request 推送） */
+  'md:takePending': () => string[]
   // ---- 窗口控制（无边框自绘标题栏）----
   'win:minimize': () => void
   'win:toggleMaximize': () => void
@@ -442,6 +453,8 @@ export interface IpcEvents {
   'file:external-change': { project: string; file: string }
   /** workspace 顶层有工程新增/删除 */
   'workspace:changed': null
+  /** 用户把 .md 拖到应用图标 / 双击关联文件，应用已在运行：absPath 为文件绝对路径 */
+  'md:open-request': { absPath: string }
   /** 流式对话增量片段 */
   'llm:stream': { requestId: string; delta: string }
   /** 流式对话结束；error 非空表示异常终止 */
