@@ -95,11 +95,11 @@ Apache-2.0 © Samuel Shi
 ## 个人其他作品
 
 <p align="center">
-  <a href="https://www.bilibili.com/video/BV1U54o6VE5u/?share_source=copy_web&vd_source=2ed777ce01c157b46368695126a8ecca">
+  <a href="https://www.bilibili.com/video/BV14r8d6mEcp/?share_source=copy_web&vd_source=2ed777ce01c157b46368695126a8ecca">
     <img src="docs/images/liquiddesk-v11-cover.jpg" width="820" alt="LiquidDesk V1.1 —— 好玻璃，不挑引擎。" />
   </a>
 </p>
 <p align="center">
-  <b><a href="https://www.bilibili.com/video/BV1U54o6VE5u/">LiquidDesk V1.1</a></b> · 好玻璃，不挑引擎。 —— Windows 桌面玻璃拟态美化工具<br>
+  <b><a href="https://www.bilibili.com/video/BV14r8d6mEcp/">LiquidDesk V1.1</a></b> · 好玻璃，不挑引擎。 —— Windows 桌面玻璃拟态美化工具<br>
   <sub>▶ 点击封面前往 B 站观看演示</sub>
 </p>
