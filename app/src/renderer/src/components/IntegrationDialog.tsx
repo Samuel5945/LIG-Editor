@@ -306,10 +306,11 @@ export default function IntegrationDialog({
               📖 Nomi
             </a>
             <button
-              onClick={() => window.open('https://github.com/Samuel5945/LIG-Editor')}
+              onClick={() => window.open('https://ligdesign.win/')}
+              title="LIG 立格 Studio 品牌官网"
               className="rounded px-2 py-1 text-slate-300 hover:bg-slate-800 hover:text-sky-300"
             >
-              ☆ GitHub ↗
+              🌐 官网 ↗
             </button>
             <button
               onClick={() => window.open('https://pan.quark.cn/s/ddbcdaaaa634')}
