@@ -1,7 +1,7 @@
-import type { ProjectMeta, ArticleTheme } from './types'
+import type { ProjectMeta, ArticleTheme, H1Style, H2Style, H2Num, H3Mark } from './types'
 import { isHexColor } from './cards'
 import { UNCATEGORIZED } from './categories'
-export type { ArticleTheme, H1Style, H2Style, H3Mark, QuoteStyle, HrStyle, StrongStyle } from './types'
+export type { ArticleTheme, H1Style, H2Style, H2Num, H3Mark, QuoteStyle, HrStyle, StrongStyle } from './types'
 
 /**
  * 分类调性：不同分类套用不同排版气质（强调色 / 字体 / 行高 / 字距 / 标题对齐 /
@@ -273,14 +273,27 @@ export const CATEGORY_THEMES: Record<string, ArticleTheme> = {
 /**
  * 解析工程最终排版调性：分类调性打底，项目显式设置覆盖。
  * custom 为运行时加载的自定义主题库（settings/customThemes.json，优先级高于预设分类）。
- * 覆盖字段（meta）：accent 强调色（标题/加粗色同源联动）、bodyFontSize 正文字号、
- * headingFontSize 标题字号、bodyAlign 正文排列、headingAlign 标题排列。
+ * 覆盖字段（meta）：accent 强调色、bodyFontSize 正文字号、headingFontSize 标题字号、
+ * bodyAlign 正文排列、headingAlign 标题排列，以及标题版式四项
+ * （h1Style/h2Style/h2Num/h3Mark——顶栏「标题」面板与 AI set_theme 同源写入）。
+ * h2Num 覆盖值 'none' = 显式关掉主题自带序号（undefined 是「跟随主题」，
+ * 与「关掉」语义不同，故用哨兵区分）。
  * 正文阅读色（bodyText）、块背景（h2Bg 黑块等）属排版形态，保持主题原值。
  */
 export function resolveArticleTheme(
   meta: Pick<
     ProjectMeta,
-    'accent' | 'category' | 'bodyFontSize' | 'headingFontSize' | 'bodyAlign' | 'headingAlign'
+    | 'accent'
+    | 'category'
+    | 'bodyFontSize'
+    | 'headingFontSize'
+    | 'bodyAlign'
+    | 'headingAlign'
+    | 'h1Style'
+    | 'h2Style'
+    | 'h2Num'
+    | 'h3Mark'
+    | 'bodyBg'
   > | null | undefined,
   custom?: Record<string, ArticleTheme>
 ): ArticleTheme {
@@ -296,17 +309,29 @@ export function resolveArticleTheme(
       : base.headingFontSize ?? DEFAULT_THEME.headingFontSize
   const bodyAlign = meta?.bodyAlign ?? base.bodyAlign
   const headingAlign = meta?.headingAlign ?? base.headingAlign
+  // 标题版式：显式覆盖 > 主题值；h2Num 'none' 哨兵把主题序号关掉
+  const h1Style = meta?.h1Style ?? base.h1Style
+  const h2Style = meta?.h2Style ?? base.h2Style
+  const h2Num = meta?.h2Num ? (meta.h2Num === 'none' ? undefined : meta.h2Num) : base.h2Num
+  const h3Mark = meta?.h3Mark ?? base.h3Mark
+  // 背景卡：显式 hex 覆盖 / 'none' 哨兵去卡片（导出透明白底）/ 未设置跟随主题（深浅字色由
+  // resolveEditorTheme / buildStyles 的兜底按实际背景亮度自动修正，覆盖亮色不会踩脏数据坑）
+  const bodyBg = meta?.bodyBg
+    ? meta.bodyBg === 'none'
+      ? undefined
+      : isHexColor(meta.bodyBg)
+        ? meta.bodyBg.trim()
+        : base.bodyBg
+    : base.bodyBg
+  const overrides = { fontSize, headingFontSize, bodyAlign, headingAlign, h1Style, h2Style, h2Num, h3Mark, bodyBg }
   if (meta?.accent && isHexColor(meta.accent)) {
     return {
       ...base,
       accent,
       ...(base.headingColor ? { headingColor: accent } : {}),
       ...(base.strongColor ? { strongColor: accent } : {}),
-      fontSize,
-      headingFontSize,
-      bodyAlign,
-      headingAlign
+      ...overrides
     }
   }
-  return { ...base, accent, fontSize, headingFontSize, bodyAlign, headingAlign }
+  return { ...base, accent, ...overrides }
 }

@@ -8,6 +8,8 @@ import type { CardDeck, CardFormat } from './cards'
 export type H1Style = 'bar' | 'pill' | 'underline'
 /** H2 小节标题装饰 */
 export type H2Style = 'leftbar' | 'block' | 'underline' | 'plain'
+/** H2 序号格式（按文档 h2 顺序自动编号） */
+export type H2Num = '01' | '1.' | '1、' | '一、' | '壹、' | '①'
 /** H3 子标题前缀标记 */
 export type H3Mark = 'diamond' | 'dot' | 'none'
 /** 引用形态 */
@@ -51,8 +53,8 @@ export interface ArticleTheme {
   h1Style?: H1Style
   /** H2 装饰：leftbar 左竖条 / block 色块标签 / underline 下划线 / plain 纯文字 */
   h2Style?: H2Style
-  /** H2 序号样式（导入排版复刻「01 标题」「一、标题」等范式；渲染按文档 h2 顺序自动编号） */
-  h2Num?: '01' | '1.' | '1、' | '一、' | '壹、'
+  /** H2 序号样式（导入排版复刻「01 标题」「一、标题」「① 标题」等范式；渲染按文档 h2 顺序自动编号） */
+  h2Num?: H2Num
   /** H2 色块标签的背景色（配 h2Style: 'block'；缺省=accent） */
   h2Bg?: string
   /** H3 前缀：diamond 菱形 / dot 圆点 / none 无 */
@@ -124,6 +126,16 @@ export interface ProjectMeta {
   bodyAlign?: 'indent' | 'flush' | 'center'
   /** 标题排列覆盖：center 居中 / left 左对齐；缺省跟随主题 */
   headingAlign?: 'center' | 'left'
+  /** H1 装饰覆盖：bar 短横 / pill 胶囊 / underline 下划线；缺省跟随主题 */
+  h1Style?: H1Style
+  /** H2 装饰覆盖：leftbar 左竖条 / block 色块标签 / underline 下划线 / plain 纯文字；缺省跟随主题 */
+  h2Style?: H2Style
+  /** H2 序号覆盖：H2Num 各格式；'none' 显式关掉主题自带序号；缺省跟随主题 */
+  h2Num?: H2Num | 'none'
+  /** H3 前缀覆盖：diamond 菱形 / dot 圆点 / none 无；缺省跟随主题 */
+  h3Mark?: H3Mark
+  /** 文章背景卡覆盖（十六进制）：覆盖主题 bodyBg；'none' 显式去卡片（透明白底）；缺省跟随主题 */
+  bodyBg?: string
   style_skill?: string
   created_at: string
   updated_at: string

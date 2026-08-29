@@ -1,6 +1,6 @@
 import { basename, isAbsolute, join } from 'path'
 import { existsSync, readFileSync } from 'fs'
-import type { IdeaCard, TitleCandidate } from '@shared/types'
+import type { H1Style, H2Style, H2Num, H3Mark, IdeaCard, TitleCandidate } from '@shared/types'
 import { ALL_CATEGORIES } from '@shared/categories'
 import {
   brainstormMessages,
@@ -372,7 +372,7 @@ export const TOOLS: ToolDef[] = [
   {
     name: 'set_theme',
     description:
-      '设置工程排版覆盖（写入 project.json，编辑器/导出/推送同源生效，与顶栏控件一致）。字段独立可传：accent 强调色 / bodyFontSize 正文字号 / headingFontSize 标题字号（H1=+6 H2=+0 H3=-3）/ bodyAlign 正文排列（indent 首行缩进 / flush 顶格两端对齐 / center 居中）/ headingAlign 标题排列（center 居中 / left 左）。传 null = 恢复默认（跟随分类主题）',
+      '设置工程排版覆盖（写入 project.json，编辑器/导出/推送同源生效，与顶栏控件一致）。字段独立可传：accent 强调色 / bodyFontSize 正文字号 / headingFontSize 标题字号（H1=+6 H2=+0 H3=-3）/ bodyAlign 正文排列（indent 首行缩进 / flush 顶格两端对齐 / center 居中）/ headingAlign 标题排列（center 居中 / left 左）/ 标题版式四项 h1Style（bar 短横 / pill 胶囊色块字底 / underline 下划线）、h2Style（leftbar 左竖条 / block 色块标签 / underline 下划线 / plain 纯文字）、h2Num（H2 自动序号：01 / 1. / 1、 / 一、 / 壹、 / ① 圈号；none 显式关闭）、h3Mark（diamond 菱形 / dot 圆点 / none 无）/ bodyBg 文章背景卡（浅色系十六进制 #rrggbb；none 去卡片纯白底；夜间由公众号逻辑自动变深）。传 null = 恢复默认（跟随分类主题）',
     inputSchema: {
       type: 'object',
       properties: {
@@ -381,7 +381,12 @@ export const TOOLS: ToolDef[] = [
         bodyFontSize: { type: ['number', 'null'], description: '正文字号 px（10-40）；null 跟随主题' },
         headingFontSize: { type: ['number', 'null'], description: '标题字号 px（12-40）；null 跟随主题' },
         bodyAlign: { type: ['string', 'null'], enum: ['indent', 'flush', 'center', null], description: '正文排列；null 跟随主题' },
-        headingAlign: { type: ['string', 'null'], enum: ['center', 'left', null], description: '标题排列；null 跟随主题' }
+        headingAlign: { type: ['string', 'null'], enum: ['center', 'left', null], description: '标题排列；null 跟随主题' },
+        h1Style: { type: ['string', 'null'], enum: ['bar', 'pill', 'underline', null], description: 'H1 装饰；null 跟随主题' },
+        h2Style: { type: ['string', 'null'], enum: ['leftbar', 'block', 'underline', 'plain', null], description: 'H2 装饰；null 跟随主题' },
+        h2Num: { type: ['string', 'null'], enum: ['01', '1.', '1、', '一、', '壹、', '①', 'none', null], description: 'H2 自动序号格式；none 显式关闭；null 跟随主题' },
+        h3Mark: { type: ['string', 'null'], enum: ['diamond', 'dot', 'none', null], description: 'H3 前缀标记；null 跟随主题' },
+        bodyBg: { type: ['string', 'null'], description: '文章背景卡十六进制（#rrggbb，建议浅色系）；none 去卡片；null 跟随主题' }
       },
       required: ['project']
     },
@@ -398,6 +403,11 @@ export const TOOLS: ToolDef[] = [
         meta.bodyAlign = a.bodyAlign === null ? undefined : (a.bodyAlign as 'indent' | 'flush' | 'center')
       if (a.headingAlign !== undefined)
         meta.headingAlign = a.headingAlign === null ? undefined : (a.headingAlign as 'center' | 'left')
+      if (a.h1Style !== undefined) meta.h1Style = a.h1Style === null ? undefined : (a.h1Style as H1Style)
+      if (a.h2Style !== undefined) meta.h2Style = a.h2Style === null ? undefined : (a.h2Style as H2Style)
+      if (a.h2Num !== undefined) meta.h2Num = a.h2Num === null ? undefined : (a.h2Num as H2Num | 'none')
+      if (a.h3Mark !== undefined) meta.h3Mark = a.h3Mark === null ? undefined : (a.h3Mark as H3Mark)
+      if (a.bodyBg !== undefined) meta.bodyBg = a.bodyBg === null ? undefined : (a.bodyBg as string)
       store.writeMeta(project, meta)
       notifyChange(project, 'project.json')
       return { ok: true }

@@ -122,9 +122,24 @@ describe('手动样式导出（span 字色/背景/字号）', () => {
       bodyText: '#cbd5e1' // 浅灰字（误配）
     }
     const html = docToExportHtml(mdToDoc('正文一行'), (src) => src, dirty)
-    expect(html).toContain('background:#fff0f0')
+    expect(html).toContain('background-color:#fff0f0')
     expect(html).toContain('color:#333') // 浅底 → 深字兜底
     expect(html).not.toContain('color:#cbd5e1')
+  })
+
+  it('背景卡双层包裹：内层 section 承载 background-color/圆角/内边距（外层被公众号剥掉时卡片仍在）', () => {
+    const html = docToExportHtml(mdToDoc('正文一行'), (src) => src, {
+      ...DEFAULT_THEME,
+      bodyBg: '#eef3fb',
+      bodyRadius: 14,
+      bodyPadding: '20px 22px'
+    })
+    // 外层只挂排版继承，紧跟的内层挂视觉卡片（font-family 值含引号，用非标签字符匹配外层）
+    expect(html).toMatch(/^<section style="font-size:[^<>]*font-family:/)
+    expect(html).toContain('><section style="background-color:#eef3fb;border-radius:14px;padding:20px 22px;">')
+    // 无卡片主题不输出内层卡片 section
+    const plain = docToExportHtml(mdToDoc('正文一行'), (src) => src, DEFAULT_THEME)
+    expect(plain).not.toContain('background-color:')
   })
 
   it('深浅兜底：深底配浅字保持（不误伤正常主题）', () => {
@@ -141,9 +156,9 @@ describe('手动样式导出（span 字色/背景/字号）', () => {
     const life = CATEGORY_THEMES['生活常识']
     const day = docToExportHtml(mdToDoc('正文'), (src) => src, life, false)
     const night = docToExportHtml(mdToDoc('正文'), (src) => src, life, true)
-    expect(day).toContain('background:#fffaf2') // 日间基础色
+    expect(day).toContain('background-color:#fffaf2') // 日间基础色
     expect(day).toContain('color:#3d3a34')
-    expect(night).toContain(`background:${wechatDarkColor('#fffaf2')}`) // 夜间算法变深深暖卡
+    expect(night).toContain(`background-color:${wechatDarkColor('#fffaf2')}`) // 夜间算法变深深暖卡
     expect(night).toContain(`color:${wechatDarkColor('#3d3a34', 'text')}`) // 深字翻转为近白浅字
   })
 
@@ -156,8 +171,8 @@ describe('手动样式导出（span 字色/背景/字号）', () => {
     expect(page).toContain('art-day')
     expect(page).toContain('art-night')
     expect(page).toContain('@media (prefers-color-scheme: dark)')
-    expect(page).toContain('background:#fffaf2') // 日间份
-    expect(page).toContain(`background:${wechatDarkColor('#fffaf2')}`) // 夜间份（算法变深）
+    expect(page).toContain('background-color:#fffaf2') // 日间份（内层卡片段）
+    expect(page).toContain(`background-color:${wechatDarkColor('#fffaf2')}`) // 夜间份（算法变深）
     // 默认显示日间，深色系统切夜间
     expect(page).toContain('.art-day{display:block}')
     expect(page).toContain('.art-night{display:none}')
@@ -175,11 +190,11 @@ describe('手动样式导出（span 字色/背景/字号）', () => {
   it('无卡片主题夜间配色：导出输出默认深底 + 浅字（不再白底浅字）', () => {
     const design = CATEGORY_THEMES['设计鉴赏'] // 无 bodyBg
     const html = docToExportHtml(mdToDoc('正文一行'), (src) => src, design, true)
-    expect(html).toContain('background:#1e2126')
+    expect(html).toContain('background-color:#1e2126')
     expect(html).toContain('color:#cbd5e1')
     // 日间保持无背景 + 深字
     const day = docToExportHtml(mdToDoc('正文一行'), (src) => src, design, false)
-    expect(day).not.toContain('background:#1e2126')
+    expect(day).not.toContain('background-color:#1e2126')
     expect(day).toContain('color:#333')
   })
 })
@@ -291,7 +306,7 @@ describe('docToExportHtml 分类排版调性（爆款范式）', () => {
 
   it('科技数码：浅蓝白卡片 + 荧光青 + 色块 H2 + 等宽字体', () => {
     const out = docToExportHtml(mdToDoc(MD), (src) => src, CATEGORY_THEMES['科技数码'])
-    expect(out).toContain('background:#eef3fb') // 浅蓝白容器
+    expect(out).toContain('background-color:#eef3fb') // 浅蓝白容器
     expect(out).toContain('color:#333') // 深色正文
     expect(out).toContain('border-radius:14px') // 容器圆角
     expect(out).toContain('border-bottom:3px solid #22d3ee') // H1 下划线
@@ -302,7 +317,7 @@ describe('docToExportHtml 分类排版调性（爆款范式）', () => {
 
   it('生活常识：暖白卡片 + 胶囊 H1 + 高亮加粗', () => {
     const out = docToExportHtml(mdToDoc(MD), (src) => src, CATEGORY_THEMES['生活常识'])
-    expect(out).toContain('background:#fffaf2')
+    expect(out).toContain('background-color:#fffaf2')
     expect(out).toContain('border-radius:9999px;padding:6px 22px') // H1 胶囊
     expect(out).toContain('background:#fef3c7;padding:1px 6px') // 高亮加粗
   })
@@ -366,6 +381,15 @@ describe('小节标题序号渲染（h2Num）', () => {
     expect(out).toContain('>十一、第11节<')
   })
 
+  it('h2Num ① → 圈号序号（①-⑳，超过 20 回落数字与编辑器 CSS fallback 同形）', () => {
+    const md = Array.from({ length: 21 }, (_, i) => `## 第${i + 1}节\n\n正文`).join('\n')
+    const out = docToExportHtml(mdToDoc(md), (src) => src, { ...DEFAULT_THEME, h2Num: '①' })
+    expect(out).toContain('>① 第1节<')
+    expect(out).toContain('>⑩ 第10节<')
+    expect(out).toContain('>⑳ 第20节<')
+    expect(out).toContain('>21 第21节<')
+  })
+
   it('无 h2Num 不注入序号；居中标题 plain 小节文字居中', () => {
     const out = docToExportHtml(mdToDoc(MD), (src) => src, DEFAULT_THEME)
     expect(out).toContain('>第一节<')
@@ -415,8 +439,8 @@ describe('小节序号：符号序号（①②）也替换为主题格式', () =
   it('「① 标题」+ h2Num 01 → 输出 01/02（符号序号被替换，不再双重）', () => {
     const md = '# 标题\n\n## ① 遮罩系统重构\n\n正文\n\n## ② 字母定位器\n\n正文\n'
     const out = docToExportHtml(mdToDoc(md), (src) => src, { ...DEFAULT_THEME, h2Num: '01' })
-    expect(out).toContain('>01  遮罩系统重构<')
-    expect(out).toContain('>02  字母定位器<')
+    expect(out).toContain('>01 遮罩系统重构<')
+    expect(out).toContain('>02 字母定位器<')
     expect(out).not.toContain('①')
   })
 

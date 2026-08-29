@@ -196,6 +196,16 @@ body {
 .article-editor .ProseMirror h2::before {
   content: var(--article-h2-num, none);
 }
+/* H2 圈号序号（①-⑳）：fixed 系统用完 20 个符号后回落 decimal（21、22…，与导出端 h2NumText 同形） */
+@counter-style h2circled {
+  system: fixed;
+  symbols: "①" "②" "③" "④" "⑤" "⑥" "⑦" "⑧" "⑨" "⑩" "⑪" "⑫" "⑬" "⑭" "⑮" "⑯" "⑰" "⑱" "⑲" "⑳";
+  fallback: decimal;
+}
+/* H2 手写序号遮罩：h2Num 自动序号启用时隐藏标题开头手写序号（H2NumMask 扩展打标，非破坏） */
+.article-editor .ProseMirror .h2num-mask {
+  display: none;
+}
 /* H3 子标题：菱形 / 圆点 / 无前缀 */
 .article-editor .ProseMirror h3 {
   @apply mb-3 mt-8 font-semibold;

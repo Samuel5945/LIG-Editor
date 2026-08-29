@@ -261,6 +261,11 @@ export function readMeta(name: string): ProjectMeta {
     headingFontSize: raw.headingFontSize,
     bodyAlign: raw.bodyAlign,
     headingAlign: raw.headingAlign,
+    h1Style: raw.h1Style,
+    h2Style: raw.h2Style,
+    h2Num: raw.h2Num,
+    h3Mark: raw.h3Mark,
+    bodyBg: raw.bodyBg,
     style_skill: raw.style_skill,
     created_at: raw.created_at ?? new Date().toISOString(),
     updated_at: raw.updated_at ?? new Date().toISOString()

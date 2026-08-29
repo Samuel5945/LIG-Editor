@@ -487,6 +487,20 @@ describe('parseThemeFromHtml v5（小节标题序号范式检测）', () => {
     expect(parseThemeFromHtml(html).theme.h2Num).toBe('一、')
   })
 
+  it('「①②③」圈号序号 → h2Num ①', () => {
+    const html = `<section>
+<p style="font-size:20px;"><strong>① 选择模式</strong></p><p>正文若干</p>
+<p style="font-size:20px;"><strong>② 先聊灵感</strong></p><p>正文若干</p>
+<p style="font-size:20px;"><strong>③ 让页面活起来</strong></p><p>正文若干</p>
+</section>`
+    expect(parseThemeFromHtml(html).theme.h2Num).toBe('①')
+  })
+
+  it('圈号「②③」（不从 ① 起步）不误判为序号', () => {
+    const html = `<section><p><strong>② 先聊灵感</strong></p><p>正文</p><p><strong>③ 让页面活起来</strong></p><p>正文</p></section>`
+    expect(parseThemeFromHtml(html).theme.h2Num).toBeUndefined()
+  })
+
   it('正文普通列表「3、4、5」（不从 1 开始）不误判为序号', () => {
     const html = `<section><p>3、项目模块展示</p><p>4、个人优势卡片</p><p>5、底部联系方式</p></section>`
     expect(parseThemeFromHtml(html).theme.h2Num).toBeUndefined()

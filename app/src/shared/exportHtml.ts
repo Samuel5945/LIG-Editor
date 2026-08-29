@@ -54,6 +54,9 @@ type Styles = { -readonly [K in keyof typeof S]: string } & {
   td: string
   tdStripe: string
   tdFirst: string
+  /** 背景卡内层（background-color/圆角/内边距）：公众号粘贴/提交会剥最外层 section 样式，
+   * 视觉卡片必须挂在第二层 section 才能在公众号预览/正文里存活 */
+  card: string
 }
 
 /** 强调色转淡色底（公众号客户端不认 color-mix，预计算 rgba；非法输入回默认蓝） */
@@ -82,7 +85,8 @@ function buildStyles(theme?: ArticleTheme, uiDark?: boolean): Styles {
     th: '',
     td: '',
     tdStripe: '',
-    tdFirst: ''
+    tdFirst: '',
+    card: ''
   }
   const c = t.accent && isHexColor(t.accent) ? t.accent.trim() : DEFAULT_ACCENT
   const lh = t.lineHeight || 2.13
@@ -123,10 +127,12 @@ function buildStyles(theme?: ArticleTheme, uiDark?: boolean): Styles {
         : '#1a1a1a'
   const tableStyle = t.tableStyle ?? 'bordered'
 
-  // 正文容器：背景卡片（深色卡片 / 暖色卡片 / 透明白底）
+  // 正文容器：字号/行高/字色/字距/字体挂最外层（排版继承）；背景卡挂第二层 section——
+  // 公众号编辑器粘贴/提交草稿时会剥掉最外层容器的样式，背景/圆角/内边距放内层才能存活
   s.root = `font-size:${baseSize}px;line-height:${lh};color:${textColor};letter-spacing:${t.letterSpacing};word-break:break-word;font-family:${t.fontFamily};`
   if (t.bodyBg) {
-    s.root += `background:${t.bodyBg};border-radius:${t.bodyRadius ?? 0}px;padding:${t.bodyPadding ?? '16px 18px'};`
+    // background-color 而非 background 简写：部分清理环节只保留 background-color
+    s.card = `background-color:${t.bodyBg};border-radius:${t.bodyRadius ?? 0}px;padding:${t.bodyPadding ?? '16px 18px'};`
   }
   s.p = `font-size:${baseSize}px;line-height:${lh};color:${textColor};margin:${pGap}px 0;${pAlign}`
   s.quoteP = `margin:4px 0;font-size:${baseSize}px;line-height:${lh};color:${quoteColor};`
@@ -318,11 +324,14 @@ function toCnNum(n: number, upper: boolean): string {
   return d[Math.floor(n / 10)] + t + (n % 10 ? d[n % 10] : '')
 }
 
-/** 第 n 个小节标题的序号前缀文本（01 / 1. / 1、/ 一、/ 壹、） */
+/** 第 n 个小节标题的序号前缀文本（01 / 1. / 1、/ 一、/ 壹、/ ①） */
 function h2NumText(kind: NonNullable<ArticleTheme['h2Num']>, n: number): string {
   switch (kind) {
     case '01':
       return `${String(n).padStart(2, '0')} `
+    case '①':
+      // 圈号 ①-⑳；超过 20 回落纯数字（与编辑器 @counter-style fallback 同形）
+      return n <= 20 ? `${String.fromCodePoint(0x2460 + n - 1)} ` : `${n} `
     case '1.':
       return `${n}. `
     case '1、':
@@ -402,6 +411,9 @@ function blockToHtml(block: BlockNode, resolveImg: (src: string) => string, s: S
   }
 }
 
+/** 手写小节序号前缀（编辑器遮罩与导出剥除同源同形）：可选吃掉一个尾随空格，避免「01  标题」双空格 */
+export const SEQ_PREFIX = /^\s*(?:[一二三四五六七八九十]{1,3}、|[壹贰叁肆伍陆柒捌玖拾]{1,3}、|\d{1,2}[.、．]|\d{2}\s|[①-⑳])[ 　]?/
+
 /** doc → 正文片段 HTML（粘贴公众号用这段；不含 <html> 外壳）；theme 为排版调性（分类调性解析结果） */
 export function docToExportHtml(
   doc: ArticleDoc,
@@ -414,7 +426,6 @@ export function docToExportHtml(
   // 标题已自带序号（「一、」「1. 」「01 」「3、」等）时用主题序号格式【替换】它——
   // 剥掉标题开头的手写序号文本，再注入主题序号，避免双重序号
   let h2Seq = 0
-  const SEQ_PREFIX = /^\s*(?:[一二三四五六七八九十]{1,3}、|[壹贰叁肆伍陆柒捌玖拾]{1,3}、|\d{1,2}[.、．]|\d{2}\s|[①-⑳])/
   const body = (doc.content ?? [])
     .map((b): typeof b => {
       if (!(b.type === 'heading' && b.attrs.level === 2 && theme?.h2Num)) return b
@@ -440,7 +451,10 @@ export function docToExportHtml(
     )
     .filter(Boolean)
     .join('\n')
-  return `<section style="${s.root}">\n${body}\n</section>`
+  // 背景卡双层包裹：外层排版继承 + 内层视觉卡片（外层被公众号剥掉时内层卡片仍在）
+  return s.card
+    ? `<section style="${s.root}"><section style="${s.card}">\n${body}\n</section></section>`
+    : `<section style="${s.root}">\n${body}\n</section>`
 }
 
 /** 所选配色变体的页面外壳背景：卡片主题取实际卡片色（整页一体，与编辑器正文区一致）；

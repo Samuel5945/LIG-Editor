@@ -12,9 +12,14 @@ import {
 import { useEditor, EditorContent, BubbleMenu } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import type { JSONContent } from '@tiptap/react'
+import { Extension } from '@tiptap/core'
+import { Plugin, PluginKey } from 'prosemirror-state'
+import { Decoration, DecorationSet } from 'prosemirror-view'
 import { mdToDoc, docToMd, docToTiptap, type ArticleDoc } from '@shared/markdown'
 import { isHexColor } from '@shared/cards'
 import { DEFAULT_THEME, contrastText, isDarkColor, resolveEditorTheme, type ArticleTheme } from '@shared/categoryThemes'
+import { SEQ_PREFIX } from '@shared/exportHtml'
+import type { H1Style, H2Style, H2Num, H3Mark } from '@shared/types'
 import { FigureImage, type FigureImageStorage } from './FigureImage'
 import { FigSuggest, type FigSuggestStorage } from './FigSuggest'
 import { FigureGallery } from './FigureGallery'
@@ -32,6 +37,20 @@ const ACCENT_PRESETS: { color: string; name: string }[] = [
   { color: '#e86fa4', name: '粉' },
   { color: '#4f8cff', name: '蓝' },
   { color: '#5b6470', name: '灰' }
+]
+
+/** 文章背景卡预设（浅色系，公众号昼夜安全：夜间由公众号逻辑自动变深，深底卡夜间无法显示） */
+const BG_PRESETS: { color: string; name: string }[] = [
+  { color: '#eef3fb', name: '浅蓝白' },
+  { color: '#fffaf2', name: '暖白' },
+  { color: '#fff0f0', name: '浅粉' },
+  { color: '#f0fdf4', name: '浅绿' },
+  { color: '#f5f3ff', name: '浅紫' },
+  { color: '#f1f5f9', name: '浅灰' },
+  { color: '#fdf6e3', name: '米黄' },
+  { color: '#e6f7f4', name: '浅青' },
+  { color: '#fff7e6', name: '杏色' },
+  { color: '#eefaf1', name: '薄荷' }
 ]
 
 /** 选区字色预设（正文/强调通用；白色常用于深底卡片上提亮文字） */
@@ -78,6 +97,35 @@ const HEADING_ALIGNS: { value: 'center' | 'left'; label: string }[] = [
   { value: 'center', label: '居中' },
   { value: 'left', label: '左' }
 ]
+/** H1 装饰三态：bar 短横收尾 / pill 胶囊色块字底 / underline 下划线 */
+const H1_STYLES: { value: H1Style; label: string }[] = [
+  { value: 'bar', label: '短横' },
+  { value: 'pill', label: '胶囊' },
+  { value: 'underline', label: '下划线' }
+]
+/** H2 装饰四态：leftbar 左竖条 / block 色块标签 / underline 下划线 / plain 纯文字 */
+const H2_STYLES: { value: H2Style; label: string }[] = [
+  { value: 'leftbar', label: '左竖条' },
+  { value: 'block', label: '色块' },
+  { value: 'underline', label: '下划线' },
+  { value: 'plain', label: '纯文字' }
+]
+/** H2 序号：none 显式关掉主题自带序号 / 其余按文档 h2 顺序自动编号 */
+const H2_NUMS: { value: H2Num | 'none'; label: string }[] = [
+  { value: 'none', label: '关' },
+  { value: '01', label: '01' },
+  { value: '1.', label: '1.' },
+  { value: '1、', label: '1、' },
+  { value: '一、', label: '一、' },
+  { value: '壹、', label: '壹、' },
+  { value: '①', label: '①' }
+]
+/** H3 前缀：diamond 菱形 / dot 圆点 / none 无 */
+const H3_MARKS: { value: H3Mark; label: string }[] = [
+  { value: 'diamond', label: '菱形' },
+  { value: 'dot', label: '圆点' },
+  { value: 'none', label: '无' }
+]
 
 /** 选区样式弹层：全屏透明层点击关闭 + 绝对定位面板（相对 BubbleMenu 容器，向上展开不挡选区） */
 function StylePanel({
@@ -104,6 +152,79 @@ export interface EditorSelection {
   from: number
   to: number
   text: string
+}
+
+/** 工具栏排版下拉的分区：灰色小标题 + 选项格 */
+function TypeSection({ label, children }: { label: string; children: ReactNode }): ReactElement {
+  return (
+    <div className="mb-1.5">
+      <div className="px-1 pb-1 text-[10px] text-slate-500">{label}</div>
+      {children}
+    </div>
+  )
+}
+
+/**
+ * H2 手写序号遮罩：h2Num 序号启用时，把标题开头的手写序号（①/一、/01 等）隐藏，
+ * 自动序号顶上——与导出端 blockToHtml 的「剥手写、注主题序号」同语义，预览即所见。
+ * 非破坏：decoration 只隐藏不改 doc，关掉序号后手写序号原样回来。
+ */
+const h2MaskKey = new PluginKey('h2NumMask')
+const H2NumMask = Extension.create({
+  name: 'h2NumMask',
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        key: h2MaskKey,
+        state: {
+          init: () => false,
+          apply: (tr, val) => tr.getMeta(h2MaskKey) ?? val
+        },
+        props: {
+          decorations(state) {
+            if (!h2MaskKey.getState(state)) return DecorationSet.empty
+            const decos: Decoration[] = []
+            state.doc.descendants((node, pos) => {
+              if (node.type.name !== 'heading' || node.attrs.level !== 2) return
+              const first = node.content.firstChild
+              if (!first || first.type.name !== 'text' || !first.text) return
+              const m = SEQ_PREFIX.exec(first.text)
+              if (m) decos.push(Decoration.inline(pos + 1, pos + 1 + m[0].length, { class: 'h2num-mask' }))
+            })
+            return decos.length ? DecorationSet.create(state.doc, decos) : DecorationSet.empty
+          }
+        }
+      })
+    ]
+  }
+})
+
+/** 排版选项格：等宽小按钮、选中高亮；高亮值 = 覆盖值或主题回退值（与面板所见一致） */
+function TypeOptions<T extends string | number>({
+  options,
+  value,
+  cols,
+  onPick
+}: {
+  options: { value: T; label: string }[]
+  value: T | undefined
+  cols: number
+  onPick: (v: T) => void
+}): ReactElement {
+  return (
+    <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
+      {options.map((o) => (
+        <button
+          key={String(o.value)}
+          type="button"
+          onClick={() => onPick(o.value)}
+          className={`rounded px-1 py-1 text-xs ${value === o.value ? 'bg-sky-600 text-white' : 'text-slate-300 hover:bg-slate-700'}`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  )
 }
 
 /** App 层经 ref 驱动编辑器的命令式 API（AI 修改/审阅定位用） */
@@ -141,12 +262,19 @@ interface ArticleEditorProps {
   onEditFigureSource?: (figureSource: string, desc: string) => void
   /** 工具栏快速换强调色：null = 恢复默认蓝 */
   onAccentChange?: (color: string | null) => void
-  /** 项目显式排版覆盖（meta 同名字段）：正文字号/标题字号/正文排列/标题排列，undefined = 跟随主题 */
+  /** 项目显式排版覆盖（meta 同名字段）：字号/排列 + 标题版式四项 + 背景卡，undefined = 跟随主题 */
   typography?: {
     bodyFontSize?: number
     headingFontSize?: number
     bodyAlign?: 'indent' | 'flush' | 'center'
     headingAlign?: 'center' | 'left'
+    h1Style?: H1Style
+    h2Style?: H2Style
+    /** 'none' = 显式关掉主题自带序号（与 undefined「跟随主题」语义不同） */
+    h2Num?: H2Num | 'none'
+    h3Mark?: H3Mark
+    /** hex 覆盖主题背景卡；'none' 显式去卡片（透明白底）；undefined 跟随主题 */
+    bodyBg?: string
   }
   /** 工具栏排版设置：patch 值 null = 恢复默认（跟随主题） */
   onTypographyChange?: (patch: {
@@ -154,6 +282,11 @@ interface ArticleEditorProps {
     headingFontSize?: number | null
     bodyAlign?: 'indent' | 'flush' | 'center' | null
     headingAlign?: 'center' | 'left' | null
+    h1Style?: H1Style | null
+    h2Style?: H2Style | null
+    h2Num?: H2Num | 'none' | null
+    h3Mark?: H3Mark | null
+    bodyBg?: string | null
   }) => void
 }
 
@@ -168,10 +301,12 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
 ): ReactElement {
   const lastEmitted = useRef(markdown)
   const [accentOpen, setAccentOpen] = useState(false)
+  /** 工具栏背景卡弹层：预设浅色 / 自定义 / 无卡片 / 跟随主题 */
+  const [bgOpen, setBgOpen] = useState(false)
   /** 选区样式弹层：color 字色 / bg 背景高亮 / size 字号 */
   const [stylePop, setStylePop] = useState<'color' | 'bg' | 'size' | null>(null)
-  /** 工具栏排版弹层：bodySize 正文字号 / headingSize 标题字号 / bodyAlign 正文排列 / headingAlign 标题排列 */
-  const [typePop, setTypePop] = useState<'bodySize' | 'headingSize' | 'bodyAlign' | 'headingAlign' | null>(null)
+  /** 工具栏排版弹层：body 正文（字号/排列）/ heading 标题（字号/排列/装饰版式/序号/前缀） */
+  const [typePop, setTypePop] = useState<'body' | 'heading' | null>(null)
 
   const editor = useEditor({
     extensions: [
@@ -190,7 +325,8 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
       FigSuggest,
       FigureGallery,
       ArticleTable,
-      TextStyleMark
+      TextStyleMark,
+      H2NumMask
     ],
     content: docToTiptap(mdToDoc(markdown)),
     onUpdate({ editor }) {
@@ -199,6 +335,15 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
       onChange(md)
     }
   })
+
+  // h2Num 开/关 → 下发遮罩开关 meta（独立小事务不动文档，不触发 onChange）；
+  // doc 变化时 decorations 按最新 state 自动重算，无需干预
+  const h2NumActive = Boolean(theme?.h2Num)
+  useEffect(() => {
+    if (!editor || editor.isDestroyed) return
+    if (h2MaskKey.getState(editor.state) === h2NumActive) return
+    editor.view.dispatch(editor.state.tr.setMeta(h2MaskKey, h2NumActive))
+  }, [editor, h2NumActive])
 
   useImperativeHandle(
     ref,
@@ -424,93 +569,185 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
             </div>
           )}
         </div>
-        {/* 排版：正文字号 / 标题字号 / 正文排列 / 标题排列（meta 覆盖主题，编辑器与导出同源） */}
+        {/* 背景卡快速换色：hex 覆盖主题 / none 去卡片（白底）/ null 跟随主题；夜间由公众号逻辑自动变深 */}
+        {(() => {
+          const bgOv = typography?.bodyBg
+          const effBg = bgOv === 'none' ? undefined : bgOv && isHexColor(bgOv) ? bgOv : theme?.bodyBg
+          const bgNone = bgOv === 'none' || (bgOv === undefined && !theme?.bodyBg)
+          return (
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setBgOpen((v) => !v)}
+                title="文章背景卡片颜色（公众号夜间自动变深）"
+                className="flex items-center gap-1 rounded px-2 py-0.5 text-slate-300 hover:bg-slate-700"
+              >
+                <span
+                  className="inline-block h-3 w-3 rounded-full border border-slate-500"
+                  style={{ background: effBg ?? 'transparent' }}
+                />
+                背景
+              </button>
+              {bgOpen && (
+                <div className="absolute left-0 top-full z-50 mt-1 w-56 rounded-lg border border-slate-700 bg-slate-900 p-2 shadow-xl">
+                  <div className="grid grid-cols-5 gap-1">
+                    {BG_PRESETS.map((p) => (
+                      <button
+                        key={p.color}
+                        type="button"
+                        title={p.name}
+                        onClick={() => {
+                          onTypographyChange?.({ bodyBg: p.color })
+                          setBgOpen(false)
+                        }}
+                        className={`h-5 w-5 rounded-full border border-slate-600 ${
+                          effBg?.toLowerCase() === p.color ? 'ring-2 ring-white' : ''
+                        }`}
+                        style={{ background: p.color }}
+                      />
+                    ))}
+                  </div>
+                  <div className="mt-2 flex items-center gap-2">
+                    <label className="flex flex-1 items-center gap-1 text-[10px] text-slate-400">
+                      自定义
+                      <input
+                        type="color"
+                        value={effBg && isHexColor(effBg) ? effBg : '#eef3fb'}
+                        onChange={(e) => onTypographyChange?.({ bodyBg: e.target.value })}
+                        className="h-6 w-8 cursor-pointer rounded border border-slate-600 bg-transparent"
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onTypographyChange?.({ bodyBg: 'none' })
+                        setBgOpen(false)
+                      }}
+                      className={`rounded border px-2 py-1 text-[10px] hover:bg-slate-700 ${
+                        bgNone ? 'border-sky-500 text-sky-300' : 'border-slate-600 text-slate-300'
+                      }`}
+                    >
+                      无卡片（白底）
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onTypographyChange?.({ bodyBg: null })
+                        setBgOpen(false)
+                      }}
+                      className="rounded border border-slate-600 px-2 py-1 text-[10px] text-slate-400 hover:bg-slate-700"
+                    >
+                      跟随主题
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )
+        })()}
+        {/* 排版：正文（字号/排列）与标题（字号/排列/装饰版式/序号/前缀）两个分区下拉。
+            覆盖值落 meta（null = 跟随主题），resolveArticleTheme 合并后编辑器/导出/推送同源生效 */}
         {(() => {
           const t = theme ?? DEFAULT_THEME
           const bodySize = typography?.bodyFontSize ?? t.fontSize ?? 16
           const headingSize = typography?.headingFontSize ?? t.headingFontSize ?? 20
           const bodyAlign = typography?.bodyAlign ?? t.bodyAlign ?? 'flush'
           const headingAlign = typography?.headingAlign ?? t.headingAlign ?? 'center'
-          const bodyAlignLabel = BODY_ALIGNS.find((a) => a.value === bodyAlign)?.label ?? '顶格'
-          const headingAlignLabel = HEADING_ALIGNS.find((a) => a.value === headingAlign)?.label ?? '居中'
+          // 版式高亮值：覆盖优先，否则显示解析后的主题值（含 h2Num 的 'none' 显式关闭态）
+          const h1Cur = typography?.h1Style ?? t.h1Style
+          const h2Cur = typography?.h2Style ?? t.h2Style
+          const h2NumCur = typography?.h2Num ?? t.h2Num
+          const h3Cur = typography?.h3Mark ?? t.h3Mark
           const typeBtn = 'flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[11px] text-slate-300 hover:bg-slate-700'
           const typePanel =
-            'absolute left-0 top-full z-50 mt-1 w-36 rounded-lg border border-slate-700 bg-slate-900 p-1.5 shadow-xl'
+            'absolute left-0 top-full z-50 mt-1 w-64 rounded-lg border border-slate-700 bg-slate-900 p-2 shadow-xl'
           const typeReset =
-            'mt-1 block w-full rounded border border-slate-600 px-2 py-1 text-left text-[10px] text-slate-400 hover:bg-slate-700'
+            'mt-0.5 block w-full rounded border border-slate-600 px-2 py-1 text-left text-[10px] text-slate-400 hover:bg-slate-700'
           return (
             <>
               <div className="relative">
-                <button type="button" title="正文字号（覆盖主题，导出同步）" onClick={() => setTypePop(typePop === 'bodySize' ? null : 'bodySize')} className={typeBtn}>
+                <button type="button" title="正文排版：字号 / 排列（覆盖主题，导出同步）" onClick={() => setTypePop(typePop === 'body' ? null : 'body')} className={typeBtn}>
                   正文 {bodySize} <span className="text-[8px] text-slate-500">▾</span>
                 </button>
-                {typePop === 'bodySize' && (
+                {typePop === 'body' && (
                   <div className={typePanel}>
-                    {BODY_FONT_SIZES.map((n) => (
-                      <button key={n} type="button" onClick={() => { onTypographyChange?.({ bodyFontSize: n }); setTypePop(null) }}
-                        className={`block w-full rounded px-2 py-1 text-left text-xs ${bodySize === n ? 'bg-sky-600 text-white' : 'text-slate-300 hover:bg-slate-700'}`}>
-                        {n}px
-                      </button>
-                    ))}
-                    <button type="button" onClick={() => { onTypographyChange?.({ bodyFontSize: null }); setTypePop(null) }} className={typeReset}>
+                    <TypeSection label="字号">
+                      <TypeOptions
+                        options={BODY_FONT_SIZES.map((n) => ({ value: n, label: `${n}px` }))}
+                        value={bodySize}
+                        cols={5}
+                        onPick={(n) => { onTypographyChange?.({ bodyFontSize: n }); setTypePop(null) }}
+                      />
+                    </TypeSection>
+                    <TypeSection label="排列">
+                      <TypeOptions
+                        options={BODY_ALIGNS}
+                        value={bodyAlign}
+                        cols={3}
+                        onPick={(v) => { onTypographyChange?.({ bodyAlign: v }); setTypePop(null) }}
+                      />
+                    </TypeSection>
+                    <button type="button" onClick={() => { onTypographyChange?.({ bodyFontSize: null, bodyAlign: null }); setTypePop(null) }} className={typeReset}>
                       恢复默认（跟随主题）
                     </button>
                   </div>
                 )}
               </div>
               <div className="relative">
-                <button type="button" title="标题字号（H1/H2/H3 整体缩放）" onClick={() => setTypePop(typePop === 'headingSize' ? null : 'headingSize')} className={typeBtn}>
+                <button type="button" title="标题排版：字号 / 排列 / 装饰版式 / 序号 / 前缀（覆盖主题，导出同步）" onClick={() => setTypePop(typePop === 'heading' ? null : 'heading')} className={typeBtn}>
                   标题 {headingSize} <span className="text-[8px] text-slate-500">▾</span>
                 </button>
-                {typePop === 'headingSize' && (
+                {typePop === 'heading' && (
                   <div className={typePanel}>
-                    {HEADING_FONT_SIZES.map((n) => (
-                      <button key={n} type="button" onClick={() => { onTypographyChange?.({ headingFontSize: n }); setTypePop(null) }}
-                        className={`block w-full rounded px-2 py-1 text-left text-xs ${headingSize === n ? 'bg-sky-600 text-white' : 'text-slate-300 hover:bg-slate-700'}`}>
-                        {n}px
-                      </button>
-                    ))}
-                    <button type="button" onClick={() => { onTypographyChange?.({ headingFontSize: null }); setTypePop(null) }} className={typeReset}>
-                      恢复默认（跟随主题）
-                    </button>
-                  </div>
-                )}
-              </div>
-              <div className="relative">
-                <button type="button" title="正文排列：缩进 / 顶格 / 居中" onClick={() => setTypePop(typePop === 'bodyAlign' ? null : 'bodyAlign')} className={typeBtn}>
-                  正文·{bodyAlignLabel} <span className="text-[8px] text-slate-500">▾</span>
-                </button>
-                {typePop === 'bodyAlign' && (
-                  <div className={typePanel}>
-                    <div className="grid grid-cols-3 gap-1">
-                      {BODY_ALIGNS.map((a) => (
-                        <button key={a.value} type="button" onClick={() => { onTypographyChange?.({ bodyAlign: a.value }); setTypePop(null) }}
-                          className={`rounded px-1 py-1 text-xs ${bodyAlign === a.value ? 'bg-sky-600 text-white' : 'text-slate-300 hover:bg-slate-700'}`}>
-                          {a.label}
-                        </button>
-                      ))}
-                    </div>
-                    <button type="button" onClick={() => { onTypographyChange?.({ bodyAlign: null }); setTypePop(null) }} className={typeReset}>
-                      恢复默认（跟随主题）
-                    </button>
-                  </div>
-                )}
-              </div>
-              <div className="relative">
-                <button type="button" title="标题排列：居中 / 左对齐" onClick={() => setTypePop(typePop === 'headingAlign' ? null : 'headingAlign')} className={typeBtn}>
-                  标题·{headingAlignLabel} <span className="text-[8px] text-slate-500">▾</span>
-                </button>
-                {typePop === 'headingAlign' && (
-                  <div className={typePanel}>
-                    <div className="grid grid-cols-2 gap-1">
-                      {HEADING_ALIGNS.map((a) => (
-                        <button key={a.value} type="button" onClick={() => { onTypographyChange?.({ headingAlign: a.value }); setTypePop(null) }}
-                          className={`rounded px-1 py-1 text-xs ${headingAlign === a.value ? 'bg-sky-600 text-white' : 'text-slate-300 hover:bg-slate-700'}`}>
-                          {a.label}
-                        </button>
-                      ))}
-                    </div>
-                    <button type="button" onClick={() => { onTypographyChange?.({ headingAlign: null }); setTypePop(null) }} className={typeReset}>
+                    <TypeSection label="字号">
+                      <TypeOptions
+                        options={HEADING_FONT_SIZES.map((n) => ({ value: n, label: `${n}px` }))}
+                        value={headingSize}
+                        cols={5}
+                        onPick={(n) => { onTypographyChange?.({ headingFontSize: n }); setTypePop(null) }}
+                      />
+                    </TypeSection>
+                    <TypeSection label="排列">
+                      <TypeOptions
+                        options={HEADING_ALIGNS}
+                        value={headingAlign}
+                        cols={2}
+                        onPick={(v) => { onTypographyChange?.({ headingAlign: v }); setTypePop(null) }}
+                      />
+                    </TypeSection>
+                    <TypeSection label="H1 装饰">
+                      <TypeOptions
+                        options={H1_STYLES}
+                        value={h1Cur}
+                        cols={3}
+                        onPick={(v) => { onTypographyChange?.({ h1Style: v }); setTypePop(null) }}
+                      />
+                    </TypeSection>
+                    <TypeSection label="H2 装饰">
+                      <TypeOptions
+                        options={H2_STYLES}
+                        value={h2Cur}
+                        cols={4}
+                        onPick={(v) => { onTypographyChange?.({ h2Style: v }); setTypePop(null) }}
+                      />
+                    </TypeSection>
+                    <TypeSection label="H2 序号">
+                      <TypeOptions
+                        options={H2_NUMS}
+                        value={h2NumCur}
+                        cols={4}
+                        onPick={(v) => { onTypographyChange?.({ h2Num: v }); setTypePop(null) }}
+                      />
+                    </TypeSection>
+                    <TypeSection label="H3 前缀">
+                      <TypeOptions
+                        options={H3_MARKS}
+                        value={h3Cur}
+                        cols={3}
+                        onPick={(v) => { onTypographyChange?.({ h3Mark: v }); setTypePop(null) }}
+                      />
+                    </TypeSection>
+                    <button type="button" onClick={() => { onTypographyChange?.({ headingFontSize: null, headingAlign: null, h1Style: null, h2Style: null, h2Num: null, h3Mark: null }); setTypePop(null) }} className={typeReset}>
                       恢复默认（跟随主题）
                     </button>
                   </div>
@@ -817,25 +1054,12 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
             }
             // 小节序号（导入排版「01 标题」范式）：CSS counter 表达式按序号样式注入，
             // 与导出端 h2NumText 同形（公众号剥伪元素，导出由 blockToHtml 注真实文本）。
-            // 标题已自带序号（「一、」「1. 」「01 」「3、」等）时跳过，避免手写 + 自动编号双重序号
-            const alreadyNumbered = (text: string): boolean =>
-              /^\s*(?:[一二三四五六七八九十]{1,3}、|[壹贰叁肆伍陆柒捌玖拾]{1,3}、|\d{1,2}[.、．]|\d{2}\s|[①-⑳])/.test(text)
-            const hasNumberedHeading = (): boolean => {
-              if (!editor) return false
-              let found = false
-              editor.state.doc.descendants((node) => {
-                if (found) return false
-                if (node.type.name === 'heading' && node.attrs.level === 2) {
-                  const text = node.textContent ?? ''
-                  if (alreadyNumbered(text)) found = true
-                }
-                return !found
-              })
-              return found
-            }
-            if (t.h2Num && !hasNumberedHeading()) {
+            // 标题手写序号由 H2NumMask 扩展隐藏、自动序号顶上（与导出端剥除+注入同语义）
+            if (t.h2Num) {
               vars['--article-h2-num'] = {
                 '01': 'counter(h2num, decimal-leading-zero) " "',
+                // 圈号：h2circled 在 index.css 用 @counter-style 定义（①-⑳，超出回落数字）
+                '①': 'counter(h2num, h2circled) " "',
                 '1.': 'counter(h2num) ". "',
                 '1、': 'counter(h2num) "、"',
                 '一、': 'counter(h2num, simp-chinese-informal) "、"',

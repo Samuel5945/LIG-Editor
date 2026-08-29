@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { AppPaths, ArticleTheme, IdeaCard, ProjectData, ProjectMeta, ProjectSummary, SkillInfo } from '@shared/types'
+import type { AppPaths, ArticleTheme, H1Style, H2Style, H2Num, H3Mark, IdeaCard, ProjectData, ProjectMeta, ProjectSummary, SkillInfo } from '@shared/types'
 import { PROJECT_CATEGORIES, UNCATEGORIZED } from '@shared/categories'
 import { resolveArticleTheme } from '@shared/categoryThemes'
 import { CARD_FORMAT_LABEL, parseCardItems, type CardFormat } from '@shared/cards'
@@ -502,13 +502,18 @@ export default function App(): JSX.Element {
     setMeta(m)
   }, [])
 
-  /** 排版设置落 meta：正文字号/标题字号/正文排列/标题排列；null = 删除覆盖恢复主题默认 */
+  /** 排版设置落 meta：字号/排列 + 标题版式 + 背景卡（bodyBg，'none'=去卡片）；null = 删除覆盖恢复主题默认 */
   const handleApplyTypography = useCallback(
     async (patch: {
       bodyFontSize?: number | null
       headingFontSize?: number | null
       bodyAlign?: 'indent' | 'flush' | 'center' | null
       headingAlign?: 'center' | 'left' | null
+      h1Style?: H1Style | null
+      h2Style?: H2Style | null
+      h2Num?: H2Num | 'none' | null
+      h3Mark?: H3Mark | null
+      bodyBg?: string | null
     }) => {
       if (!currentRef.current) throw new Error('先打开工程')
       const m = await window.api.invoke('project:readMeta', currentRef.current)
@@ -516,6 +521,11 @@ export default function App(): JSX.Element {
       if ('headingFontSize' in patch) m.headingFontSize = patch.headingFontSize ?? undefined
       if ('bodyAlign' in patch) m.bodyAlign = patch.bodyAlign ?? undefined
       if ('headingAlign' in patch) m.headingAlign = patch.headingAlign ?? undefined
+      if ('h1Style' in patch) m.h1Style = patch.h1Style ?? undefined
+      if ('h2Style' in patch) m.h2Style = patch.h2Style ?? undefined
+      if ('h2Num' in patch) m.h2Num = patch.h2Num ?? undefined
+      if ('h3Mark' in patch) m.h3Mark = patch.h3Mark ?? undefined
+      if ('bodyBg' in patch) m.bodyBg = patch.bodyBg ?? undefined
       await window.api.invoke('project:writeMeta', currentRef.current, m)
       setMeta(m)
     },
@@ -633,11 +643,11 @@ export default function App(): JSX.Element {
             🔄 版本更新
           </button>
           <button
-            onClick={() => window.open('https://github.com/Samuel5945/LIG-Editor')}
-            title="GitHub 开源仓库"
+            onClick={() => window.open('https://ligdesign.win/')}
+            title="LIG 立格 Studio 品牌官网：设计 · 工具 · 桌面美学"
             className="rounded px-2 py-1 hover:bg-panel-3"
           >
-            ★ GitHub
+            🌐 官网
           </button>
         </div>
         <div className="flex h-full items-stretch">

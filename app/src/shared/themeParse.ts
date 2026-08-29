@@ -457,12 +457,12 @@ function cnOrdinal(s: string, upper: boolean): number | null {
 }
 
 /**
- * 小节标题序号范式检测：文本段以「01 」「1.」「1、」「一、」「壹、」开头。
+ * 小节标题序号范式检测：文本段以「01 」「1.」「1、」「一、」「壹、」「①」开头。
  * 要求同一种类从 1 开始、文档序严格递增且 ≥2 个——正文里的普通列表「3、4、5」
  * （不从 1 开始）和零散「12 个技巧」不会误判成标题序号。
  */
 function detectH2Num(html: string): ArticleTheme['h2Num'] {
-  const KINDS = ['01', '1.', '1、', '一、', '壹、'] as const
+  const KINDS = ['01', '1.', '1、', '一、', '壹、', '①'] as const
   type Kind = (typeof KINDS)[number]
   const hits: { kind: Kind; n: number }[] = []
   for (const m of html.matchAll(/>([^<]{1,40})</g)) {
@@ -471,6 +471,7 @@ function detectH2Num(html: string): ArticleTheme['h2Num'] {
     if ((km = /^(\d{2})\s+\S/.exec(s))) hits.push({ kind: '01', n: Number(km[1]) })
     else if ((km = /^([1-9]\d?)\s*、/.exec(s))) hits.push({ kind: '1、', n: Number(km[1]) })
     else if ((km = /^([1-9]\d?)[.．]\s*\S/.exec(s))) hits.push({ kind: '1.', n: Number(km[1]) })
+    else if ((km = /^([①-⑳])\s*\S/.exec(s))) hits.push({ kind: '①', n: km[1].codePointAt(0)! - 0x2460 + 1 })
     else if ((km = /^([一二三四五六七八九十]{1,3})、/.exec(s))) {
       const n = cnOrdinal(km[1], false)
       if (n !== null) hits.push({ kind: '一、', n })
