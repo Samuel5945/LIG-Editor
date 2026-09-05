@@ -52,7 +52,7 @@
 | 富文本编辑器 | TipTap（ProseMirror） |
 | 图像处理 | sharp + 自研抠图算法 |
 | 代码绘图 | Electron offscreen BrowserWindow（HTML→PNG） |
-| MCP | `@modelcontextprotocol/sdk`（stdio + 本地 HTTP） |
+| MCP | stdio 代理与本地 HTTP 桥为手写零依赖；远程网关用 `@modelcontextprotocol/sdk`（StreamableHTTP） |
 | 文件监听 | chokidar（工程文件热载） |
 
 ## 开发
@@ -71,7 +71,7 @@ npm run dist     # 构建 + 打包 Windows 安装包
 ┌─ Electron 主进程 ───────────────────────────────┐
 │ · 工程文件存储 + chokidar 热载                    │
 │ · 模型调用代理（OpenAI 兼容，流式转发）            │
-│ · MCP 能力核（stdio + 本地 HTTP/SSE）             │
+│ · MCP 能力核（stdio + 本地 HTTP + 远程网关）      │
 │ · offscreen 渲染器（figures/*.html → assets/*.png）│
 │ · 图像处理（抠图/裁切/封面合成）                   │
 │ · 密钥 DPAPI 加密存储（safeStorage）               │

@@ -5,6 +5,7 @@ import { registerIpc, extractMdPaths, queueOrBroadcastMd } from './ipc'
 import { watchWorkspace } from './watcher'
 import { getAppPaths } from './paths'
 import { startBridge, stopBridge } from './bridge'
+import { startRemoteClient, stopRemoteClient } from './remote/remoteClient'
 import { seedBundledSkills } from './skillStore'
 import { migrateWorkspaceLayout } from './projectStore'
 import { migrateSafeStorageKey } from './oscryptMigrate'
@@ -114,6 +115,9 @@ app.whenReady().then(() => {
   registerIpc()
   watchWorkspace()
   startBridge()
+  // 远程 MCP 设备端：只在 GUI 分支拨号。无头分支若也注册为设备，会用同一个 deviceId
+  // 把 GUI 的活连接从网关顶掉（且 MCP_MODE 跳过单实例锁，并发无头实例会成倍放大）
+  startRemoteClient()
   // 只保留编辑/视图菜单的快捷键（菜单栏不显示）：复制粘贴、撤销、开发者工具等照常可用
   Menu.setApplicationMenu(Menu.buildFromTemplate([{ role: 'editMenu' }, { role: 'viewMenu' }]))
   // 首实例启动参数里拖拽/关联的 .md：入队等窗口加载完成后统一放行
@@ -125,7 +129,12 @@ app.whenReady().then(() => {
   })
 })
 
-app.on('will-quit', () => stopBridge())
+app.on('will-quit', () => {
+  // 先停远程再拆桥：远程可能有在途 tool_call，先断它才能让网关立刻把 pending 判成「设备已断开」，
+  // 而不是让调用方白等满 120 秒超时。两者都是同步的，will-quit 里不能 await
+  stopRemoteClient()
+  stopBridge()
+})
 
 app.on('window-all-closed', () => {
   if (!MCP_MODE && process.platform !== 'darwin') app.quit()

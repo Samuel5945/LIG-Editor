@@ -254,6 +254,64 @@ set_cover(image, crop) / export_html                # 封面与导出
 
 Agent 直接编辑 article.md / figures/*.html / project.json → watcher 热载。figures/*.html 变化时自动重渲染对应 PNG（可在设置关闭）。
 
+### 10.4 远程 MCP 网关（Phase 1：只读闭环）
+
+10.1 的两条通道都只能被**同机** Agent 使用（桥绑 `127.0.0.1` 随机端口，代理靠读 `bridge.json` 发现它）。远程 MCP 客户端要驱动这台机器上的编辑器，家用网络没有公网 IP、不开端口转发，方向只能反过来：**编辑器主动出站拨号**到网关，网关对外说 MCP。
+
+```
+MCP 客户端 ──HTTP POST /mcp──> remote-mcp 网关 ──WS /device（编辑器出站拨号）──> 立格编辑器
+                                                                              └─> CapabilityCore.callTool()
+```
+
+**承重不变量：`capabilityCore.ts` 一行不改，网关不维护第二张工具表。** 编辑器握手后把 `TOOLS` 全量（23 个）原样推给网关，网关只按工具名过滤出白名单三个。这与 `mcp-proxy.cjs` 实时拉 `GET /tools` 是同一思路——工具定义永远只有 capabilityCore 一个真源。
+
+Phase 1 范围：只暴露 `list_projects` / `get_project` / `read_article`，网关只绑 `127.0.0.1`，不上公网、不做 OAuth、不做设备配对、不开放任何写操作。写工具**照样被推给网关**，挡住它们靠的是网关侧一个 `Set`——编辑器完全不知道自己正处在「只读模式」。
+
+**设备通道协议**（5 个消息型，两份手工镜像：`app/src/main/remote/remoteProtocol.ts` 为原本，`remote-mcp/src/protocol.ts` 为镜像，改协议必须两边同改并跑冒烟）：
+
+| type | 方向 | 载荷 |
+|---|---|---|
+| `hello` | 编辑器 → 网关 | `{protocol, deviceId, appVersion}` |
+| `ready` | 网关 → 编辑器 | `{protocol, heartbeatMs}` |
+| `tools` | 编辑器 → 网关 | `{tools: RemoteToolMeta[]}`（全量工具表） |
+| `tool_call` | 网关 → 编辑器 | `{id, name, arguments}` |
+| `tool_result` | 编辑器 → 网关 | `{id, ok:true, result}` \| `{id, ok:false, error}` |
+
+`tool_result` 的信封与 `bridge.ts` 逐字一致，两个入口对外表现相同。线上跑的是 JSON，**类型是文档不是契约**——两端收帧都过运行时校验函数实际验字段。
+
+网关侧对外用 MCP SDK 的**低阶 `Server`** 而非 `McpServer`：`McpServer.registerTool` 的 `inputSchema` 只收 zod，换它就得把 23 个手写 JSON Schema 全部重写成 zod——凭空多出第二张工具表，必然与真源漂移。代价是 `Server` 的 JSDoc 标了 `@deprecated`（透传 JSON Schema 正是它说的「advanced use case」，弃用标记无运行时警告），且 `tools/call` 的返回值会被 SDK 复验，必须回 `{content, isError}` 信封。传输层取**无状态 + JSON 响应**：网关真实状态（设备表、pending、工具聚合）全在模块级单例里，不挂在 `Server` 实例上，按请求新建不丢任何东西，且一条 curl 就能调完整个网关。
+
+**环境变量**（编辑器侧全部可选，未配 `LIG_REMOTE_MCP=1` 时模块是彻底的空操作，不多一条出站连接）：
+
+| 变量 | 进程 | 默认 | 说明 |
+|---|---|---|---|
+| `LIG_REMOTE_MCP` | 编辑器 | 未设 | 必须恰为 `1` 才启用 |
+| `LIG_REMOTE_GATEWAY` | 编辑器 | `ws://127.0.0.1:3000/device` | 将来换 `wss://` 无需改码 |
+| `LIG_REMOTE_DEVICE_ID` | 编辑器 | `os.hostname()` | 两台机器接同一网关不会撞 |
+| `LIG_REMOTE_DEVICE_TOKEN` | 编辑器 + 网关 `/device` | 无 | 空 → 编辑器记 warning 不拨号 |
+| `LIG_REMOTE_CLIENT_TOKEN` | 网关 `/mcp` | 无 | 空 → 网关拒绝启动（fail closed） |
+| `PORT` | 网关 | `3000` | |
+
+无头模式（`--mcp`）**刻意不拨号**：`mcp-proxy.cjs` 仅在 GUI 未运行时才拉起无头实例，且 `index.ts` 在 `MCP_MODE` 下跳过单实例锁——无头实例若也注册为设备，会用同一个 `deviceId` 把 GUI 的活连接从网关顶掉（网关对同 id 是驱逐语义），代理退出时设备表还会抖动。
+
+**已推迟的接缝**：
+
+| 推迟项 | 接缝在哪 | 届时改动范围 |
+|---|---|---|
+| 工具标注 `access: read/write/dangerous` | `mcp.ts` 的 `READ_ONLY_TOOLS` Set | 换成按 `access` 过滤，单点 |
+| safeStorage 存设备 token | `remoteClient.ts` 的 `readConfig()` 是唯一读 token 处 | 换成 `remoteSecrets.readDeviceToken()`；须遵守 `migrateSafeStorageKey()` 先于任何 safeStorage 调用的次序，并沿用 `<root>/settings/*.json` + 明文回退约定 |
+| 设备配对 / 每设备独立 token | `server.ts` 的两个 token 常量 | 单点替换 |
+| 公网部署 + 有状态 MCP | `server.ts` 的无状态 transport 构造 | 加 session Map + `sessionIdGenerator` + 真 GET/DELETE；**设备协议与 `deviceRegistry.ts` 零改动**。无状态发不出服务端主动消息，被推迟的「本地确认弹窗」依赖 `elicitation/create`，届时必须转有状态 |
+| `write_article` 的请求体上限 | `createMcpExpressApp` 内 `express.json()` 默认 **100kb**（`bridge.ts` 是 32MB） | 换 `express()` + `express.json({limit:'32mb'})` + `localhostHostValidation()`。Phase 1 入参只有 `{project, file}`，撞不到；开放写工具后整篇文章作参数**一定会撞** |
+| 协议膨胀到需要单一包 | 两份手工镜像 | 届时引入根 workspace 包（现在引入要给一个刻意没有 root package.json 的仓库加 workspaces，且 `file:` 依赖与 electron-builder 的 asar 复制相性差） |
+
+**上公网前必须处理的两点**：
+
+1. **绝对路径外泄**：`list_projects` 返回的 `dir` 是绝对 Windows 路径（形如 `C:\Users\<名>\...\workspace\未分类\<工程>`）。本地桥今天就在泄，Phase 1 网关只绑回环不算回归；但一旦对第三方（如 ChatGPT Web）可达，就是在公布用户名与目录布局。**不在网关侧脱敏**——那意味着网关开始理解工具载荷结构，破坏「原样透传、零工具知识」这个让整套设计便宜的不变量，且每新增一个返回路径的工具都要记得改。应在 capabilityCore/存储层收口。
+2. **路径穿越已由存储层挡住**：`assertSafeName` 在建任何路径之前就拒 `..` 与非法字符，远程网关白捡这份防护（冒烟已断言 `../../settings` 被拒且未泄任何文件）。新增工具时不要绕过 `projectDir()` 自行拼路径。
+
+验证：`cd remote-mcp && npm run smoke` 用 SDK 的真 `Client` 跑 14 项断言（工具清单、schema 原样透传、真实工程数据、只读边界、错误传播、路径穿越、鉴权）。之所以不用裸 fetch：本设计的赌注在于「capabilityCore 的手写 JSON Schema 能被 SDK 的 `ToolSchema` 接受」，而只有真 `Client` 会拿 `ListToolsResultSchema` 复验响应。
+
 ---
 
 ## 11. 范围划分
