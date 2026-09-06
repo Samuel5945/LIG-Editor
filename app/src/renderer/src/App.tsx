@@ -22,6 +22,7 @@ import ReviewPanel from './components/ReviewPanel'
 import CardsReviewPanel from './components/CardsReviewPanel'
 import TitleCoverPanel from './components/TitleCoverPanel'
 import CardsPanel, { type CardsPanelHandle } from './components/CardsPanel'
+import CalendarBoard from './components/CalendarBoard'
 import ArticleEditor, { type ArticleEditorHandle, type EditorSelection } from './editor/ArticleEditor'
 import { shouldAutoStart, startTour } from './components/onboardingTour'
 
@@ -69,7 +70,7 @@ export default function App(): JSX.Element {
   }, [tourHandlers])
   // M5 副驾驶
   const [leftTab, setLeftTab] = useState<'projects' | 'ideas'>('projects')
-  const [centerTab, setCenterTab] = useState<'article' | 'titlecover'>('article')
+  const [centerTab, setCenterTab] = useState<'article' | 'titlecover' | 'calendar'>('article')
   const [rightTab, setRightTab] = useState<'chat' | 'create' | 'review'>('chat')
   const [skills, setSkills] = useState<SkillInfo[]>([])
   const [skillName, setSkillName] = useState('')
@@ -971,6 +972,13 @@ export default function App(): JSX.Element {
             >
               标题/封面
             </button>
+            <button
+              onClick={() => setCenterTab('calendar')}
+              title="跨工程发布排期看板：拖拽工程卡片到日期即排期"
+              className={`rounded px-2 py-0.5 ${centerTab === 'calendar' ? 'bg-panel-3 text-ink' : 'hover:bg-panel-3'}`}
+            >
+              📅 日历
+            </button>
             {current && centerTab === 'article' && meta?.format !== 'cards' && (
               <>
                 <button
@@ -1058,7 +1066,26 @@ export default function App(): JSX.Element {
               )}
             </span>
           </div>
-          {current ? (
+          {centerTab === 'calendar' ? (
+            <CalendarBoard
+              projects={projects}
+              categories={categories}
+              current={current}
+              onOpen={(name) => void openProject(name)}
+              onSchedule={async (name, date) => {
+                await window.api.invoke('project:setSchedule', name, date)
+                refreshProjects()
+                if (name === current) void refreshMeta()
+              }}
+              ideasVersion={ideasVersion}
+              onIdeasChanged={() => setIdeasVersion((v) => v + 1)}
+              onMakeOutline={handleMakeOutline}
+              onScheduleIdea={async (index, date, category) =>
+                window.api.invoke('ideas:schedule', index, date, category)
+              }
+              onToast={setToast}
+            />
+          ) : current ? (
             centerTab === 'article' ? (
               meta?.format === 'cards' ? (
                 <CardsPanel

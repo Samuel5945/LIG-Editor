@@ -154,6 +154,8 @@ export function registerIpc(): void {
   handle('project:readMeta', (project) => store.readMeta(project))
   handle('project:writeMeta', (project, meta) => store.writeMeta(project, meta))
 
+  handle('project:setSchedule', (project, date) => store.setSchedule(project, date))
+
   // ---- 模型接入（M4）----
   handle('settings:getLlm', () => getLlmSettings())
   handle('settings:setLlm', (settings) => setLlmSettings(settings))
@@ -189,6 +191,7 @@ export function registerIpc(): void {
   handle('ideas:list', () => store.listIdeas())
   handle('ideas:add', (idea) => store.addIdea(idea))
   handle('ideas:remove', (index) => store.removeIdea(index))
+  handle('ideas:schedule', (index, date, category) => store.scheduleIdea(index, date, category))
 
   // ---- 免密联网搜索 ----
   handle('web:search', (query, fresh) => webSearch(query, fresh))

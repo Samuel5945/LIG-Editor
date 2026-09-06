@@ -266,6 +266,7 @@ export function readMeta(name: string): ProjectMeta {
     h2Num: raw.h2Num,
     h3Mark: raw.h3Mark,
     bodyBg: raw.bodyBg,
+    plannedAt: raw.plannedAt,
     style_skill: raw.style_skill,
     created_at: raw.created_at ?? new Date().toISOString(),
     updated_at: raw.updated_at ?? new Date().toISOString()
@@ -290,7 +291,8 @@ export function listProjects(): ProjectSummary[] {
         dir,
         status: meta.status,
         category: meta.category ?? UNCATEGORIZED,
-        updated_at: meta.updated_at
+        updated_at: meta.updated_at,
+        plannedAt: meta.plannedAt
       })
     } catch {
       // project.json 损坏的目录跳过，不阻塞列表
@@ -360,6 +362,43 @@ export function setProjectCategory(name: string, category: string): ProjectMeta 
   const next: ProjectMeta = { ...readMeta(name), category }
   writeMeta(name, next)
   return next
+}
+
+/** 设置发布排期（内容日历看板）：date 为 YYYY-MM-DD 本地日期，null 取消排期。
+ * 只写 meta 不动目录；writeMeta 自动盖 updated_at（列表/看板随之刷新）。 */
+export function setSchedule(name: string, date: string | null): ProjectMeta {
+  const dir = resolveDir(name)
+  if (!dir) throw new Error(`工程不存在：${name}`)
+  if (date !== null && !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    throw new Error(`非法排期日期（应为 YYYY-MM-DD）：${date}`)
+  }
+  const next: ProjectMeta = { ...readMeta(name), plannedAt: date ?? undefined }
+  writeMeta(name, next)
+  return next
+}
+
+/** 选题拖拽立项（内容日历）：选题 → 工程（带 topic 画像）+ 排期，一步到位。
+ *  选题保留在库中不消费——同一选题可给多个账号（分类）重复排期，删除走左栏选题库。 */
+export function scheduleIdea(index: number, date: string, category?: string): ProjectSummary {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    throw new Error(`非法排期日期（应为 YYYY-MM-DD）：${date}`)
+  }
+  const idea = listIdeas().find((it) => it.index === index)
+  if (!idea) throw new Error(`选题不存在（index=${index}），可能已被删除，请刷新选题库`)
+  // 工程名全局唯一：同一选题多账号复用（不同分类重复排期）时追加排期月日后缀
+  const base = sanitizeProjectName(idea.title)
+  let name = base
+  if (resolveDir(name)) name = sanitizeProjectName(`${base} ${date.slice(5).replace('-', '')}`)
+  if (resolveDir(name)) throw new Error(`同名工程已存在：${name}（请改名后再排期）`)
+  const created = createProject(name, category || undefined)
+  const meta = readMeta(created.name)
+  writeMeta(created.name, {
+    ...meta,
+    status: 'ideating',
+    topic: { angle: idea.angle, audience: idea.audience, source_material: [] },
+    plannedAt: date
+  })
+  return { ...created, plannedAt: date }
 }
 
 /** 重命名工程：目录留在原分类下改名 + meta.name 同步。工程名全局唯一；

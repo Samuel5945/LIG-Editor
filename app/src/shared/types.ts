@@ -136,6 +136,8 @@ export interface ProjectMeta {
   h3Mark?: H3Mark
   /** 文章背景卡覆盖（十六进制）：覆盖主题 bodyBg；'none' 显式去卡片（透明白底）；缺省跟随主题 */
   bodyBg?: string
+  /** 发布排期（本地日期 YYYY-MM-DD）：内容日历看板按此聚合；缺省 = 未排期 */
+  plannedAt?: string
   style_skill?: string
   created_at: string
   updated_at: string
@@ -148,6 +150,8 @@ export interface ProjectSummary {
   /** 所属分类（缺省 = 未分类） */
   category?: string
   updated_at: string
+  /** 发布排期（YYYY-MM-DD；缺省 = 未排期，日历看板用） */
+  plannedAt?: string
 }
 
 /** 工程内直接可编辑的文本文件（约定文件名即 ID）；cards-review.md 按需创建不预建 */
@@ -368,6 +372,8 @@ export interface IpcApi {
   'project:rename': (oldName: string, newName: string) => ProjectMeta
   /** 切换分类：工程目录迁移到 workspace/<分类>/ 下并更新 meta，返回新 meta */
   'project:setCategory': (project: string, category: string) => ProjectMeta
+  /** 设置发布排期（YYYY-MM-DD 本地日期；null 取消排期），返回新 meta */
+  'project:setSchedule': (project: string, date: string | null) => ProjectMeta
   /** 全部可用分类：预设 + 未分类 + workspace 顶层自定义分类文件夹（不含已删除/隐藏的） */
   'project:listCategories': () => string[]  /** 已删除（隐藏）的分类：可在管理里恢复 */
   'project:listHiddenCategories': () => string[]
@@ -422,6 +428,9 @@ export interface IpcApi {
   'ideas:list': () => IdeaEntry[]
   'ideas:add': (idea: IdeaCard) => void
   'ideas:remove': (index: number) => void
+  /** 选题拖拽立项：按 index 找选题 → 建工程（标题清洗后为名，带 topic 画像）→ 写排期。
+   *  不消费选题（保留库中，可多账号复用）；返回新建工程摘要 */
+  'ideas:schedule': (index: number, date: string, category?: string) => ProjectSummary
   /** 免密联网搜索（主进程 net.fetch 走系统代理，DDG 优先 Bing 兜底；fresh 限近一个月） */
   'web:search': (query: string, fresh?: boolean) => WebSearchResult[]
   /** 审阅级深度检索：多查询+新闻源+深抓正文；配了搜索 API 则走 API */

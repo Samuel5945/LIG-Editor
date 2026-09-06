@@ -501,6 +501,31 @@ export const TOOLS: ToolDef[] = [
     }
   },
   {
+    name: 'schedule_set',
+    description:
+      '设置工程的发布排期（写入 project.json 的 plannedAt，内容日历看板按此聚合展示）。date 为本地日期 YYYY-MM-DD，null/不传 = 取消排期。适合 Agent 在文章完成后自动排期或按日历调整发布计划',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project: P.project,
+        date: { type: ['string', 'null'], description: '排期日期 YYYY-MM-DD；null 取消排期' }
+      },
+      required: ['project']
+    },
+    handler: (a) => {
+      const project = str(a, 'project')
+      const date = a.date === undefined || a.date === null ? null : String(a.date)
+      if (date !== null && !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        throw new Error(`非法排期日期（应为 YYYY-MM-DD）：${date}`)
+      }
+      const meta = store.readMeta(project)
+      meta.plannedAt = date ?? undefined
+      store.writeMeta(project, meta)
+      notifyChange(project, 'project.json')
+      return { ok: true, plannedAt: date ?? undefined }
+    }
+  },
+  {
     name: 'export_html',
     description:
       '把 article.md 导出为 HTML 文件，返回绝对路径。缺省导出 article.html（公众号排版）；variant 配色模式：auto 读者端自动昼夜（prefers-color-scheme 媒体查询，读者系统深色自动看夜间配色，适合部署自有网页/博客）/ day 固定日间配色（浅卡深字）/ night 固定夜间配色（日间排版按公众号夜间逻辑算法变深，深卡浅字）。公众号推送不支持媒体查询，若要复制到公众号请用 day/night 固定配色。platform 指定分发目标（zhihu/toutiao/baijiahao）时改为导出 article-<platform>.html 平台适配稿（按平台编辑器净化规则简化排版，图片相对路径），适合多平台分发前的稿源',
