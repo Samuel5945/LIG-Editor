@@ -653,7 +653,7 @@ export default function App(): JSX.Element {
             ❓ 帮助
           </button>
           <button
-            onClick={() => window.open('https://pan.quark.cn/s/ddbcdaaaa634')}
+            onClick={() => window.open('https://pan.quark.cn/s/1cb400aa407b')}
             title="前往夸克网盘下载最新版本安装包"
             className="rounded px-2 py-1 hover:bg-panel-3"
           >

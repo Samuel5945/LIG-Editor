@@ -313,7 +313,7 @@ export default function IntegrationDialog({
               🌐 官网 ↗
             </button>
             <button
-              onClick={() => window.open('https://pan.quark.cn/s/ddbcdaaaa634')}
+              onClick={() => window.open('https://pan.quark.cn/s/1cb400aa407b')}
               className="rounded px-2 py-1 text-slate-300 hover:bg-slate-800 hover:text-sky-300"
             >
               📥 版本更新 ↗
