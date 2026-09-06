@@ -13,7 +13,9 @@ import { webResearch, webSearch } from './webSearch'
 import { generateImage } from './imageGen'
 import { saveFigureHtml, readFigureHtml, renderFigure } from './figureRender'
 import { readCards, writeCards, renderCard, readArchivedCards, writeArchivedCards } from './cardsStore'
-import { exportArticleHtml, copyArticleRich } from './exporter'
+import { exportArticleHtml, copyArticleRich, exportPlatformHtml } from './exporter'
+import { exportDocx, exportPdf } from './docExport'
+import type { PlatformId } from '@shared/types'
 import { getWechatSettings, setWechatSettings } from './wechatStore'
 import { pushDraft, pushCards, invalidateToken, getPublicIp } from './wechatPublish'
 import { listCustomThemes, saveCustomTheme, deleteCustomTheme, fetchUrlHtml } from './themeStore'
@@ -199,11 +201,15 @@ export function registerIpc(): void {
   handle('figure:render', (project, htmlRelPath) => renderFigure(project, htmlRelPath))
 
   // ---- 导出（M7）：variant auto=读者端自动昼夜 / day / night（复制与推送只用 day/night）----
-  handle('export:html', ({ project, variant }: { project: string; variant?: string }) =>
-    exportArticleHtml(project, (variant as 'auto' | 'day' | 'night') ?? 'auto')
-  )
-  handle('export:copyRich', ({ project, variant }: { project: string; variant?: string }) =>
-    copyArticleRich(project, variant === 'night' ? 'night' : 'day')
+  // platform（M11 多平台分发）：缺省 wechat；知乎/头条/百家走 exportPlatformHtml 落 article-<platform>.html
+  handle('export:html', ({ project, variant, platform }: { project: string; variant?: string; platform?: string }) => {
+    if (platform && platform !== 'wechat') return exportPlatformHtml(project, platform as 'zhihu' | 'toutiao' | 'baijiahao')
+    return exportArticleHtml(project, (variant as 'auto' | 'day' | 'night') ?? 'auto')
+  })
+  handle(
+    'export:copyRich',
+    ({ project, variant, platform }: { project: string; variant?: string; platform?: string }) =>
+      copyArticleRich(project, variant === 'night' ? 'night' : 'day', (platform as PlatformId | undefined) ?? 'wechat')
   )
   handle('export:openFile', async (absPath) => {
     // 先校验存在：ShellExecute 对不存在的路径会弹 Windows 原生错误框，改走应用内提示
@@ -211,6 +217,9 @@ export function registerIpc(): void {
     const err = await shell.openPath(absPath)
     if (err) throw new Error(err)
   })
+  // ---- 交稿导出（M10）：可编辑 Word + 打印用 PDF，落到工程 <工程>/交付/ ----
+  handle('export:docx', (project) => exportDocx(project))
+  handle('export:pdf', (project) => exportPdf(project))
 
   // ---- 贴图卡片 ----
   handle('cards:read', (project) => readCards(project))

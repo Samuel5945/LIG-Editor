@@ -12,7 +12,8 @@ import {
 import * as store from './projectStore'
 import { generateImage } from './imageGen'
 import { renderFigure, saveFigureHtml } from './figureRender'
-import { exportArticleHtml } from './exporter'
+import { exportArticleHtml, exportPlatformHtml } from './exporter'
+import { exportDocx } from './docExport'
 import { pushCards, pushDraft } from './wechatPublish'
 import { readSkill } from './skillStore'
 import { broadcast } from './ipc'
@@ -502,18 +503,40 @@ export const TOOLS: ToolDef[] = [
   {
     name: 'export_html',
     description:
-      '把 article.md 导出为 article.html，返回绝对路径。variant 配色模式：auto 读者端自动昼夜（prefers-color-scheme 媒体查询，读者系统深色自动看夜间配色，适合部署自有网页/博客）/ day 固定日间配色（浅卡深字）/ night 固定夜间配色（日间排版按公众号夜间逻辑算法变深，深卡浅字）。公众号推送不支持媒体查询，若要复制到公众号请用 day/night 固定配色',
+      '把 article.md 导出为 HTML 文件，返回绝对路径。缺省导出 article.html（公众号排版）；variant 配色模式：auto 读者端自动昼夜（prefers-color-scheme 媒体查询，读者系统深色自动看夜间配色，适合部署自有网页/博客）/ day 固定日间配色（浅卡深字）/ night 固定夜间配色（日间排版按公众号夜间逻辑算法变深，深卡浅字）。公众号推送不支持媒体查询，若要复制到公众号请用 day/night 固定配色。platform 指定分发目标（zhihu/toutiao/baijiahao）时改为导出 article-<platform>.html 平台适配稿（按平台编辑器净化规则简化排版，图片相对路径），适合多平台分发前的稿源',
     inputSchema: {
       type: 'object',
       properties: {
         project: P.project,
-        variant: { type: 'string', enum: ['auto', 'day', 'night'], description: '配色模式（缺省 auto）' }
+        variant: { type: 'string', enum: ['auto', 'day', 'night'], description: '配色模式（缺省 auto；仅公众号路径有效）' },
+        platform: {
+          type: 'string',
+          enum: ['wechat', 'zhihu', 'toutiao', 'baijiahao'],
+          description: '分发目标平台（缺省 wechat=公众号排版 article.html；其他平台落 article-<platform>.html）'
+        }
       },
       required: ['project']
     },
-    handler: (a) => ({
-      path: exportArticleHtml(str(a, 'project'), (str(a, 'variant', false) || 'auto') as 'auto' | 'day' | 'night')
-    })
+    handler: (a) => {
+      const platform = str(a, 'platform', false)
+      if (platform && platform !== 'wechat') {
+        return { path: exportPlatformHtml(str(a, 'project'), platform as 'zhihu' | 'toutiao' | 'baijiahao') }
+      }
+      return {
+        path: exportArticleHtml(str(a, 'project'), (str(a, 'variant', false) || 'auto') as 'auto' | 'day' | 'night')
+      }
+    }
+  },
+  {
+    name: 'export_docx',
+    description:
+      '把工程导出为可编辑的 Word 交稿稿（标题/正文/表格/图片进 Word 原生结构，可继续编辑），落到工程「交付/」目录，返回绝对路径。适合代运营给甲方审稿、投稿存档、二次编辑；封面若已设置自动放文档首页',
+    inputSchema: {
+      type: 'object',
+      properties: { project: P.project },
+      required: ['project']
+    },
+    handler: async (a) => ({ path: await exportDocx(str(a, 'project')) })
   },
   {
     name: 'push_draft',

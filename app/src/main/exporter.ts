@@ -3,6 +3,8 @@ import { existsSync, readFileSync } from 'fs'
 import { clipboard } from 'electron'
 import { mdToDoc } from '@shared/markdown'
 import { docToExportHtml, exportPageBg, extractTitle, wrapExportPage, wrapExportPageDayNight } from '@shared/exportHtml'
+import { docToPlatformHtml, wrapPlatformPage } from '@shared/platformHtml'
+import type { PlatformId } from '@shared/types'
 import { resolveArticleTheme } from '@shared/categoryThemes'
 import { listCustomThemes } from './themeStore'
 import { projectDir, readMeta, readTextFile, writeTracked } from './projectStore'
@@ -61,11 +63,25 @@ export function exportArticleHtml(project: string, variant: ExportVariant = 'aut
   return target
 }
 
-/** 富文本复制：图片全部 dataURL 内嵌，粘贴公众号后台即带图带排版；配色固定 day/night 二选一 */
-export function copyArticleRich(project: string, variant: 'day' | 'night' = 'day'): void {
+/** 富文本复制：图片全部 dataURL 内嵌，粘贴平台后台正文区即带图带排版；配色固定 day/night 二选一。
+ *  platform 指定分发目标（缺省 wechat）——知乎/头条/百家按平台画像输出净化友好形态 */
+export function copyArticleRich(project: string, variant: 'day' | 'night' = 'day', platform: PlatformId = 'wechat'): void {
   const dir = projectDir(project)
   const md = readTextFile(project, 'article.md')
   const doc = mdToDoc(md)
-  const html = docToExportHtml(doc, (src) => toDataUrl(dir, src), resolveThemeForExport(readMeta(project)), variant === 'night')
+  const theme = resolveThemeForExport(readMeta(project))
+  const resolveImg = (src: string): string => toDataUrl(dir, src)
+  const html = docToPlatformHtml(doc, resolveImg, theme, platform, variant === 'night')
   clipboard.write({ html, text: md })
+}
+
+/** 平台适配 HTML 落盘（外部 Agent 分发用）：article-<platform>.html，图片相对路径，页壳桌面专栏宽 */
+export function exportPlatformHtml(project: string, platform: Exclude<PlatformId, 'wechat'>): string {
+  const doc = mdToDoc(readTextFile(project, 'article.md'))
+  const theme = resolveThemeForExport(readMeta(project))
+  const fragment = docToPlatformHtml(doc, (src) => src, theme, platform)
+  const title = extractTitle(doc, project)
+  const target = join(projectDir(project), `article-${platform}.html`)
+  writeTracked(target, wrapPlatformPage(fragment, title))
+  return target
 }

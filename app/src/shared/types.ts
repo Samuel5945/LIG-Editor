@@ -340,6 +340,11 @@ export interface WebSearchResult {
   content?: string
 }
 
+// ---------- 多平台分发（M11，见 shared/platformHtml.ts 的平台画像） ----------
+
+/** 分发目标平台：各平台编辑器粘贴净化规则不同，导出/复制按平台画像输出对应形态 */
+export type PlatformId = 'wechat' | 'zhihu' | 'toutiao' | 'baijiahao'
+
 // ---------- IPC 契约 ----------
 // 所有 invoke 通道集中定义；主进程 handle 与渲染进程调用共享此单一来源
 
@@ -364,8 +369,7 @@ export interface IpcApi {
   /** 切换分类：工程目录迁移到 workspace/<分类>/ 下并更新 meta，返回新 meta */
   'project:setCategory': (project: string, category: string) => ProjectMeta
   /** 全部可用分类：预设 + 未分类 + workspace 顶层自定义分类文件夹（不含已删除/隐藏的） */
-  'project:listCategories': () => string[]
-  /** 已删除（隐藏）的分类：可在管理里恢复 */
+  'project:listCategories': () => string[]  /** 已删除（隐藏）的分类：可在管理里恢复 */
   'project:listHiddenCategories': () => string[]
   /** 删除分类（= 隐藏：目录与工程保留，恢复后归位）；未分类不可删 */
   'project:deleteCategory': (name: string) => void
@@ -432,12 +436,18 @@ export interface IpcApi {
   /** 离屏渲染 figures/*.html → assets/<同名>.png，返回 PNG 相对路径 */
   'figure:render': (project: string, htmlRelPath: string) => string
   // ---- 导出（M7）----
-  /** 导出 article.html 到工程目录（图片保持相对路径），返回绝对路径；variant 配色模式 */
-  'export:html': (args: { project: string; variant?: 'auto' | 'day' | 'night' }) => string
-  /** 富文本复制到剪贴板（text/html 图片 dataURL 内嵌 + 纯文本 md 兑底）；variant 配色二选一 */
-  'export:copyRich': (args: { project: string; variant?: 'day' | 'night' }) => void
+  /** 导出 article.html 到工程目录（图片保持相对路径），返回绝对路径；variant 配色模式。
+   *  platform（M11 多平台分发）非 wechat 时改为落 article-<platform>.html 平台适配稿 */
+  'export:html': (args: { project: string; variant?: 'auto' | 'day' | 'night'; platform?: PlatformId }) => string
+  /** 富文本复制到剪贴板（text/html 图片 dataURL 内嵌 + 纯文本 md 兜底）；variant 配色二选一。
+   *  platform 指定分发目标（缺省 wechat；知乎/头条/百家按平台画像输出净化友好形态） */
+  'export:copyRich': (args: { project: string; variant?: 'day' | 'night'; platform?: PlatformId }) => void
   /** 用系统默认应用（浏览器）打开导出的文件 */
   'export:openFile': (absPath: string) => void
+  /** 导出可继续编辑的 Word 到工程「交付/」目录，返回绝对路径 */
+  'export:docx': (project: string) => string
+  /** 导出打印用 PDF（公众号日间排版，A4）到工程「交付/」目录，返回绝对路径 */
+  'export:pdf': (project: string) => string
   // ---- 贴图卡片 ----
   /** 读取工程 cards.json；不存在返回 null */
   'cards:read': (project: string) => CardDeck | null
