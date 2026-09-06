@@ -349,6 +349,12 @@ export interface WebSearchResult {
 /** 分发目标平台：各平台编辑器粘贴净化规则不同，导出/复制按平台画像输出对应形态 */
 export type PlatformId = 'wechat' | 'zhihu' | 'toutiao' | 'baijiahao'
 
+/** 分类级账号预设：新工程自动继承的账号默认（多账号骨架；后续字段按需扩展） */
+export interface CategoryPreset {
+  /** 新工程自动挂载的写作 Skill 名；缺省 = 不挂载 */
+  style_skill?: string
+}
+
 // ---------- IPC 契约 ----------
 // 所有 invoke 通道集中定义；主进程 handle 与渲染进程调用共享此单一来源
 
@@ -473,6 +479,10 @@ export interface IpcApi {
   'customTheme:delete': (name: string) => void
   /** 抓取链接 HTML（导入公众号文章排版） */
   'customTheme:fetchUrl': (url: string) => string
+  // ---- 分类级账号预设（多账号骨架：新工程自动继承）----
+  'categoryPreset:list': () => Record<string, CategoryPreset>
+  /** 设置分类预设（skill 传 null = 清除该字段）；skill 不存在时报错 */
+  'categoryPreset:set': (category: string, skill: string | null) => CategoryPreset
 }
 
 export type IpcChannel = keyof IpcApi

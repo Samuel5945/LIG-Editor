@@ -1,15 +1,19 @@
-import { useState, type ReactElement } from 'react'
+import { useEffect, useState, type ReactElement } from 'react'
+import type { CategoryPreset, SkillInfo } from '@shared/types'
 
 /**
- * 分类管理弹窗：删除（隐藏）/ 恢复 / 重命名分类。
+ * 分类管理弹窗：删除（隐藏）/ 恢复 / 重命名分类 / 账号预设（默认写作 Skill）。
  * - 删除 = 隐藏：分类从列表消失，目录与工程保留，可在「已删除」里恢复（预设与自定义同机制）
- * - 重命名：目录 + 工程 meta + 自定义主题同步；预设重命名后成为自定义分类
+ * - 重命名：目录 + 工程 meta + 自定义主题 + 账号预设同步；预设 key 随分类迁移
  * - 「未分类」是兜底分类，不可删
+ * - 账号预设（多账号骨架）：分类配置默认写作 Skill，新建工程自动挂载
  */
 
 interface Props {
   categories: string[]
   hidden: string[]
+  /** 已安装 Skill 列表（账号预设下拉用） */
+  skills: SkillInfo[]
   onClose: () => void
   onToast: (msg: string) => void
   /** 变更成功后刷新（重新拉分类/主题/工程列表） */
@@ -25,6 +29,7 @@ const inputCls =
 export default function CategoryManageDialog({
   categories,
   hidden,
+  skills,
   onClose,
   onToast,
   onChanged
@@ -34,6 +39,23 @@ export default function CategoryManageDialog({
   const [renameValue, setRenameValue] = useState('')
   const [confirmDel, setConfirmDel] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  // 账号预设（分类 → 默认 Skill），挂载时自取
+  const [presets, setPresets] = useState<Record<string, CategoryPreset>>({})
+  useEffect(() => {
+    window.api
+      .invoke('categoryPreset:list')
+      .then(setPresets)
+      .catch(() => setPresets({}))
+  }, [])
+
+  /** 设置账号预设：即选即存；skill null = 清除 */
+  const doSetPreset = (category: string, skill: string | null): void => {
+    void run(async () => {
+      await window.api.invoke('categoryPreset:set', category, skill)
+      setPresets(await window.api.invoke('categoryPreset:list'))
+      onToast(skill ? `「${category}」的新工程将自动挂载「${skill}」` : `已清除「${category}」的 Skill 预设`)
+    })
+  }
 
   const run = async (fn: () => Promise<void> | void): Promise<void> => {
     if (busy) return
@@ -93,7 +115,8 @@ export default function CategoryManageDialog({
         </div>
 
         <p className="mb-3 text-[11px] leading-relaxed text-ink-dim">
-          删除 = 隐藏：分类下的工程与目录全部保留，随时可恢复。重命名会同步移动工程目录并更新自定义排版。
+          删除 = 隐藏：分类下的工程与目录全部保留，随时可恢复。重命名会同步移动工程目录并更新自定义排版与账号预设。
+          每个分类可配默认写作 Skill：新建该分类的工程自动挂载（多账号各配各的风格）。
         </p>
 
         {/* 可见分类 */}
@@ -102,66 +125,85 @@ export default function CategoryManageDialog({
           {categories.map((c) => {
             const isUncat = c === '未分类'
             return (
-              <div key={c} className="flex items-center gap-1.5 rounded bg-panel px-2 py-1">
-                {renaming === c ? (
-                  <>
-                    <input
-                      autoFocus
-                      value={renameValue}
-                      onChange={(e) => setRenameValue(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') doRename(c)
-                        if (e.key === 'Escape') setRenaming(null)
-                      }}
-                      placeholder="新分类名"
-                      className={inputCls}
-                    />
-                    <button onClick={() => doRename(c)} disabled={!renameValue.trim() || busy} className={btn}>
-                      保存
-                    </button>
-                    <button onClick={() => setRenaming(null)} className={btn}>
-                      取消
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <span className="min-w-0 flex-1 truncate text-xs text-ink">{c}</span>
-                    {!isUncat && (
-                      <>
-                        <button
-                          onClick={() => {
-                            setRenaming(c)
-                            setRenameValue(c)
-                          }}
-                          disabled={busy}
-                          title="重命名分类"
-                          className={btn}
-                        >
-                          ✏️ 重命名
-                        </button>
-                        {confirmDel === c ? (
-                          <>
-                            <button onClick={() => doDelete(c)} disabled={busy} className={btnDanger}>
-                              确认删除？
-                            </button>
-                            <button onClick={() => setConfirmDel(null)} className={btn}>
-                              取消
-                            </button>
-                          </>
-                        ) : (
+              <div key={c} className="flex flex-col gap-1 rounded bg-panel px-2 py-1">
+                <div className="flex items-center gap-1.5">
+                  {renaming === c ? (
+                    <>
+                      <input
+                        autoFocus
+                        value={renameValue}
+                        onChange={(e) => setRenameValue(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') doRename(c)
+                          if (e.key === 'Escape') setRenaming(null)
+                        }}
+                        placeholder="新分类名"
+                        className={inputCls}
+                      />
+                      <button onClick={() => doRename(c)} disabled={!renameValue.trim() || busy} className={btn}>
+                        保存
+                      </button>
+                      <button onClick={() => setRenaming(null)} className={btn}>
+                        取消
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="min-w-0 flex-1 truncate text-xs text-ink">{c}</span>
+                      {!isUncat && (
+                        <>
                           <button
-                            onClick={() => setConfirmDel(c)}
+                            onClick={() => {
+                              setRenaming(c)
+                              setRenameValue(c)
+                            }}
                             disabled={busy}
-                            title="删除分类（工程保留，可恢复）"
-                            className={btnDanger}
+                            title="重命名分类"
+                            className={btn}
                           >
-                            🗑 删除
+                            ✏️ 重命名
                           </button>
-                        )}
-                      </>
-                    )}
-                  </>
-                )}
+                          {confirmDel === c ? (
+                            <>
+                              <button onClick={() => doDelete(c)} disabled={busy} className={btnDanger}>
+                                确认删除？
+                              </button>
+                              <button onClick={() => setConfirmDel(null)} className={btn}>
+                                取消
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              onClick={() => setConfirmDel(c)}
+                              disabled={busy}
+                              title="删除分类（工程保留，可恢复）"
+                              className={btnDanger}
+                            >
+                              🗑 删除
+                            </button>
+                          )}
+                        </>
+                      )}
+                    </>
+                  )}
+                </div>
+                {/* 账号预设：新工程自动挂载的写作 Skill（即选即存，随分类重命名迁移） */}
+                <select
+                  value={presets[c]?.style_skill ?? ''}
+                  onChange={(e) => doSetPreset(c, e.target.value || null)}
+                  disabled={busy}
+                  title="账号预设：新建该分类工程时自动挂载此写作风格"
+                  className="min-w-0 rounded border border-panel-3 bg-panel-2 px-1 py-0.5 text-[10px] text-ink-dim outline-none"
+                >
+                  <option value="">Skill：无（新工程不自动挂载）</option>
+                  {skills
+                    .filter((s) => s.enabled || presets[c]?.style_skill === s.name)
+                    .map((s) => (
+                      <option key={s.name} value={s.name}>
+                        Skill：{s.name}
+                      </option>
+                    ))}
+                </select>
               </div>
             )
           })}

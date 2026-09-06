@@ -19,6 +19,7 @@ import type { PlatformId } from '@shared/types'
 import { getWechatSettings, setWechatSettings } from './wechatStore'
 import { pushDraft, pushCards, invalidateToken, getPublicIp } from './wechatPublish'
 import { listCustomThemes, saveCustomTheme, deleteCustomTheme, fetchUrlHtml } from './themeStore'
+import { listCategoryPresets, saveCategoryPreset } from './categoryPresetStore'
 import { openMdFile } from './projectStore'
 
 /** 类型安全的 handle 注册：通道名与出入参由 IpcApi 单一来源约束 */
@@ -249,6 +250,10 @@ export function registerIpc(): void {
   handle('customTheme:save', (name, theme) => saveCustomTheme(name, theme))
   handle('customTheme:delete', (name) => deleteCustomTheme(name))
   handle('customTheme:fetchUrl', async (url) => fetchUrlHtml(url))
+
+  // ---- 分类级账号预设（多账号骨架：新工程自动继承写作 Skill）----
+  handle('categoryPreset:list', () => listCategoryPresets())
+  handle('categoryPreset:set', (category, skill) => saveCategoryPreset(category, skill))
 }
 
 /** 生成一键接入卡片：MCP stdio 由纯 Node 代理脚本承接（Windows 下 Electron 主进程无管道 stdio） */

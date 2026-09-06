@@ -24,6 +24,7 @@ import type {
 import { UNCATEGORIZED, PROJECT_CATEGORIES, isKnownCategory } from '@shared/categories'
 import { getAppPaths } from './paths'
 import { listCustomThemes, saveCustomThemes } from './themeStore'
+import { listCategoryPresets, renameCategoryPreset } from './categoryPresetStore'
 
 /** 工程目录约定（PRD §4）：article.md 为唯一事实源 */
 const TEXT_FILES: ProjectTextFile[] = ['article.md', 'ideas.md', 'review.md']
@@ -234,6 +235,8 @@ export function renameCategory(oldName: string, newName: string): void {
     delete themes[oldName]
     saveCustomThemes(themes)
   }
+  // 账号预设同步（多账号骨架：预设 key 随分类重命名迁移）
+  renameCategoryPreset(oldName, newName)
 }
 
 function metaPath(name: string): string {
@@ -316,6 +319,10 @@ export function createProject(name: string, category?: string): ProjectSummary {
 
   const now = new Date().toISOString()
   const meta: ProjectMeta = { name, status: 'ideating', titles: [], category: cat, created_at: now, updated_at: now }
+  // 账号预设注入（多账号骨架）：分类配置了默认写作 Skill 的新工程自动挂载——
+  // 手动新建 / 日历选题立项 / Agent create_project 三条路都走这里，单点生效
+  const presetSkill = listCategoryPresets()[cat]?.style_skill
+  if (presetSkill) meta.style_skill = presetSkill
   writeTracked(join(dir, 'project.json'), JSON.stringify(meta, null, 2) + '\n')
   writeTracked(join(dir, 'article.md'), `# ${name}\n\n`)
   writeTracked(join(dir, 'ideas.md'), `# 选题脑暴：${name}\n\n`)

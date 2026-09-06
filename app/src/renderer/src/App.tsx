@@ -1365,6 +1365,7 @@ export default function App(): JSX.Element {
         <CategoryManageDialog
           categories={categories}
           hidden={hiddenCats}
+          skills={skills}
           onClose={() => setShowCatManage(false)}
           onToast={setToast}
           onChanged={refreshAfterCategoryChange}
