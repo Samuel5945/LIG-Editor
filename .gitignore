@@ -1,5 +1,6 @@
 # runtime user data & secrets (settings/llm.json contains API keys - never commit)
 /settings/
+/remote-mcp/
 /workspace/
 /skills/
 

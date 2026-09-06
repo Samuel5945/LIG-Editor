@@ -210,7 +210,7 @@ export default function IntegrationDialog({
             </div>
           ) : tab === 'mcp' ? (
             card ? (
-              <div className="space-y-4">
+              <div data-tour="mcp-card" className="space-y-4">
                 <p className="text-slate-400">
                   把本应用注册为外部 Agent（Codex / Qoder 等）的 MCP 工具：复制下方片段填进对应配置文件，
                   Agent 即可通过对话完成「建项目 → 生成正文 → 改图 → 导出」全流程。

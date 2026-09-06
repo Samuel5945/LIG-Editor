@@ -238,7 +238,7 @@ export default function SettingsDialog({ onClose }: SettingsDialogProps): ReactE
         {tab === 'providers' ? (
           <div className="flex min-h-0 flex-1">
             {/* 左：供应商列表 */}
-            <aside className="flex w-44 shrink-0 flex-col border-r border-panel-3 bg-panel p-2">
+            <aside data-tour="provider-list" className="flex w-44 shrink-0 flex-col border-r border-panel-3 bg-panel p-2">
               <p className="mb-2 px-1 text-xs font-bold">模型供应商</p>
               <div className="flex-1 overflow-auto">
                 {displayProviders.map((p, i) => {

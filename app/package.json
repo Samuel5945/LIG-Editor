@@ -17,6 +17,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
     "chokidar": "^3.6.0",
+    "driver.js": "^1.8.0",
     "pdfjs-dist": "^6.2.108",
     "sharp": "^0.33.4",
     "zod": "^3.23.8"

@@ -23,6 +23,7 @@ import CardsReviewPanel from './components/CardsReviewPanel'
 import TitleCoverPanel from './components/TitleCoverPanel'
 import CardsPanel, { type CardsPanelHandle } from './components/CardsPanel'
 import ArticleEditor, { type ArticleEditorHandle, type EditorSelection } from './editor/ArticleEditor'
+import { shouldAutoStart, startTour } from './components/onboardingTour'
 
 const STATUS_LABEL: Record<string, string> = {
   ideating: '脑暴中',
@@ -58,6 +59,14 @@ export default function App(): JSX.Element {
       return next
     })
   }, [])
+  // 新手引导：首启自动弹出（localStorage 记忆），顶栏「帮助」可随时重看
+  const tourHandlers = useMemo(
+    () => ({ openSettings: () => setShowSettings(true), openIntegration: () => setShowIntegration(true) }),
+    []
+  )
+  useEffect(() => {
+    if (shouldAutoStart()) startTour(tourHandlers)
+  }, [tourHandlers])
   // M5 副驾驶
   const [leftTab, setLeftTab] = useState<'projects' | 'ideas'>('projects')
   const [centerTab, setCenterTab] = useState<'article' | 'titlecover'>('article')
@@ -625,7 +634,7 @@ export default function App(): JSX.Element {
       <header className="app-drag flex h-11 shrink-0 items-center gap-3 border-b border-panel-3 bg-panel-2 pl-4">
         <span className="text-sm font-bold">立格编辑器</span>
         <span className="text-xs text-ink-dim">@LIG人生如戏的图文创作平台公测版</span>
-        <div className="ml-auto flex items-center gap-2 text-xs text-ink-dim">
+        <div data-tour="topbar-actions" className="ml-auto flex items-center gap-2 text-xs text-ink-dim">
           <button onClick={toggleTheme} title="切换深色 / 日间模式" className="rounded px-2 py-1 hover:bg-panel-3">
             {theme === 'dark' ? '☀ 日间' : '☾ 深色'}
           </button>
@@ -634,6 +643,13 @@ export default function App(): JSX.Element {
           </button>
           <button onClick={() => setShowIntegration(true)} className="rounded px-2 py-1 hover:bg-panel-3">
             设置
+          </button>
+          <button
+            onClick={() => startTour(tourHandlers)}
+            title="重新播放新手引导"
+            className="rounded px-2 py-1 hover:bg-panel-3"
+          >
+            ❓ 帮助
           </button>
           <button
             onClick={() => window.open('https://pan.quark.cn/s/ddbcdaaaa634')}
@@ -677,7 +693,7 @@ export default function App(): JSX.Element {
 
       <div className="flex min-h-0 flex-1">
         {/* 左栏：项目 / 选题库 */}
-        <aside className="flex w-60 shrink-0 flex-col border-r border-panel-3 bg-panel-2">
+        <aside data-tour="left-pane" className="flex w-60 shrink-0 flex-col border-r border-panel-3 bg-panel-2">
           <nav className="flex gap-1 border-b border-panel-3 p-2 text-xs">
             <button
               onClick={() => setLeftTab('projects')}
@@ -936,7 +952,7 @@ export default function App(): JSX.Element {
 
         {/* 中栏：正文编辑器 / 标题封面 */}
         <main className="flex min-w-0 flex-1 flex-col bg-panel">
-          <div className="flex h-9 shrink-0 items-center gap-2 border-b border-panel-3 px-4 text-xs text-ink-dim">
+          <div data-tour="center-toolbar" className="flex h-9 shrink-0 items-center gap-2 border-b border-panel-3 px-4 text-xs text-ink-dim">
             <button
               onClick={() => setCenterTab('article')}
               className={`rounded px-2 py-0.5 ${centerTab === 'article' ? 'bg-panel-3 text-ink' : 'hover:bg-panel-3'}`}
@@ -1112,7 +1128,7 @@ export default function App(): JSX.Element {
 
         {/* 右栏：AI 副驾驶（对话 / 脑暴创作 / 审阅，三面板互相独立） */}
         <aside className="flex w-80 shrink-0 flex-col border-l border-panel-3 bg-panel-2">
-          <div className="flex h-9 shrink-0 items-center gap-1 border-b border-panel-3 px-3 text-xs">
+          <div data-tour="right-tabs" className="flex h-9 shrink-0 items-center gap-1 border-b border-panel-3 px-3 text-xs">
             <button
               onClick={() => setRightTab('chat')}
               className={`rounded px-2 py-0.5 ${rightTab === 'chat' ? 'bg-panel-3 text-ink' : 'text-ink-dim hover:bg-panel-3'}`}

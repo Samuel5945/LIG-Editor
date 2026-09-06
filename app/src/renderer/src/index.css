@@ -328,3 +328,75 @@ body {
     transform: translateX(var(--scroll-dist, 0px));
   }
 }
+
+/* ---------- 新手引导弹层（driver.js popoverClass=lig-tour-popover）----------
+   直接消费主题 CSS 变量，深色 / 日间自动跟随，无需两套覆盖 */
+.driver-popover.lig-tour-popover {
+  background-color: rgb(var(--panel-2));
+  color: rgb(var(--ink));
+  border: 1px solid rgb(var(--panel-3));
+  border-radius: 10px;
+  box-shadow: 0 12px 40px rgb(0 0 0 / 45%);
+  max-width: 360px;
+  padding: 16px;
+}
+.driver-popover.lig-tour-popover .driver-popover-title {
+  font-size: 14px;
+  font-weight: 700;
+}
+.driver-popover.lig-tour-popover .driver-popover-description {
+  font-size: 12.5px;
+  line-height: 1.75;
+  color: rgb(var(--ink-dim));
+}
+.driver-popover.lig-tour-popover .driver-popover-progress-text {
+  font-size: 11px;
+  color: rgb(var(--ink-dim));
+}
+.driver-popover.lig-tour-popover .driver-popover-close-btn {
+  color: rgb(var(--ink-dim));
+}
+.driver-popover.lig-tour-popover .driver-popover-footer-btn {
+  background-color: rgb(var(--panel-3));
+  color: rgb(var(--ink));
+  border: none;
+  border-radius: 6px;
+  padding: 6px 14px;
+  font-size: 12px;
+  cursor: pointer;
+  text-shadow: none;
+}
+.driver-popover.lig-tour-popover .driver-popover-footer-btn:last-child {
+  background-color: rgb(var(--accent));
+  color: #fff;
+}
+.driver-popover.lig-tour-popover .driver-popover-footer-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+/* 结束页「配置模型 / 了解 MCP」入口按钮（onboardingTour.ts 注入）：
+   插在 footer 最前并 flex-basis 100% 独占一行，避免与「完成」按钮同行挤压换字 */
+.driver-popover.lig-tour-popover .driver-popover-footer {
+  flex-wrap: wrap;
+  row-gap: 12px;
+}
+.lig-tour-entry {
+  display: flex;
+  gap: 8px;
+  flex-basis: 100%;
+}
+.lig-tour-btn {
+  flex: 1;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  background-color: rgb(var(--accent));
+  color: #fff;
+}
+.lig-tour-btn--ghost {
+  background-color: rgb(var(--panel-3));
+  color: rgb(var(--ink));
+}
