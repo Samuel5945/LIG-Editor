@@ -319,10 +319,11 @@ export function createProject(name: string, category?: string): ProjectSummary {
 
   const now = new Date().toISOString()
   const meta: ProjectMeta = { name, status: 'ideating', titles: [], category: cat, created_at: now, updated_at: now }
-  // 账号预设注入（多账号骨架）：分类配置了默认写作 Skill 的新工程自动挂载——
-  // 手动新建 / 日历选题立项 / Agent create_project 三条路都走这里，单点生效
-  const presetSkill = listCategoryPresets()[cat]?.style_skill
-  if (presetSkill) meta.style_skill = presetSkill
+  // 账号预设注入（账号 = 分类）：分类配了默认写作 Skill 的新工程自动挂载——
+  // 手动新建 / 日历选题立项 / Agent create_project 三条路都走这里，单点生效。
+  // 默认分发平台不入 project.json：与排版调性同理，按 meta.category 现算即可全账号即时生效
+  const preset = listCategoryPresets()[cat]
+  if (preset?.style_skill) meta.style_skill = preset.style_skill
   writeTracked(join(dir, 'project.json'), JSON.stringify(meta, null, 2) + '\n')
   writeTracked(join(dir, 'article.md'), `# ${name}\n\n`)
   writeTracked(join(dir, 'ideas.md'), `# 选题脑暴：${name}\n\n`)

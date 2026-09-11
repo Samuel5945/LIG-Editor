@@ -23,6 +23,8 @@ interface BrainstormPanelProps {
   /** 当前工程正文（判断「写入当前工程」是否需要覆盖确认） */
   article: string
   skill: string | null
+  /** 当前筛选分类（= 账号）：立项时带上，新工程才能命中该账号的分类预设 */
+  category?: string
   seed: BrainstormSeed | null
   onArticleGenerated: (md: string) => void
   onOpenProject: (name: string) => Promise<void>
@@ -44,6 +46,7 @@ export default function BrainstormPanel({
   project,
   article,
   skill,
+  category,
   seed,
   onArticleGenerated,
   onOpenProject,
@@ -258,14 +261,14 @@ export default function BrainstormPanel({
     }
     try {
       // 主进程会再清洗一道（如去结尾点），后续操作必须用它返回的最终名
-      const created = await window.api.invoke('project:create', name)
+      const created = await window.api.invoke('project:create', name, category)
       onProjectsChanged()
       await onOpenProject(created.name)
       await writeArticle(created.name)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     }
-  }, [projName, onProjectsChanged, onOpenProject, writeArticle, onToast])
+  }, [projName, category, onProjectsChanged, onOpenProject, writeArticle, onToast])
 
   /** 立项并生成贴图：建工程标记 cards 形态 → 大纲提炼卡片组 → 打开工程（贴图面板自动补渲 PNG） */
   const createCards = useCallback(
@@ -280,7 +283,7 @@ export default function BrainstormPanel({
       setCardsFormat(format)
       setPhase('writing')
       try {
-        const created = await window.api.invoke('project:create', name)
+        const created = await window.api.invoke('project:create', name, category)
         const meta = await window.api.invoke('project:readMeta', created.name)
         meta.format = 'cards'
         meta.status = 'drafting'
@@ -303,7 +306,7 @@ export default function BrainstormPanel({
         abortRef.current = null
       }
     },
-    [projName, outline, skill, onProjectsChanged, onOpenProject, onToast]
+    [projName, outline, skill, category, onProjectsChanged, onOpenProject, onToast]
   )
 
   /** 写入当前已打开工程（正文非空时确认覆盖） */

@@ -1,12 +1,13 @@
 import { readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
-import type { CategoryPreset } from '@shared/types'
+import type { CategoryPreset, CategoryPresetPatch, PlatformId } from '@shared/types'
+import { PLATFORM_LABELS } from '@shared/platformHtml'
 import { getAppPaths } from './paths'
 import { readSkill } from './skillStore'
 
 /**
- * 分类级账号预设（多账号骨架）：settings/categoryPresets.json
- * 「账号 = 分类」——预设记录账号级默认（当前仅写作 Skill），新建工程时由
+ * 分类级账号预设（账号 = 分类）：settings/categoryPresets.json
+ * 预设记录账号级默认（写作 Skill / 默认分发平台），新建工程时由
  * projectStore.createProject 注入，一次配置处处生效。无敏感信息，纯 JSON 不加密。
  * 分类重命名由 projectStore.renameCategory 调 renameCategoryPreset 同步 key；
  * 删除（隐藏）分类保留预设，恢复后仍生效。
@@ -16,35 +17,67 @@ function presetsFile(): string {
   return join(getAppPaths().settings, 'categoryPresets.json')
 }
 
+function isEmptyPreset(preset: CategoryPreset): boolean {
+  return !preset.style_skill && !preset.default_platform
+}
+
+/** 读盘并剔除脏值：未知平台、空字符串与空条目一律丢弃（盘上 JSON 可被外部工具改坏） */
 export function listCategoryPresets(): Record<string, CategoryPreset> {
+  let raw: unknown
   try {
-    const raw = JSON.parse(readFileSync(presetsFile(), 'utf8'))
-    return raw && typeof raw === 'object' ? raw : {}
+    raw = JSON.parse(readFileSync(presetsFile(), 'utf8'))
   } catch {
     return {}
   }
+  if (!raw || typeof raw !== 'object') return {}
+  const out: Record<string, CategoryPreset> = {}
+  for (const [category, value] of Object.entries(raw as Record<string, Partial<CategoryPreset> | null>)) {
+    if (!value || typeof value !== 'object') continue
+    const preset: CategoryPreset = {}
+    if (typeof value.style_skill === 'string' && value.style_skill) preset.style_skill = value.style_skill
+    const platform = value.default_platform as PlatformId | undefined
+    if (platform && PLATFORM_LABELS[platform]) preset.default_platform = platform
+    if (!isEmptyPreset(preset)) out[category] = preset
+  }
+  return out
 }
 
 function writePresets(presets: Record<string, CategoryPreset>): void {
   writeFileSync(presetsFile(), JSON.stringify(presets, null, 2), 'utf8')
 }
 
-/** 设置分类预设：skill 为 null 清除该字段（整条空了顺手删 key）；Skill 必须已安装 */
-export function saveCategoryPreset(category: string, skill: string | null): CategoryPreset {
+/**
+ * 增量设置分类预设：patch 中字段为 null = 清除该项，缺省 = 保持原值。
+ * 字段各自校验（Skill 必须已安装，平台必须是已知 id）；全部为空时顺手删掉整条。
+ */
+export function saveCategoryPreset(category: string, patch: CategoryPresetPatch): CategoryPreset {
   const presets = listCategoryPresets()
   const next: CategoryPreset = { ...presets[category] }
-  if (skill === null) {
-    delete next.style_skill
-  } else {
-    try {
-      readSkill(skill)
-    } catch {
-      throw new Error(`Skill 不存在：${skill}`)
+  if ('style_skill' in patch) {
+    const skill = patch.style_skill
+    if (!skill) {
+      delete next.style_skill
+    } else {
+      try {
+        readSkill(skill)
+      } catch {
+        throw new Error(`Skill 不存在：${skill}`)
+      }
+      next.style_skill = skill
     }
-    next.style_skill = skill
   }
-  if (!next.style_skill) {
-    if (presets[category]) delete presets[category]
+  if ('default_platform' in patch) {
+    const platform = patch.default_platform
+    if (!platform) {
+      delete next.default_platform
+    } else if (!PLATFORM_LABELS[platform]) {
+      throw new Error(`未知分发平台：${platform}`)
+    } else {
+      next.default_platform = platform
+    }
+  }
+  if (isEmptyPreset(next)) {
+    delete presets[category]
   } else {
     presets[category] = next
   }

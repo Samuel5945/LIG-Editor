@@ -251,9 +251,9 @@ export function registerIpc(): void {
   handle('customTheme:delete', (name) => deleteCustomTheme(name))
   handle('customTheme:fetchUrl', async (url) => fetchUrlHtml(url))
 
-  // ---- 分类级账号预设（多账号骨架：新工程自动继承写作 Skill）----
+  // ---- 分类级账号预设（账号 = 分类：新工程自动继承账号级默认）----
   handle('categoryPreset:list', () => listCategoryPresets())
-  handle('categoryPreset:set', (category, skill) => saveCategoryPreset(category, skill))
+  handle('categoryPreset:set', (category, patch) => saveCategoryPreset(category, patch))
 }
 
 /** 生成一键接入卡片：MCP stdio 由纯 Node 代理脚本承接（Windows 下 Electron 主进程无管道 stdio） */

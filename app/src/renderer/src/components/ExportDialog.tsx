@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, type ReactElement } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactElement } from 'react'
 import { mdToDoc } from '@shared/markdown'
 import { docToExportHtml, exportPageBg, extractTitle, wrapExportPage } from '@shared/exportHtml'
 import { docToPlatformHtml, wrapPlatformPage, PLATFORM_LABELS } from '@shared/platformHtml'
@@ -21,6 +21,8 @@ interface ExportDialogProps {
   markdown: string
   /** 排版调性（分类调性解析结果）：预览与导出产物同源跟色 */
   theme?: ArticleTheme
+  /** 所属分类（= 账号）：用于取账号预设里预选的分发平台 */
+  category?: string
   onToast: (msg: string) => void
   onClose: () => void
 }
@@ -40,6 +42,7 @@ export default function ExportDialog({
   projectDir,
   markdown,
   theme,
+  category,
   onToast,
   onClose
 }: ExportDialogProps): ReactElement {
@@ -57,6 +60,23 @@ export default function ExportDialog({
   const [htmlAuto, setHtmlAuto] = useState(true)
   // 分发目标平台（M11 多平台分发）：影响「复制富文本」与预览形态；公众号推送始终走公众号画像
   const [platform, setPlatform] = useState<PlatformId>('wechat')
+  // 账号（分类）预设了默认平台则预选它，省掉每次导出重挑一遍
+  useEffect(() => {
+    if (!category) return
+    let alive = true
+    window.api
+      .invoke('categoryPreset:list')
+      .then((presets) => {
+        const preset = presets[category]?.default_platform
+        if (alive && preset) setPlatform(preset)
+      })
+      .catch(() => {
+        // 预设读不到就维持公众号，不打扰
+      })
+    return () => {
+      alive = false
+    }
+  }, [category])
 
   // 预览页：图片解析为 asset:// 绝对地址，配色跟随发布配色选择（所见即所得——
   // 复制/推送/固定导出的是哪套配色，预览就显示哪套）；

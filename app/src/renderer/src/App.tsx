@@ -230,7 +230,12 @@ export default function App(): JSX.Element {
     if (!name) return
     try {
       // 主进程会清洗工程名（如去结尾点），打开时用返回的最终名
-      const created = await window.api.invoke('project:create', name)
+      // 按当前筛选分类创建，新工程才会命中该账号的分类预设（筛选为「全部」时落未分类）
+      const created = await window.api.invoke(
+        'project:create',
+        name,
+        filterCat === 'all' ? undefined : filterCat
+      )
       setCreating(false)
       setNewName('')
       refreshProjects()
@@ -238,7 +243,7 @@ export default function App(): JSX.Element {
     } catch (err) {
       setToast(String(err instanceof Error ? err.message : err))
     }
-  }, [newName, openProject, refreshProjects])
+  }, [newName, filterCat, openProject, refreshProjects])
 
   /** 删除工程（确认后整目录移除；删当前工程先关闭） */
   const deleteProject = useCallback(
@@ -1225,6 +1230,7 @@ export default function App(): JSX.Element {
               project={current}
               article={article}
               skill={skillContent}
+              category={filterCat === 'all' ? undefined : filterCat}
               seed={brainstormSeed}
               onArticleGenerated={handleArticleGenerated}
               onOpenProject={openProject}
@@ -1342,6 +1348,7 @@ export default function App(): JSX.Element {
           projectDir={currentDir}
           markdown={article}
           theme={articleTheme}
+          category={meta?.category}
           onToast={setToast}
           onClose={() => setShowExport(false)}
         />

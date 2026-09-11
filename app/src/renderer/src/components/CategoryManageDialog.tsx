@@ -1,12 +1,13 @@
 import { useEffect, useState, type ReactElement } from 'react'
-import type { CategoryPreset, SkillInfo } from '@shared/types'
+import type { CategoryPreset, CategoryPresetPatch, PlatformId, SkillInfo } from '@shared/types'
+import { PLATFORM_LABELS } from '@shared/platformHtml'
 
 /**
- * 分类管理弹窗：删除（隐藏）/ 恢复 / 重命名分类 / 账号预设（默认写作 Skill）。
+ * 分类管理弹窗：删除（隐藏）/ 恢复 / 重命名分类 / 账号预设（默认写作 Skill 与默认分发平台）。
  * - 删除 = 隐藏：分类从列表消失，目录与工程保留，可在「已删除」里恢复（预设与自定义同机制）
  * - 重命名：目录 + 工程 meta + 自定义主题 + 账号预设同步；预设 key 随分类迁移
  * - 「未分类」是兜底分类，不可删
- * - 账号预设（多账号骨架）：分类配置默认写作 Skill，新建工程自动挂载
+ * - 账号预设（账号 = 分类）：分类级默认逐项即选即存，新建该分类的工程自动继承
  */
 
 interface Props {
@@ -48,12 +49,12 @@ export default function CategoryManageDialog({
       .catch(() => setPresets({}))
   }, [])
 
-  /** 设置账号预设：即选即存；skill null = 清除 */
-  const doSetPreset = (category: string, skill: string | null): void => {
+  /** 设置账号预设：单字段增量提交、即选即存；字段传 null = 清除该项 */
+  const doSetPreset = (category: string, patch: CategoryPresetPatch, toast: string): void => {
     void run(async () => {
-      await window.api.invoke('categoryPreset:set', category, skill)
+      await window.api.invoke('categoryPreset:set', category, patch)
       setPresets(await window.api.invoke('categoryPreset:list'))
-      onToast(skill ? `「${category}」的新工程将自动挂载「${skill}」` : `已清除「${category}」的 Skill 预设`)
+      onToast(toast)
     })
   }
 
@@ -116,7 +117,7 @@ export default function CategoryManageDialog({
 
         <p className="mb-3 text-[11px] leading-relaxed text-ink-dim">
           删除 = 隐藏：分类下的工程与目录全部保留，随时可恢复。重命名会同步移动工程目录并更新自定义排版与账号预设。
-          每个分类可配默认写作 Skill：新建该分类的工程自动挂载（多账号各配各的风格）。
+          每个分类即一个账号，可配账号级默认：新建工程自动挂载的写作 Skill、导出时预选的分发平台。
         </p>
 
         {/* 可见分类 */}
@@ -187,23 +188,55 @@ export default function CategoryManageDialog({
                     </>
                   )}
                 </div>
-                {/* 账号预设：新工程自动挂载的写作 Skill（即选即存，随分类重命名迁移） */}
-                <select
-                  value={presets[c]?.style_skill ?? ''}
-                  onChange={(e) => doSetPreset(c, e.target.value || null)}
-                  disabled={busy}
-                  title="账号预设：新建该分类工程时自动挂载此写作风格"
-                  className="min-w-0 rounded border border-panel-3 bg-panel-2 px-1 py-0.5 text-[10px] text-ink-dim outline-none"
-                >
-                  <option value="">Skill：无（新工程不自动挂载）</option>
-                  {skills
-                    .filter((s) => s.enabled || presets[c]?.style_skill === s.name)
-                    .map((s) => (
-                      <option key={s.name} value={s.name}>
-                        Skill：{s.name}
+                {/* 账号预设：新建该分类工程时自动继承的账号级默认（即选即存，随分类重命名迁移） */}
+                <div className="flex gap-1">
+                  <select
+                    value={presets[c]?.style_skill ?? ''}
+                    onChange={(e) => {
+                      const skill = e.target.value || null
+                      doSetPreset(
+                        c,
+                        { style_skill: skill },
+                        skill ? `「${c}」的新工程将自动挂载「${skill}」` : `已清除「${c}」的 Skill 预设`
+                      )
+                    }}
+                    disabled={busy}
+                    title="账号预设：新建该分类工程时自动挂载此写作风格"
+                    className="min-w-0 flex-1 rounded border border-panel-3 bg-panel-2 px-1 py-0.5 text-[10px] text-ink-dim outline-none"
+                  >
+                    <option value="">Skill：无（新工程不自动挂载）</option>
+                    {skills
+                      .filter((s) => s.enabled || presets[c]?.style_skill === s.name)
+                      .map((s) => (
+                        <option key={s.name} value={s.name}>
+                          Skill：{s.name}
+                        </option>
+                      ))}
+                  </select>
+                  <select
+                    value={presets[c]?.default_platform ?? ''}
+                    onChange={(e) => {
+                      const platform = (e.target.value || null) as PlatformId | null
+                      doSetPreset(
+                        c,
+                        { default_platform: platform },
+                        platform
+                          ? `「${c}」导出时默认选「${PLATFORM_LABELS[platform]}」`
+                          : `已清除「${c}」的默认平台（回到公众号）`
+                      )
+                    }}
+                    disabled={busy}
+                    title="账号预设：该分类工程打开导出框时预选的分发平台（缺省 = 公众号）"
+                    className="min-w-0 shrink-0 rounded border border-panel-3 bg-panel-2 px-1 py-0.5 text-[10px] text-ink-dim outline-none"
+                  >
+                    <option value="">平台：默认（公众号）</option>
+                    {(Object.keys(PLATFORM_LABELS) as PlatformId[]).map((p) => (
+                      <option key={p} value={p}>
+                        平台：{PLATFORM_LABELS[p]}
                       </option>
                     ))}
-                </select>
+                  </select>
+                </div>
               </div>
             )
           })}

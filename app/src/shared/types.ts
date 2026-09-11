@@ -349,11 +349,16 @@ export interface WebSearchResult {
 /** 分发目标平台：各平台编辑器粘贴净化规则不同，导出/复制按平台画像输出对应形态 */
 export type PlatformId = 'wechat' | 'zhihu' | 'toutiao' | 'baijiahao'
 
-/** 分类级账号预设：新工程自动继承的账号默认（多账号骨架；后续字段按需扩展） */
+/** 分类级账号预设：「账号 = 分类」，新建工程自动继承的账号级默认 */
 export interface CategoryPreset {
   /** 新工程自动挂载的写作 Skill 名；缺省 = 不挂载 */
   style_skill?: string
+  /** 该账号的默认分发平台：导出框打开时预选；缺省 = 公众号 */
+  default_platform?: PlatformId
 }
+
+/** 预设增量写入载荷：字段显式传 null = 清除该项，缺省 = 保持原值 */
+export type CategoryPresetPatch = { [K in keyof CategoryPreset]?: CategoryPreset[K] | null }
 
 // ---------- IPC 契约 ----------
 // 所有 invoke 通道集中定义；主进程 handle 与渲染进程调用共享此单一来源
@@ -479,10 +484,10 @@ export interface IpcApi {
   'customTheme:delete': (name: string) => void
   /** 抓取链接 HTML（导入公众号文章排版） */
   'customTheme:fetchUrl': (url: string) => string
-  // ---- 分类级账号预设（多账号骨架：新工程自动继承）----
+  // ---- 分类级账号预设（账号 = 分类：新工程自动继承）----
   'categoryPreset:list': () => Record<string, CategoryPreset>
-  /** 设置分类预设（skill 传 null = 清除该字段）；skill 不存在时报错 */
-  'categoryPreset:set': (category: string, skill: string | null) => CategoryPreset
+  /** 增量设置分类预设：字段传 null = 清除该项，未提及 = 保持原值；整条空了删除该分类预设 */
+  'categoryPreset:set': (category: string, patch: CategoryPresetPatch) => CategoryPreset
 }
 
 export type IpcChannel = keyof IpcApi
