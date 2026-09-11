@@ -141,7 +141,8 @@ export default function CalendarBoard({
     await move(payload, date)
   }
 
-  const chip = (p: ProjectSummary, onUnschedule = false): ReactElement => (
+  /** 月历格内卡片：42 格挤一屏，刻意保持紧凑（右栏另用 asideRow/ideaRow） */
+  const chip = (p: ProjectSummary): ReactElement => (
     <div
       key={p.name}
       draggable
@@ -159,23 +160,43 @@ export default function CalendarBoard({
     >
       <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${STATUS_DOT[p.status] ?? 'bg-slate-400'}`} />
       <span className="truncate text-ink">{p.name}</span>
-      {onUnschedule && (
-        <button
-          onClick={(e) => {
-            e.stopPropagation()
-            void move(p.name, null)
-          }}
-          title="取消排期"
-          className="ml-auto hidden shrink-0 px-0.5 text-ink-dim hover:text-red-400 group-hover:block"
-        >
-          ×
-        </button>
-      )}
+      <button
+        onClick={(e) => {
+          e.stopPropagation()
+          void move(p.name, null)
+        }}
+        title="取消排期"
+        className="ml-auto hidden shrink-0 px-0.5 text-ink-dim hover:text-red-400 group-hover:block"
+      >
+        ×
+      </button>
     </div>
   )
 
-  /** 选题 chip：分数徽章 + 标题；拖到日期立项排期，点击送脑暴出大纲 */
-  const ideaChip = (it: IdeaEntry): ReactElement => (
+  /** 右栏未排期工程行：整行可点（打开工程）/可拖（排期），标题换行不截断 */
+  const asideRow = (p: ProjectSummary): ReactElement => (
+    <div
+      key={p.name}
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.setData('text/plain', p.name)
+        e.dataTransfer.effectAllowed = 'move'
+        setDragging(p.name)
+      }}
+      onDragEnd={() => setDragging(null)}
+      onClick={() => onOpen(p.name)}
+      title={`${p.name} — 点击打开，拖到日期格排期`}
+      className={`flex min-h-9 cursor-grab items-center gap-2 rounded-md border px-2 py-1.5 text-xs leading-snug hover:border-sky-500/40 hover:bg-sky-500/10 active:cursor-grabbing ${
+        p.name === current ? 'border-sky-500/40 bg-sky-500/15' : 'border-panel-3 bg-panel'
+      } ${dragging === p.name ? 'opacity-40' : ''}`}
+    >
+      <span className={`h-2 w-2 shrink-0 rounded-full ${STATUS_DOT[p.status] ?? 'bg-slate-400'}`} />
+      <span className="line-clamp-2 min-w-0 flex-1 text-ink">{p.name}</span>
+    </div>
+  )
+
+  /** 右栏选题行：拖到日期格立项排期，点击送脑暴出大纲（样式镜像左栏 IdeaLibrary） */
+  const ideaRow = (it: IdeaEntry): ReactElement => (
     <div
       key={`idea-${it.index}`}
       draggable
@@ -189,18 +210,21 @@ export default function CalendarBoard({
         onMakeOutline({ title: it.title, angle: it.angle, audience: it.audience, score: it.score, reason: it.reason })
       }
       title={`${it.title}（角度：${it.angle || '未填'}）— 拖到日期格立项排期；点击送脑暴出大纲`}
-      className={`flex cursor-grab items-center gap-1.5 rounded px-1 py-0.5 text-[10px] leading-tight hover:bg-accent/10 ${
-        dragging === `idea:${it.index}` ? 'opacity-40' : 'bg-panel-3'
+      className={`cursor-grab rounded-md border border-panel-3 bg-panel px-2 py-1.5 text-xs leading-snug hover:border-accent/40 hover:bg-accent/10 active:cursor-grabbing ${
+        dragging === `idea:${it.index}` ? 'opacity-40' : ''
       }`}
     >
-      <span
-        className={`shrink-0 rounded px-1 py-0.5 font-bold ${
-          it.score >= 8 ? 'bg-green-950 text-green-400' : 'bg-panel text-ink-dim'
-        }`}
-      >
-        {it.score}
-      </span>
-      <span className="truncate text-ink">{it.title}</span>
+      <div className="flex items-center gap-2">
+        <span
+          className={`shrink-0 rounded px-1.5 py-0.5 font-bold ${
+            it.score >= 8 ? 'bg-green-950 text-green-400' : 'bg-panel-3 text-ink-dim'
+          }`}
+        >
+          {it.score}
+        </span>
+        <span className="line-clamp-2 min-w-0 flex-1 font-bold text-ink">{it.title}</span>
+      </div>
+      {it.angle && <p className="mt-1 line-clamp-2 text-ink-dim">角度：{it.angle}</p>}
     </div>
   )
 
@@ -287,7 +311,7 @@ export default function CalendarBoard({
                   >
                     {d.getDate()}
                   </span>
-                  {shown.map((p) => chip(p, true))}
+                  {shown.map((p) => chip(p))}
                   {hidden > 0 && <span className="px-1 text-[9px] text-ink-dim">+{hidden} 篇</span>}
                 </div>
               )
@@ -297,40 +321,40 @@ export default function CalendarBoard({
 
         {/* 右栏：未排期工程 / 选题库，都可拖入月历（选题 = 立项 + 排期） */}
         <aside
-          className="flex w-60 shrink-0 flex-col border-l border-panel-3 bg-panel-2"
+          className="flex w-72 shrink-0 flex-col border-l border-panel-3 bg-panel-2"
           onDragOver={(e) => e.preventDefault()}
           onDrop={dropOn(null)}
         >
           <div className="flex shrink-0 gap-1 border-b border-panel-3 px-2 py-1.5 text-xs">
             <button
               onClick={() => setAsideTab('unscheduled')}
-              className={`rounded px-2 py-0.5 ${asideTab === 'unscheduled' ? 'bg-panel-3 text-ink' : 'text-ink-dim hover:bg-panel-3'}`}
+              className={`flex-1 rounded px-2.5 py-1 ${asideTab === 'unscheduled' ? 'bg-panel-3 text-ink' : 'text-ink-dim hover:bg-panel-3'}`}
             >
               🗂 未排期 {unscheduled.length}
             </button>
             <button
               onClick={() => setAsideTab('ideas')}
-              className={`rounded px-2 py-0.5 ${asideTab === 'ideas' ? 'bg-panel-3 text-ink' : 'text-ink-dim hover:bg-panel-3'}`}
+              className={`flex-1 rounded px-2.5 py-1 ${asideTab === 'ideas' ? 'bg-panel-3 text-ink' : 'text-ink-dim hover:bg-panel-3'}`}
             >
               💡 选题库 {ideas.length}
             </button>
           </div>
-          <div className="min-h-0 flex-1 space-y-1 overflow-y-auto p-2">
+          <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto p-2">
             {asideTab === 'unscheduled' ? (
               <>
                 {unscheduled.length === 0 && (
-                  <p className="px-1 py-4 text-center text-[11px] text-ink-dim">全部工程都已排期</p>
+                  <p className="px-1 py-4 text-center text-xs text-ink-dim">全部工程都已排期</p>
                 )}
-                {unscheduled.map((p) => chip(p))}
+                {unscheduled.map((p) => asideRow(p))}
               </>
             ) : (
               <>
                 {ideas.length === 0 && (
-                  <p className="px-1 py-4 text-center text-[11px] text-ink-dim">
+                  <p className="px-1 py-4 text-center text-xs text-ink-dim">
                     空空如也，去「脑暴」面板产出选题后点「入库」
                   </p>
                 )}
-                {ideas.map(ideaChip)}
+                {ideas.map((it) => ideaRow(it))}
               </>
             )}
           </div>
