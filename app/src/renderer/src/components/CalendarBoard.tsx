@@ -59,6 +59,10 @@ export default function CalendarBoard({
   const [category, setCategory] = useState<string>('')
   // 拖拽中的工程名（dataTransfer 之外留一份，drop 目标校验用）
   const [dragging, setDragging] = useState<string | null>(null)
+  // 拖拽悬停中的落点：日期 ymd 或 'aside'。没有它用户不知道松手会发生什么
+  const [dragOver, setDragOver] = useState<string | null>(null)
+  const isIdeaDrag = dragging?.startsWith('idea:') ?? false
+  const asideHot = dragOver === 'aside'
   // aside 页签：未排期工程 / 选题库
   const [asideTab, setAsideTab] = useState<'unscheduled' | 'ideas'>('unscheduled')
   // 选题库（ideas:list + version 驱动刷新，镜像左栏 IdeaLibrary 模式）
@@ -130,6 +134,7 @@ export default function CalendarBoard({
     e.preventDefault()
     const payload = e.dataTransfer.getData('text/plain') || dragging
     setDragging(null)
+    setDragOver(null)
     if (!payload) return
     if (payload.startsWith('idea:')) {
       if (date === null) return // 拖回未排期区对选题无意义
@@ -151,7 +156,10 @@ export default function CalendarBoard({
         e.dataTransfer.effectAllowed = 'move'
         setDragging(p.name)
       }}
-      onDragEnd={() => setDragging(null)}
+      onDragEnd={() => {
+        setDragging(null)
+        setDragOver(null)
+      }}
       onClick={() => onOpen(p.name)}
       title={`${p.name}（${p.plannedAt ?? '未排期'}）— 点击打开，拖拽调排期`}
       className={`group flex cursor-grab items-center gap-1 rounded px-1 py-0.5 text-[10px] leading-tight hover:bg-sky-500/10 ${
@@ -183,7 +191,10 @@ export default function CalendarBoard({
         e.dataTransfer.effectAllowed = 'move'
         setDragging(p.name)
       }}
-      onDragEnd={() => setDragging(null)}
+      onDragEnd={() => {
+        setDragging(null)
+        setDragOver(null)
+      }}
       onClick={() => onOpen(p.name)}
       title={`${p.name} — 点击打开，拖到日期格排期`}
       className={`flex min-h-9 cursor-grab items-center gap-2 rounded-md border px-2 py-1.5 text-xs leading-snug hover:border-sky-500/40 hover:bg-sky-500/10 active:cursor-grabbing ${
@@ -205,7 +216,10 @@ export default function CalendarBoard({
         e.dataTransfer.effectAllowed = 'move'
         setDragging(`idea:${it.index}`)
       }}
-      onDragEnd={() => setDragging(null)}
+      onDragEnd={() => {
+        setDragging(null)
+        setDragOver(null)
+      }}
       onClick={() =>
         onMakeOutline({ title: it.title, angle: it.angle, audience: it.audience, score: it.score, reason: it.reason })
       }
@@ -284,20 +298,36 @@ export default function CalendarBoard({
               <span key={d}>{d}</span>
             ))}
           </div>
-          <div className="grid min-h-0 flex-1 grid-cols-7 grid-rows-6 gap-px overflow-hidden rounded bg-panel-3">
+          <div
+            className="grid min-h-0 flex-1 grid-cols-7 grid-rows-6 gap-px overflow-hidden rounded bg-panel-3"
+            onDragLeave={(e) => {
+              // 格子间移动也会触发 leave，只在真正离开整张网格时清除
+              if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragOver(null)
+            }}
+          >
             {weeks.flat().map((d) => {
               const key = ymd(d)
               const inMonth = d.getMonth() === cursor.month0
               const list = byDay.get(key) ?? []
               const shown = list.slice(0, MAX_CHIPS)
               const hidden = list.length - shown.length
+              const hot = dragOver === key
               return (
                 <div
                   key={key}
-                  onDragOver={(e) => e.preventDefault()}
+                  onDragOver={(e) => {
+                    e.preventDefault()
+                    if (!hot) setDragOver(key)
+                  }}
                   onDrop={dropOn(key)}
                   className={`flex min-h-0 flex-col gap-0.5 overflow-hidden p-1 ${
-                    inMonth ? 'bg-panel' : 'bg-panel-2'
+                    hot
+                      ? isIdeaDrag
+                        ? 'bg-accent/15 ring-2 ring-inset ring-accent/60'
+                        : 'bg-sky-500/15 ring-2 ring-inset ring-sky-500/60'
+                      : inMonth
+                        ? 'bg-panel'
+                        : 'bg-panel-2'
                   }`}
                 >
                   <span
@@ -321,8 +351,17 @@ export default function CalendarBoard({
 
         {/* 右栏：未排期工程 / 选题库，都可拖入月历（选题 = 立项 + 排期） */}
         <aside
-          className="flex w-72 shrink-0 flex-col border-l border-panel-3 bg-panel-2"
-          onDragOver={(e) => e.preventDefault()}
+          className={`flex w-72 shrink-0 flex-col border-l ${
+            asideHot ? 'border-l-sky-500/60 bg-sky-500/15' : 'border-l-panel-3 bg-panel-2'
+          }`}
+          onDragOver={(e) => {
+            e.preventDefault()
+            // 选题拖回右栏不产生任何动作（dropOn 里直接 return），所以不给它可放置信号
+            if (!isIdeaDrag && !asideHot) setDragOver('aside')
+          }}
+          onDragLeave={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragOver(null)
+          }}
           onDrop={dropOn(null)}
         >
           <div className="flex shrink-0 gap-1 border-b border-panel-3 px-2 py-1.5 text-xs">
@@ -359,9 +398,11 @@ export default function CalendarBoard({
             )}
           </div>
           <div className="shrink-0 border-t border-panel-3 px-3 py-1.5 text-[10px] text-ink-dim">
-            {asideTab === 'unscheduled'
-              ? '拖到日期格排期，拖回此处取消'
-              : `拖到日期格 = 立项 + 排期${category ? `（分类：${category}）` : ''}；点击选题送脑暴出大纲`}
+            {asideHot
+              ? '松手即取消排期'
+              : asideTab === 'unscheduled'
+                ? '拖到日期格排期，拖回此处取消'
+                : `拖到日期格 = 立项 + 排期${category ? `（分类：${category}）` : ''}；点击选题送脑暴出大纲`}
           </div>
         </aside>
       </div>
