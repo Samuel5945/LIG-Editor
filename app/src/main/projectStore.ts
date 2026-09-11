@@ -24,7 +24,7 @@ import type {
 import { UNCATEGORIZED, PROJECT_CATEGORIES, isKnownCategory } from '@shared/categories'
 import { getAppPaths } from './paths'
 import { listCustomThemes, saveCustomThemes } from './themeStore'
-import { listCategoryPresets, renameCategoryPreset } from './categoryPresetStore'
+import { listCategoryPresets, presetFillFor, renameCategoryPreset } from './categoryPresetStore'
 import { renameWechatBinding } from './wechatStore'
 
 /** 工程目录约定（PRD §4）：article.md 为唯一事实源 */
@@ -325,8 +325,7 @@ export function createProject(name: string, category?: string): ProjectSummary {
   // 账号预设注入（账号 = 分类）：分类配了默认写作 Skill 的新工程自动挂载——
   // 手动新建 / 日历选题立项 / Agent create_project 三条路都走这里，单点生效。
   // 默认分发平台不入 project.json：与排版调性同理，按 meta.category 现算即可全账号即时生效
-  const preset = listCategoryPresets()[cat]
-  if (preset?.style_skill) meta.style_skill = preset.style_skill
+  Object.assign(meta, presetFillFor(meta, listCategoryPresets()[cat]))
   writeTracked(join(dir, 'project.json'), JSON.stringify(meta, null, 2) + '\n')
   writeTracked(join(dir, 'article.md'), `# ${name}\n\n`)
   writeTracked(join(dir, 'ideas.md'), `# 选题脑暴：${name}\n\n`)
@@ -371,6 +370,8 @@ export function setProjectCategory(name: string, category: string): ProjectMeta 
     dirCache.set(name, target)
   }
   const next: ProjectMeta = { ...readMeta(name), category }
+  // 改分类即换账号：补上目标账号的默认写作 Skill（只补空缺，不覆盖已手选的值）
+  Object.assign(next, presetFillFor(next, listCategoryPresets()[category]))
   writeMeta(name, next)
   return next
 }

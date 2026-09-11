@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
-import type { CategoryPreset, CategoryPresetPatch, PlatformId } from '@shared/types'
+import type { CategoryPreset, CategoryPresetPatch, PlatformId, ProjectMeta } from '@shared/types'
 import { PLATFORM_LABELS } from '@shared/platformHtml'
 import { getAppPaths } from './paths'
 import { readSkill } from './skillStore'
@@ -17,8 +17,22 @@ function presetsFile(): string {
   return join(getAppPaths().settings, 'categoryPresets.json')
 }
 
+/** 预设是否已无任何字段（决定要不要删 key） */
 function isEmptyPreset(preset: CategoryPreset): boolean {
   return !preset.style_skill && !preset.default_platform
+}
+
+/**
+ * 账号预设落到工程上的唯一规则：**只补工程缺失的字段，绝不覆盖已有值**。
+ * - 新建工程：meta 是空白的，等价于「全部注入」
+ * - 改分类：推送账号与排版调性都按分类现算、会立刻切换，风格不跟着走就是不一致；
+ *   但用户已在工程上手选过的 Skill 不能被静默冲掉，所以只填空缺
+ * 默认分发平台不落工程（按 meta.category 现算），故不在回填范围。
+ */
+export function presetFillFor(meta: ProjectMeta, preset?: CategoryPreset): Partial<ProjectMeta> {
+  const fill: Partial<ProjectMeta> = {}
+  if (preset?.style_skill && !meta.style_skill) fill.style_skill = preset.style_skill
+  return fill
 }
 
 /** 读盘并剔除脏值：未知平台、空字符串与空条目一律丢弃（盘上 JSON 可被外部工具改坏） */

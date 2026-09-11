@@ -315,7 +315,7 @@ export default function App(): JSX.Element {
         const m = await window.api.invoke('project:setCategory', name, category)
         if (currentRef.current === name) setMeta(m)
         refreshProjects()
-        setToast(`「${name}」已归入「${category}」，文件夹已同步移动`)
+        setToast(`「${name}」已归入「${category}」，文件夹已同步移动；排版调性与推送账号按新分类生效`)
       } catch (err) {
         setToast(`分类失败：${err instanceof Error ? err.message : err}`)
       }

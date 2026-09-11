@@ -29,10 +29,11 @@ import { getAppPaths } from '../paths'
 import {
   deleteCategoryPreset,
   listCategoryPresets,
+  presetFillFor,
   renameCategoryPreset,
   saveCategoryPreset
 } from '../categoryPresetStore'
-import type { PlatformId } from '@shared/types'
+import type { PlatformId, ProjectMeta } from '@shared/types'
 
 const presetFile = (): string => join(getAppPaths().settings, 'categoryPresets.json')
 const writeRaw = (value: unknown): void => writeFileSync(presetFile(), JSON.stringify(value), 'utf8')
@@ -111,5 +112,30 @@ describe('分类级账号预设', () => {
     saveCategoryPreset('生活常识', { style_skill: 'khazix-writer' })
     deleteCategoryPreset('科技数码')
     expect(listCategoryPresets()).toEqual({ 生活常识: { style_skill: 'khazix-writer' } })
+  })
+})
+
+describe('账号预设落到工程（新建注入与改分类回填共用同一规则）', () => {
+  const meta = (over: Partial<ProjectMeta> = {}): ProjectMeta => ({
+    name: 'p',
+    status: 'ideating',
+    titles: [],
+    created_at: '2026-09-11T00:00:00.000Z',
+    updated_at: '2026-09-11T00:00:00.000Z',
+    ...over
+  })
+
+  it('工程还没有 Skill 时补上目标账号的默认', () => {
+    expect(presetFillFor(meta(), { style_skill: 'khazix-writer' })).toEqual({ style_skill: 'khazix-writer' })
+  })
+
+  it('工程已有 Skill 时不动它（改分类不静默覆盖手选值）', () => {
+    const existing = meta({ style_skill: 'wechat-viral-topic' })
+    expect(presetFillFor(existing, { style_skill: 'khazix-writer' })).toEqual({})
+  })
+
+  it('目标分类无预设、或预设只有默认平台时不回填任何字段', () => {
+    expect(presetFillFor(meta(), undefined)).toEqual({})
+    expect(presetFillFor(meta(), { default_platform: 'zhihu' })).toEqual({})
   })
 })
