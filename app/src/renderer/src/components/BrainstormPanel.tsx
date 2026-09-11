@@ -32,6 +32,8 @@ interface BrainstormPanelProps {
   onProjectsChanged: () => void
   onGoReview: () => void
   onGoTitles: () => void
+  /** 跳回正文页签（成文后去处理 fig-suggest 配图占位） */
+  onGoArticle: () => void
   /** 入库后通知 App 刷新选题库 */
   onIdeasChanged: () => void
   onToast: (msg: string) => void
@@ -54,6 +56,7 @@ export default function BrainstormPanel({
   onProjectsChanged,
   onGoReview,
   onGoTitles,
+  onGoArticle,
   onIdeasChanged,
   onToast
 }: BrainstormPanelProps): ReactElement {
@@ -335,6 +338,9 @@ export default function BrainstormPanel({
 
   const busy = phase === 'brainstorming' || phase === 'outlining' || phase === 'writing'
 
+  // 正文里的建议配图位数量（全文提示词会按「至少 3 处」插入 fig-suggest 占位）
+  const figSpots = (article.match(/<!--\s*fig-suggest:/g) ?? []).length
+
   return (
     <div className="flex min-h-0 flex-1 flex-col text-xs">
       <div ref={scrollRef} className="selectable min-h-0 flex-1 overflow-auto p-3">
@@ -539,24 +545,45 @@ export default function BrainstormPanel({
 
         {/* ---- 完成 ---- */}
         {phase === 'done' && (
-          <div className="rounded bg-panel p-3 text-center">
+          <div className="rounded bg-panel p-3">
             {cardsFormat ? (
-              <>
+              <div className="text-center">
                 <p className="mb-3 text-green-500">✓ 卡片已生成，中央区可编辑文案、生成背图</p>
                 <button onClick={reset} className="rounded bg-panel-3 px-3 py-1.5 text-ink hover:bg-panel">
                   再来一篇
                 </button>
-              </>
+              </div>
             ) : (
               <>
-                <p className="mb-3 text-green-500">✓ 全文已生成，接下来可以：</p>
-                <div className="flex justify-center gap-2">
-                  <button onClick={onGoReview} className="rounded bg-accent px-3 py-1.5 text-white hover:opacity-90">
-                    去审阅
-                  </button>
-                  <button onClick={onGoTitles} className="rounded bg-accent px-3 py-1.5 text-white hover:opacity-90">
-                    起标题/封面
-                  </button>
+                <p className="mb-2 text-center text-green-500">✓ 全文已生成，接下来：</p>
+                <div className="mb-3 space-y-2">
+                  <StepRow
+                    n="①"
+                    label="配图"
+                    desc={
+                      figSpots > 0
+                        ? `正文已标出 ${figSpots} 处建议配图位，点文中卡片选管线出图并原位替换`
+                        : '正文里暂无建议配图位，需要的话在正文里自行插 fig-suggest 占位'
+                    }
+                    actionLabel="去配图"
+                    onGo={onGoArticle}
+                  />
+                  <StepRow
+                    n="②"
+                    label="标题与封面"
+                    desc="起标题候选（可一键写入正文首行）；封面用版式模板直出，或生图/导入后裁剪"
+                    actionLabel="去标题/封面"
+                    onGo={onGoTitles}
+                  />
+                  <StepRow
+                    n="③"
+                    label="审阅"
+                    desc="整篇过一遍：结构节奏、事实存疑、敏感词、配图与图注"
+                    actionLabel="去审阅"
+                    onGo={onGoReview}
+                  />
+                </div>
+                <div className="text-center">
                   <button onClick={reset} className="rounded bg-panel-3 px-3 py-1.5 text-ink hover:bg-panel">
                     再来一篇
                   </button>
@@ -572,6 +599,37 @@ export default function BrainstormPanel({
           <div className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap rounded bg-panel p-2 text-[10px] text-ink-dim">{streamText}</div>
         )}
       </div>
+    </div>
+  )
+}
+
+/** 完成阶段的一步：序号 + 标题 + 说明 + 直达按钮 */
+function StepRow({
+  n,
+  label,
+  desc,
+  actionLabel,
+  onGo
+}: {
+  n: string
+  label: string
+  desc: string
+  actionLabel: string
+  onGo: () => void
+}): ReactElement {
+  return (
+    <div className="flex items-start gap-2 rounded border border-panel-3 bg-panel-2 px-2.5 py-2">
+      <span className="shrink-0 font-bold text-accent">{n}</span>
+      <div className="min-w-0 flex-1">
+        <p className="text-[13px] font-bold text-ink">{label}</p>
+        <p className="mt-0.5 text-[11px] leading-relaxed text-ink-dim">{desc}</p>
+      </div>
+      <button
+        onClick={onGo}
+        className="shrink-0 rounded bg-accent px-2.5 py-1 text-[11px] text-white hover:opacity-90"
+      >
+        {actionLabel}
+      </button>
     </div>
   )
 }

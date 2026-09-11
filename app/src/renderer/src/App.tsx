@@ -1256,6 +1256,7 @@ export default function App(): JSX.Element {
               onProjectsChanged={refreshProjects}
               onGoReview={handleFullReview}
               onGoTitles={() => setCenterTab('titlecover')}
+              onGoArticle={() => setCenterTab('article')}
               onIdeasChanged={() => setIdeasVersion((v) => v + 1)}
               onToast={setToast}
             />
