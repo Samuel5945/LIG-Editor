@@ -219,7 +219,11 @@ function photoLayer(o: CoverHtmlOptions, accent: string): string {
     o.size === 'wide'
       ? `linear-gradient(90deg, ${rgba(dark, 0.95)} 0%, ${rgba(dark, 0.88)} 26%, ${rgba(dark, 0.56)} 42%, ${rgba(dark, 0)} 55%)`
       : `linear-gradient(105deg, ${rgba(dark, 0.94)} 0%, ${rgba(dark, 0.78)} 52%, ${rgba(dark, 0.3)} 100%)`
-  return `<div class="abs" style="inset:0;background-image:url('../${escapeHtml(o.bgSrc)}');background-size:cover;background-position:center"></div>
+  // 头图几乎无横向余量可移（21:9 源 vs 2.35:1 画布），构图靠提示词保证；
+  // 1:1 方图会从横图裁掉左右两侧，主体既然偏右就得靠右取景，否则缩略图把主体裁没。
+  // 取 78% 而非 100%：完全靠右会把主体留在画面正中，而方图文字是通栏的，会压在字上
+  const pos = o.size === 'wide' ? 'center' : '78% center'
+  return `<div class="abs" style="inset:0;background-image:url('../${escapeHtml(o.bgSrc)}');background-size:cover;background-position:${pos}"></div>
     <div class="abs" style="inset:0;background:${accent};mix-blend-mode:color;opacity:0.13"></div>
     <div class="abs" style="inset:0;background:${scrim}"></div>`
 }
