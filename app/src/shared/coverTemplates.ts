@@ -197,27 +197,42 @@ function brandLine(brand: string | undefined, color: string, size: CoverSize): s
   return `<div class="brand" style="left:${PAD}px;bottom:30px;color:${color};font-size:${px}px">${escapeHtml(brand)}</div>`
 }
 
-/** 右侧方形画面：有底图放底图，没底图放光晕与同心圆——保证 1:1 缩略图永远有主体 */
-function rightSquare(o: CoverHtmlOptions, accent: string): string {
-  if (o.size !== 'wide') return ''
-  const side = squareSide('wide')
-  const common = `right:0;top:0;width:${side}px;height:${side}px;`
-  if (o.bgSrc) {
-    return `<div class="abs" style="${common}background-image:url('../${escapeHtml(o.bgSrc)}');background-size:cover;background-position:center"></div>`
-  }
-  // 刻意不铺自己的底色：只发光晕与同心圆，让主渐变贯穿整幅
-  // （右区一旦自带底色，与左区色调不同就会留一条硬竖边，正是要避免的"硬拼接"）
-  return `<div class="abs" style="${common}overflow:hidden">
-    <div class="abs" style="left:-10%;top:-10%;width:120%;height:120%;background:radial-gradient(circle at 50% 50%, ${hexToRgba(accent, 0.3) ?? accent} 0%, ${hexToRgba(accent, 0) ?? 'rgba(0,0,0,0)'} 62%)"></div>
-    <div class="abs" style="left:50%;top:50%;width:${Math.round(side * 0.86)}px;height:${Math.round(side * 0.86)}px;transform:translate(-50%,-50%);border:3px solid ${hexToRgba(accent, 0.5) ?? accent};border-radius:50%"></div>
-    <div class="abs" style="left:50%;top:50%;width:${Math.round(side * 0.58)}px;height:${Math.round(side * 0.58)}px;transform:translate(-50%,-50%);border:2px solid ${hexToRgba(accent, 0.3) ?? accent};border-radius:50%"></div>
-  </div>`
+/** hexToRgba 的兜底封装：本文件的色值都由 shade 派生，理论上不会失败，兜底只为类型收窄 */
+function rgba(hex: string, alpha: number): string {
+  return hexToRgba(hex, alpha) ?? 'rgba(0,0,0,0)'
 }
 
-/** 左区与右区之间的柔化过渡：压在右图左缘，避免两块硬拼接（仅头图有右区） */
-function edgeBlend(accent: string): string {
+/**
+ * 底图与文字的同化。
+ *
+ * 刻意不再分「左面板 / 右图块」——两块各自有底色就必然存在一条边界，
+ * 再怎么柔化也只是把硬边改成软边。改成照片整幅铺满、文字压在它自己的暗部上：
+ * 没有边界，也就没有"不融合"。
+ * 三层叠加：照片 → 极淡强调色（mix-blend-mode:color，把照片色调拉向品牌色）
+ *          → 由强调色派生的暗部渐变承载文字。
+ * 暗部渐变在 55% 处已完全透明，右侧方形区保持原图亮度，仍可直接裁成 1:1 缩略图。
+ */
+function photoLayer(o: CoverHtmlOptions, accent: string): string {
+  if (!o.bgSrc) return ''
+  const dark = shade(accent, -0.8)
+  const scrim =
+    o.size === 'wide'
+      ? `linear-gradient(90deg, ${rgba(dark, 0.95)} 0%, ${rgba(dark, 0.88)} 26%, ${rgba(dark, 0.56)} 42%, ${rgba(dark, 0)} 55%)`
+      : `linear-gradient(105deg, ${rgba(dark, 0.94)} 0%, ${rgba(dark, 0.78)} 52%, ${rgba(dark, 0.3)} 100%)`
+  return `<div class="abs" style="inset:0;background-image:url('../${escapeHtml(o.bgSrc)}');background-size:cover;background-position:center"></div>
+    <div class="abs" style="inset:0;background:${accent};mix-blend-mode:color;opacity:0.13"></div>
+    <div class="abs" style="inset:0;background:${scrim}"></div>`
+}
+
+/** 无底图时右侧方形区的主体感：只发光晕与同心圆，不铺自己的底色（铺了就会与左区形成硬竖边） */
+function ringDecor(o: CoverHtmlOptions, accent: string): string {
+  if (o.size !== 'wide' || o.bgSrc) return ''
   const side = squareSide('wide')
-  return `<div class="abs" style="right:${side - 150}px;top:0;width:150px;height:100%;background:linear-gradient(90deg, ${accent} 0%, ${hexToRgba(accent, 0) ?? 'rgba(0,0,0,0)'} 100%)"></div>`
+  return `<div class="abs" style="right:0;top:0;width:${side}px;height:${side}px;overflow:hidden">
+    <div class="abs" style="left:-10%;top:-10%;width:120%;height:120%;background:radial-gradient(circle at 50% 50%, ${rgba(accent, 0.3)} 0%, ${rgba(accent, 0)} 62%)"></div>
+    <div class="abs" style="left:50%;top:50%;width:${Math.round(side * 0.86)}px;height:${Math.round(side * 0.86)}px;transform:translate(-50%,-50%);border:3px solid ${rgba(accent, 0.5)};border-radius:50%"></div>
+    <div class="abs" style="left:50%;top:50%;width:${Math.round(side * 0.58)}px;height:${Math.round(side * 0.58)}px;transform:translate(-50%,-50%);border:2px solid ${rgba(accent, 0.3)};border-radius:50%"></div>
+  </div>`
 }
 
 /** 版式主体：文字一律锁左区，模板之间只差底衬、右图与配色 */
@@ -232,8 +247,8 @@ function stage(o: CoverHtmlOptions, accent: string): string {
     case 'band': {
       const base = `background:linear-gradient(115deg, ${darker} 0%, ${deep} 100%)`
       return `<div class="abs" style="inset:0;${base}">
-        ${rightSquare(o, accent)}
-        ${o.size === 'wide' ? edgeBlend(darker) : ''}
+        ${photoLayer(o, accent)}
+        ${ringDecor(o, accent)}
         ${textBlock(o, accent, '#ffffff', 'rgba(255,255,255,0.86)')}
         ${brandLine(o.brand, 'rgba(255,255,255,0.72)', o.size)}
       </div>`
@@ -241,8 +256,8 @@ function stage(o: CoverHtmlOptions, accent: string): string {
     case 'left': {
       const bar = o.size === 'wide' ? 20 : 18
       return `<div class="abs" style="inset:0;background:linear-gradient(120deg, #0f141d 0%, ${darker} 100%)">
-        ${rightSquare(o, accent)}
-        ${o.size === 'wide' ? edgeBlend('#0f141d') : ''}
+        ${photoLayer(o, accent)}
+        ${ringDecor(o, accent)}
         <div class="abs" style="left:0;top:0;bottom:0;width:${bar}px;background:${accent}"></div>
         ${textBlock(o, accent, '#ffffff', 'rgba(255,255,255,0.82)')}
         ${brandLine(o.brand, 'rgba(255,255,255,0.7)', o.size)}
@@ -264,8 +279,8 @@ function stage(o: CoverHtmlOptions, accent: string): string {
     default: {
       // plain：强调色压深满底 + 左侧超大字
       return `<div class="abs" style="inset:0;background:linear-gradient(135deg, ${deep} 0%, ${darker} 100%)">
-        ${rightSquare(o, accent)}
-        ${o.size === 'wide' ? edgeBlend(darker) : ''}
+        ${photoLayer(o, accent)}
+        ${ringDecor(o, accent)}
         ${textBlock(o, accent, o.bgSrc ? '#ffffff' : onAccent, o.bgSrc ? 'rgba(255,255,255,0.86)' : onAccent)}
         ${brandLine(o.brand, o.bgSrc ? 'rgba(255,255,255,0.7)' : onAccent, o.size)}
       </div>`
@@ -279,7 +294,7 @@ export function coverHtml(o: CoverHtmlOptions): string {
   const accent = safeAccent(o.accent)
   return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><style>
 html, body { width: ${w}px; height: ${h}px; margin: 0; padding: 0; overflow: hidden; }
-body { position: relative; font-family: ${FONT}; -webkit-font-smoothing: antialiased; }
+body { position: relative; isolation: isolate; font-family: ${FONT}; -webkit-font-smoothing: antialiased; }
 ${BASE_CSS}
 </style></head><body>${stage(o, accent)}</body></html>`
 }
