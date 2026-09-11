@@ -65,8 +65,14 @@ export interface CoverHtmlOptions {
    * 生成的 HTML 落在 `<工程>/covers/` 下，故这里拼 `../` 前缀。
    */
   bgSrc?: string
-  /** 品牌行（通常传账号名） */
+  /** 右下角品牌行（通常传账号名） */
   brand?: string
+  /**
+   * 压在照片上的文字用浅色还是深色：由主进程取样照片文字区亮度算出（见 main/coverStore.ts）。
+   * 刻意不靠"压一层暗底"保可读性——那会在照片上凭空造出一块与照片对不上色的面板。
+   * 无底图时忽略此项（各版式自己的底色已决定文字色）。
+   */
+  lightText?: boolean
 }
 
 /** 中文断行优先落在这些标点后 */
@@ -183,9 +189,11 @@ function textBlock(o: CoverHtmlOptions, accent: string, color: string, subColor:
   // 顶部让给标题遮罩、底部让给品牌行：居中发生在这段净空内，副标题就不会压到品牌行
   const guard = size === 'wide' ? Math.round(COVER_WIDE.h * TOP_GUARD) : Math.round(COVER_SQUARE.h * 0.16)
   const foot = size === 'wide' ? 108 : 112
+  // 有底图时文字直接压在照片上，用一层极轻投影兜底可读性（不铺底色）；纯色版式不加，免得在平底上显脏
+  const shadow = o.bgSrc ? 'text-shadow:0 2px 12px rgba(0,0,0,0.38);' : ''
   return `<div class="abs" style="left:0;top:0;bottom:0;width:${size === 'wide' ? SIZES.wide.w - squareSide('wide') : SIZES.square.w}px;display:flex;flex-direction:column;justify-content:center;padding:${guard}px ${PAD}px ${foot}px;">
     <div style="width:88px;height:8px;border-radius:4px;margin-bottom:20px;background:${accent}"></div>
-    <h1 style="font-size:${fs}px;color:${color}">${body}${
+    <h1 style="font-size:${fs}px;color:${color};${shadow}">${body}${
       sub ? `<span class="sub" style="color:${subColor};font-size:${Math.round(fs * 0.3)}px">${sub}</span>` : ''
     }</h1>
   </div>`
@@ -205,27 +213,22 @@ function rgba(hex: string, alpha: number): string {
 /**
  * 底图与文字的同化。
  *
- * 刻意不再分「左面板 / 右图块」——两块各自有底色就必然存在一条边界，
- * 再怎么柔化也只是把硬边改成软边。改成照片整幅铺满、文字压在它自己的暗部上：
- * 没有边界，也就没有"不融合"。
- * 三层叠加：照片 → 极淡强调色（mix-blend-mode:color，把照片色调拉向品牌色）
- *          → 由强调色派生的暗部渐变承载文字。
- * 暗部渐变在 55% 处已完全透明，右侧方形区保持原图亮度，仍可直接裁成 1:1 缩略图。
+ * 刻意不再分「左面板 / 右图块」——两块各自有底色就必然存在一条边界。
+ * 做法是照片整幅铺满，只叠一层极淡强调色（mix-blend-mode:color，取色相不改明度，
+ * 所以右区原图亮度不受影响，仍可直裁 1:1）把照片色调拉向品牌色。
+ *
+ * 不再压暗部渐变：底图的左侧留白由生图提示词保证（主体偏右、左侧安静），
+ * 再叠一层暗部等于凭空造出一块与照片对不上色的面板——那是"文字底色不对"的来源。
+ * 可读性交给自适应字色（lightText，浅底用深字、深底用白字）加一层极轻投影兜底。
  */
 function photoLayer(o: CoverHtmlOptions, accent: string): string {
   if (!o.bgSrc) return ''
-  const dark = shade(accent, -0.8)
-  const scrim =
-    o.size === 'wide'
-      ? `linear-gradient(90deg, ${rgba(dark, 0.95)} 0%, ${rgba(dark, 0.88)} 26%, ${rgba(dark, 0.56)} 42%, ${rgba(dark, 0)} 55%)`
-      : `linear-gradient(105deg, ${rgba(dark, 0.94)} 0%, ${rgba(dark, 0.78)} 52%, ${rgba(dark, 0.3)} 100%)`
   // 头图几乎无横向余量可移（21:9 源 vs 2.35:1 画布），构图靠提示词保证；
   // 1:1 方图会从横图裁掉左右两侧，主体既然偏右就得靠右取景，否则缩略图把主体裁没。
   // 取 78% 而非 100%：完全靠右会把主体留在画面正中，而方图文字是通栏的，会压在字上
   const pos = o.size === 'wide' ? 'center' : '78% center'
   return `<div class="abs" style="inset:0;background-image:url('../${escapeHtml(o.bgSrc)}');background-size:cover;background-position:${pos}"></div>
-    <div class="abs" style="inset:0;background:${accent};mix-blend-mode:color;opacity:0.13"></div>
-    <div class="abs" style="inset:0;background:${scrim}"></div>`
+    <div class="abs" style="inset:0;background:${accent};mix-blend-mode:color;opacity:0.13"></div>`
 }
 
 /** 无底图时右侧方形区的主体感：只发光晕与同心圆，不铺自己的底色（铺了就会与左区形成硬竖边） */
@@ -239,11 +242,22 @@ function ringDecor(o: CoverHtmlOptions, accent: string): string {
   </div>`
 }
 
-/** 版式主体：文字一律锁左区，模板之间只差底衬、右图与配色 */
+/**
+ * 压在照片上的文字配色：浅底用深字、深底用白字。
+ * 由主进程取样照片文字区亮度后经 lightText 传入；无底图时 lightText 为 undefined，
+ * 走白字分支（各版式无图时的底衬都是深色）。
+ */
+function photoInk(o: CoverHtmlOptions): { fg: string; sub: string; brand: string } {
+  return o.lightText === false
+    ? { fg: '#1f2937', sub: '#4b5563', brand: '#6b7280' }
+    : { fg: '#ffffff', sub: 'rgba(255,255,255,0.86)', brand: 'rgba(255,255,255,0.72)' }
+}
+
 function stage(o: CoverHtmlOptions, accent: string): string {
   const deep = shade(accent, -0.34)
   const darker = shade(accent, -0.62)
   const onAccent = contrastText(accent)
+  const ink = photoInk(o)
 
   switch (o.template) {
     // 旧 id 'band'（底部色带）保留：老工程重渲染时落到新的左文右图版式
@@ -253,8 +267,8 @@ function stage(o: CoverHtmlOptions, accent: string): string {
       return `<div class="abs" style="inset:0;${base}">
         ${photoLayer(o, accent)}
         ${ringDecor(o, accent)}
-        ${textBlock(o, accent, '#ffffff', 'rgba(255,255,255,0.86)')}
-        ${brandLine(o.brand, 'rgba(255,255,255,0.72)', o.size)}
+        ${textBlock(o, accent, ink.fg, ink.sub)}
+        ${brandLine(o.brand, ink.brand, o.size)}
       </div>`
     }
     case 'left': {
@@ -263,8 +277,8 @@ function stage(o: CoverHtmlOptions, accent: string): string {
         ${photoLayer(o, accent)}
         ${ringDecor(o, accent)}
         <div class="abs" style="left:0;top:0;bottom:0;width:${bar}px;background:${accent}"></div>
-        ${textBlock(o, accent, '#ffffff', 'rgba(255,255,255,0.82)')}
-        ${brandLine(o.brand, 'rgba(255,255,255,0.7)', o.size)}
+        ${textBlock(o, accent, ink.fg, ink.sub)}
+        ${brandLine(o.brand, ink.brand, o.size)}
       </div>`
     }
     case 'editorial': {
@@ -281,12 +295,13 @@ function stage(o: CoverHtmlOptions, accent: string): string {
       </div>`
     }
     default: {
-      // plain：强调色压深满底 + 左侧超大字
+      // plain：强调色压深满底 + 左侧超大字；有底图时字色交给自适应
+      const fg = o.bgSrc ? ink.fg : onAccent
       return `<div class="abs" style="inset:0;background:linear-gradient(135deg, ${deep} 0%, ${darker} 100%)">
         ${photoLayer(o, accent)}
         ${ringDecor(o, accent)}
-        ${textBlock(o, accent, o.bgSrc ? '#ffffff' : onAccent, o.bgSrc ? 'rgba(255,255,255,0.86)' : onAccent)}
-        ${brandLine(o.brand, o.bgSrc ? 'rgba(255,255,255,0.7)' : onAccent, o.size)}
+        ${textBlock(o, accent, fg, o.bgSrc ? ink.sub : onAccent)}
+        ${brandLine(o.brand, o.bgSrc ? ink.brand : onAccent, o.size)}
       </div>`
     }
   }
