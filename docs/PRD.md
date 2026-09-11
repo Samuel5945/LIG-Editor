@@ -1,9 +1,16 @@
 # PRD：立格编辑器（本地优先的公众号图文创作工作台，原名图文编辑器 tuwen-editor）
 
-- 版本：v1.0（2026-07-28）
-- 状态：待评审
-- 工作区：`C:\Users\PC\Desktop\图文编辑器`
+- 版本：**v1.1（2026-09-11，对齐已交付的 v0.5.0）**
+- 状态：一期已全部交付，本文转为**随实现滚动维护的现状文档**；下一步计划见 §11
+- 工作区：`C:\Users\PC\Desktop\tuwen-editor`（仓库目录名保留历史名 `tuwen-editor`，应用标识为 `LIG-Editor` / 立格编辑器）
 - 参考范式：[Nomi](https://github.com/aqm857886159/Nomi)（本地优先 + AI 副驾驶 + 无头能力核），本产品为其"图文版"适配
+
+> **v1.0 → v1.1 变更摘要**（v1.0 定稿于 2026-07-28，此后实现推进到内部里程碑 M13，本文按实际代码全面校正）
+> 1. §1.3 非目标里"EXE 不做联网搜索"已失效：现内置 Tavily / Bocha 检索（用户自带 Key），见 §5.3
+> 2. §9.2 设想的"浏览器自动化推公众号草稿"已被**官方 API 直推**取代，见 §9.3
+> 3. §10.2 的 13 个 MCP 工具扩到 **25 个**，且 AI 类工具改为**返回提示词、不代跑 LLM**，见 §10.2
+> 4. 新增：分类=账号体系（§4.1）、排版调性系统（§7.6）、贴图卡片（§7.7）、多平台分发（§7.8）、内容日历排期（§7.8）、Skill 在线导入（§6）
+> 5. §11 范围划分由"一期/二期"改为"**已交付 / 仍待做**"，并列出三期候选
 
 ---
 
@@ -19,14 +26,18 @@
 
 - **本地优先**：工程、素材、密钥全在本机，不上传任何内容到自有服务器
 - **AI 副驾驶**：右侧对话面板驱动全流程，结果直接落到编辑器，改动可确认
-- **Agent 可操控**：创作能力抽成无头能力核（MCP + 本地 HTTP），Codex / Qoder（WorkCN）/ workbuddy / Marvis 可用对话指挥编辑器；工程文件为纯文本，Agent 也可直接改文件，编辑器热载
+- **Agent 可操控**：创作能力抽成无头能力核（MCP + 本地 HTTP），Codex / Qoder / workbuddy / Marvis 可用对话指挥编辑器；工程文件为纯文本，Agent 也可直接改文件，编辑器热载
 - **模型自带**：接入任意 OpenAI 兼容 API（预置 Agnes AI `https://apihub.agnes-ai.com/v1`），文本与图像模型分开配置
+- **多账号**：一个工作台同时服务多个调性不同的账号，**账号 = 分类**，排版、风格、平台画像按账号成套切换（§4.1）
 
 ### 1.3 非目标（明确不做）
 
-- EXE 自身**不做联网搜索/热点抓取**——该能力由接入的模型 API 或外部 Agent 承担；产品侧通过 Skill 导入（如 wechat-viral-topic）提供方法论
-- 不做多人协作、云同步、账号体系
-- MVP 不做视频/动图创作（保持与 Nomi 的分工：它管视频，本产品管图文）
+- 不做多人协作、云同步、账号体系（登录意义上的）
+- 不做自有服务器与内容托管；除用户自配的模型 API、检索 API、微信官方 API 外不产生任何上行
+- 不做视频/动图创作（与 Nomi 的分工：它管视频，本产品管图文）
+- 不做版面级 PDF 素材还原（仅纯文本抽取，见 §14）
+
+> **v1.0 曾把"联网搜索/热点抓取"列为非目标，现已推翻**：审阅与脑暴确实需要核事实、追热点，因此内置了**用户自带 Key 的第三方检索**（Tavily / Bocha）。边界仍然是"不自建爬虫、不做热点榜单聚合"，见 §5.3。
 
 ---
 
@@ -39,11 +50,14 @@
 | S1 | 手里有素材（链接文本/PDF/一句话想法），想脑暴出选题 | 副驾驶脑暴 → 选题卡 → 入选题库或立项 |
 | S2 | 定了选题，想快速出一篇有个人风格的长文初稿 | 挂风格 Skill → 大纲 → 全文 → 落编辑器 |
 | S3 | 初稿不满意，逐段修改打磨 | 编辑器选区 + 指令 → diff 高亮 → 确认应用 |
-| S4 | 发布前想全面审一遍 | 审阅报告（结构/事实存疑/风格/敏感词/配图建议） |
+| S4 | 发布前想全面审一遍 | 审阅报告（结构/事实存疑/风格/敏感词/配图建议），可挂检索核事实 |
 | S5 | 需要配图：数据图用代码画，氛围图用 AI 生，品牌图用真图抠 | 三种配图管线，产物统一进 assets/ |
 | S6 | 出标题候选和封面图 | N 个标题打分；封面 2.35:1 主图 + 1:1 小图 |
-| S7 | 成品发到公众号 | 一键复制富文本 → 粘贴到公众号后台（MVP） |
+| S7 | 成品发到公众号 | 复制富文本粘贴 / Word·PDF 交稿 / 官方 API 直推草稿 |
 | S8 | 在 Codex/Qoder 里说"帮我把第三张配图换成超椭圆序列图" | Agent 走 MCP 或直改 figures/*.html，编辑器热载 |
+| S9 | 同一篇内容还要发小红书/知乎/头条/百家 | 一键转贴图卡片（1242×1656 逐张 PNG）；按平台画像复制富文本 |
+| S10 | 手里几个账号，一周要排开发布节奏 | 内容日历拖拽排期；选题直接拖到某天 = 立项 + 排期 |
+| S11 | 桌面双击 / 把 .md 拖到应用图标 | 直接打开：workspace 内则定位所属工程，外部 md 自动导入为新工程 |
 
 ---
 
@@ -51,11 +65,14 @@
 
 ### 3.1 技术栈
 
-- **Electron + React + Vite + Tailwind**（与 Nomi 同源，Agent 修改源码最熟悉）
+- **Electron 31 + React 18 + Vite 5 + Tailwind CSS 3**（与 Nomi 同源，Agent 修改源码最熟悉）
 - 富文本编辑器：**TipTap（ProseMirror）**
 - 图像处理：**sharp**（裁切/合成）+ 自研 JS 抠图算法（白底反预乘/形状掩码/拟合圆，移植自已验证的 Python 实现）
 - 代码绘图渲染：Electron **offscreen BrowserWindow**（HTML→PNG，替代外部 headless Edge 命令行）
+- 交稿文档：`docx`（Word）+ `printToPDF`（PDF）；PDF 预览 `pdfjs-dist`
 - MCP：`@modelcontextprotocol/sdk`（stdio）+ 内置 HTTP server（127.0.0.1 随机端口，写入锁文件供发现）
+- 新手引导：`driver.js`
+- 测试：`vitest`（14 个文件 / 257 例，集中在 `src/shared/__tests__/` 的纯函数层）
 
 ### 3.2 进程结构
 
@@ -63,18 +80,22 @@
 ┌─ Electron 主进程 ────────────────────────────────┐
 │ · 工程文件存储 + chokidar 文件 watcher（热载）     │
 │ · 模型调用代理（OpenAI 兼容，流式转发到渲染进程）  │
+│ · 检索代理（Tavily / Bocha）                      │
 │ · MCP 能力核（stdio 入口 + 本地 HTTP/SSE）        │
 │ · offscreen 渲染器（figures/*.html → assets/*.png）│
-│ · 图像处理（抠图/裁切/封面合成）                   │
-│ · 密钥加密存储（safeStorage）                     │
+│ · 图像处理（抠图/裁切/封面合成/贴图卡片渲染）      │
+│ · 交稿导出（article.html / Word / PDF → 交付/）    │
+│ · 公众号官方 API 客户端（图片转存 + 草稿直推）     │
+│ · 密钥加密存储（safeStorage / DPAPI）             │
 └───────────────────────┬──────────────────────────┘
                      IPC (typed)
 ┌─ 渲染进程：三栏工作台 ─┴──────────────────────────┐
 │ 左栏           │ 中栏               │ 右栏        │
 │ 项目列表        │ 富文本编辑器        │ AI 副驾驶    │
 │ 选题库(ideas)  │ (TipTap 所见即所得   │ 对话面板     │
-│ 素材/配图树    │  公众号内联样式预览)  │ (指令→diff→ │
-│ Skill 管理     │ 标题/封面工作区(页签) │  确认应用)   │
+│ 分类/账号管理   │  公众号内联样式预览)  │ 脑暴创作     │
+│ Skill 管理     │ 标题/封面 · 日历排期  │ 审阅打磨     │
+│                │ 贴图卡片            │ 模型接入     │
 └──────────────────────────────────────────────────┘
 ```
 
@@ -89,36 +110,50 @@
 
 ## 4. 工程文件格式（数据模型）
 
-每篇图文 = 一个工程目录，**article.md 为正文唯一事实源**：
+每篇图文 = 一个工程目录，**article.md 为正文唯一事实源**。工程按分类分子文件夹存放（`workspace/<分类>/<工程>/`）：
 
 ```
-C:\Users\PC\Desktop\图文编辑器\workspace\<项目名>\
+C:\Users\PC\Desktop\tuwen-editor\workspace\<分类>\<项目名>\
 ├── project.json      # 元信息（见下）
 ├── article.md        # 正文事实源：Markdown + 图片引用 + 图注语法
 ├── article.html      # 导出物：内联样式 HTML（由导出动作生成，勿手改）
 ├── ideas.md          # 本项目选题脑暴记录
 ├── review.md         # 最新审阅报告（每次审阅覆盖，历史入 chat/）
+├── cards.json        # 贴图卡片组（format=xhs|wechat）；转风格前备份为 cards-<format>.json
+├── cards/            # 逐张卡片源与产物：cards/<format>/card-N.html → card-N.png（1242×1656）
 ├── assets/           # 全部配图 PNG（AI生图/代码绘图产物/导入真图）
 ├── figures/          # 代码绘图源 HTML（一图一文件，可被 Agent 直改）
 │   └── fig-01.html   #   头部注释声明画布尺寸，渲染产物 assets/fig-01.png
+├── 交付/             # 交稿产物落盘：<项目名>-交稿.docx / .pdf
 └── chat/             # 副驾驶会话历史（JSON，跨次打开保留上下文）
 ```
 
-**project.json 核心字段**：
+**project.json 字段（当前全量）**：
 
 ```json
 {
   "name": "荣耀新LOGO",
   "status": "drafting",
+  "format": "article",
+  "category": "科技数码",
   "topic": { "angle": "...", "audience": "...", "source_material": ["..."] },
   "titles": [ { "text": "...", "score": 8.5, "reason": "..." } ],
   "cover": { "main": "assets/cover-235.png", "square": "assets/cover-11.png" },
+  "plannedAt": "2026-09-12",
   "style_skill": "khazix-writer",
+  "accent": "#2f6fed",
+  "bodyFontSize": 17, "headingFontSize": 22,
+  "bodyAlign": "indent", "headingAlign": "center",
+  "h1Style": "capsule", "h2Style": "underline", "h2Num": "circle", "h3Mark": "bar",
+  "bodyBg": "none",
   "created_at": "...", "updated_at": "..."
 }
 ```
 
-status 取值：`ideating | drafting | reviewing | ready`。
+- `status`：`ideating | drafting | reviewing | ready`
+- `format`：`article`（默认）/ `cards`（中央区切到贴图面板）
+- `plannedAt`：本地日期 `YYYY-MM-DD`，缺省 = 未排期（§7.8）
+- 排版八项（`accent` / 两个字号 / 两个排列 / 四个装饰）均为**可选覆盖**：未设置 = 跟随分类主题；`h2Num: "none"` 与 `bodyBg: "none"` 是**哨兵值**，表示"显式关掉主题自带项"，与"未覆盖"语义不同
 
 **article.md 图片语法**（约定优于配置）：
 
@@ -133,13 +168,38 @@ status 取值：`ideating | drafting | reviewing | ready`。
 **全局目录**（workspace 同级）：
 
 ```
-├── workspace\           # 所有图文工程
-├── skills\              # 导入的 Skill（SKILL.md 格式）
-├── idea-inbox.md        # 跨项目选题收集箱
-└── settings\            # 模型接入配置（密钥加密）、导出模板、bridge.json
+├── workspace\<分类>\<工程>\   # 所有图文工程
+├── skills\                   # 导入的 Skill（SKILL.md 格式），首启预装 khazix-writer + wechat-viral-topic
+├── idea-inbox.md             # 跨项目选题收集箱（## 标题 + 角度/读者/评分/理由）
+└── settings\
+    ├── llm.json              # 供应商与模型配置（Key 经 safeStorage 加密）、检索配置、一次性种子标记
+    ├── customThemes.json     # 分类名 → 导入的自定义排版主题
+    ├── categoryPresets.json  # 分类名 → 账号级预设（§4.1）
+    ├── disabledCategories.json # 已隐藏分类（数组）
+    ├── wechat.json           # 公众号 appId + 加密 appSecret（当前为全局单账号）
+    └── bridge.json           # MCP 本地 HTTP 端口与 token，运行时写入供本机发现
 ```
 
-**取舍说明**：事实源选 Markdown 而非 ProseMirror JSON（Agent 不友好、不可读）或纯 HTML（人工编辑困难）。编辑器负责 md ↔ TipTap 双向转换；公众号排版样式在**导出时**套用内联样式模板注入，正文源保持干净。
+> **维护约束（踩过的坑）**：`projectStore.readMeta` 是**字段白名单**式重建。给 `ProjectMeta` 加新字段必须同时加进 `readMeta`，否则 `readMeta → writeMeta` 往返会静默把盘上的值抹掉（历史上排版覆盖四项就漏过，表现为"改标题字号把正文字号一起重置"）。`cardsStore.normalizeDeck` 同理。
+
+### 4.1 分类 = 账号（多账号体系）
+
+产品假设一个人同时运营多个调性不同的账号，落地为**「账号 = 分类」**：分类既是 workspace 的物理目录，也是排版、风格、平台画像的切换单位。
+
+一个账号目前由三处配置共同定义：
+
+| 维度 | 存放处 | 生效方式 |
+|---|---|---|
+| 排版调性 | `CATEGORY_THEMES`（内置 6 套 + 未分类默认）与 `settings/customThemes.json`（导入） | **不落到工程**，每次读取按 `meta.category` 现算（§7.6） |
+| 写作风格 | `settings/categoryPresets.json` 的 `style_skill` | 新建工程时由 `createProject` 单点注入 `meta.style_skill`，手动新建 / 日历选题立项 / Agent `create_project` 三条路都走这里 |
+| 默认分发平台 | 同文件的 `default_platform` | **不落工程**：导出框打开时按 `meta.category` 现算并预选，未配置则公众号；改预设即刻对全账号生效 |
+| 凭据 | `settings/wechat.json`（当前全局，非分类级） | 推送草稿时使用 |
+
+分类重命名会同步迁移工程目录、自定义主题 key 与预设 key；删除分类实为"隐藏"，其预设保留，恢复后仍生效。
+
+**当前状态：两项账号级默认已闭环。** `CategoryPreset = { style_skill?, default_platform? }`，`categoryPreset:set` 走**增量 patch**（字段传 `null` = 清除该项，缺省 = 保持原值），整条被清空才删除该分类的 key。盘上 JSON 可被外部工具改坏，读取端统一剔除空串、未知平台与非对象条目。新建工程与脑暴立项都**按侧栏当前筛选分类落档**（筛选为「全部」时落未分类），否则预设永远命中不上。
+
+仍未收口的两点见 §11.3：工程改分类时是否回填目标账号预设（现不回填，避免静默覆盖用户已手选的 Skill）；分类级公众号凭据（现全局单账号）。
 
 ---
 
@@ -149,30 +209,37 @@ status 取值：`ideating | drafting | reviewing | ready`。
 
 - 添加供应商：BaseURL + API Key +「测试连接」（自动探测 `/v1/chat/completions` 与 `/v1/images/generations` 或 chat 图像模式）
 - **预置 Agnes AI**：`https://apihub.agnes-ai.com/v1`，填 Key 即用；文本模型与图像模型分别下拉选择
-- 支持多供应商并存，按能力（文本/图像）分别指定默认模型
-- Key 用 Electron `safeStorage` 加密落盘，仅本机可解
+- 多供应商并存，按能力（文本/图像）分别指定默认模型；支持拖拽排序与置顶/取消置顶
+- 图像接口有两种形态可切换：OpenAI 兼容 `images/generations` 与 Agnes 多模态 chat 模式（旧配置自动迁移）
+- Key 用 Electron `safeStorage`（Windows DPAPI）加密落盘，仅本机可解
 
 ### 5.2 模型分工
 
 | 任务 | 模型类型 | 说明 |
 |---|---|---|
 | 脑暴/大纲/全文/修改/审阅/标题 | 文本（chat/completions，流式） | 挂载 Skill 系统提示 |
-| AI 生图/封面/图生图 | 图像 | 兼容 OpenAI images 接口与 Agnes 多模态 chat 格式 |
+| AI 生图/封面/图生图/贴图卡片底图 | 图像 | 见 §5.1 双形态 |
 
-联网搜索：若所接模型自带 search 能力则自然可用；EXE 不实现独立搜索器。
+### 5.3 联网检索（v1.0 列为非目标，现已内置）
+
+`main/webSearch.ts` 提供 `webSearch(query, fresh)` 与 `webResearch(queries[])`，供应商在设置里选配：`none | tavily | bocha`（各自需用户 Key）。用途限定为**审阅核事实与脑暴补料**，不做热点榜单聚合、不自建爬虫。未配置时相关能力自动降级为不检索。
 
 ---
 
 ## 6. Skill 系统
 
 - **格式**：兼容 SKILL.md（frontmatter: name/description + Markdown 正文），与 `.agents/skills` 生态一致
-- **导入**：从本地目录导入到 `skills\`；左栏 Skill 管理页可启用/停用/查看
+- **导入**：本地目录导入到 `skills\`；左栏 Skill 管理页可启用/停用/查看
+- **在线导入**：支持四种来源 `inline`（直接粘正文）/ `path` / `url` / `github`，GitHub 源走**多镜像并发竞速**并尝试多个候选路径，墙内可直连
 - **挂载**：副驾驶按任务类型自动推荐挂载（脑暴→选题类 Skill；生成→风格类 Skill），也可手动指定；挂载即注入系统提示
-- **首发建议内置**：`wechat-viral-topic`（选题方法论）、`khazix-writer`（个人写作风格）——以"预装可删"的方式放入 skills\
+- **预装**：`wechat-viral-topic`（选题方法论）、`khazix-writer`（个人写作风格），以"预装可删"方式放入 `skills\`
+- **账号绑定**：分类级预设可指定新工程默认挂载的写作 Skill（§4.1）
+
+> 注：**「发布前合规审查」不在应用代码内**，它是外部 Skill（`lig-publish-precheck`），通过本应用的 `read_article` / `patch_article` / `save_review` 三个 MCP 工具落地。这正是 §10.2 采用"返回提示词"设计的收益之一。
 
 ---
 
-## 7. 五大能力流（副驾驶对话驱动）
+## 7. 能力流（副驾驶对话驱动）
 
 所有能力统一交互模式：**对话发指令 → AI 产出 → 落盘 + 界面呈现 → 改动需确认**。
 
@@ -180,7 +247,7 @@ status 取值：`ideating | drafting | reviewing | ready`。
 
 - 输入：粘贴素材文本 / 导入文件（txt/md/pdf 文本抽取）/ 一句话想法 / 从 idea-inbox.md 与选题库取料
 - 输出：**选题卡**列表（角度、目标读者、切入点、标题雏形、爆款潜力评估与理由）
-- 动作：选题卡可「存入选题库」（追加 ideas.md / idea-inbox.md）或「立项」（创建工程并写入 project.json.topic）
+- 动作：「存入选题库」（追加 `idea-inbox.md`，全局）或「立项」（创建工程并写入 `project.json.topic`）
 
 ### 7.2 生成图文
 
@@ -196,11 +263,33 @@ status 取值：`ideating | drafting | reviewing | ready`。
 
 - 一键整篇审阅，输出结构化报告：结构与节奏 / 事实存疑点清单 / 风格一致性 / 敏感词与合规风险 / 配图与图注检查（图片是否有图注、自制图是否标注非官方）/ 标题与内文匹配度
 - 报告写入 review.md 并在右栏面板分区展示，每条问题带「定位到原文」跳转
+- 可挂 §5.3 检索做**深度审阅**（逐条核事实）；支持只审选中段落
 
 ### 7.5 标题与封面
 
-- 标题：生成 N 个候选 + 打分 + 理由，入 project.json.titles，一键采用
-- 封面：三种来源（AI 生图 / 代码绘图 / 导入图）→ 内置裁切器出 **2.35:1 主封面 + 1:1 朋友圈小图**，写入 project.json.cover
+- 标题：生成 N 个候选 + 打分 + 理由，入 `project.json.titles`，一键采用
+- 封面：三种来源（AI 生图 / 代码绘图 / 导入图）→ 内置裁切器出 **2.35:1 主封面（1175×500）+ 1:1 朋友圈小图（800×800）**，写入 `project.json.cover`
+- 封面提示词可直接从当前正文提炼
+
+### 7.6 排版与主题
+
+- 每个分类绑定一套排版主题：内置 6 套分类调性 + `未分类` 默认，另可从**已发布的公众号文章 HTML 反向解析**出自定义主题（`themeParse.ts`，存 `customThemes.json`，主题名即创建一个分类）
+- 主题可逐项微调：标题装饰（胶囊/下划线等）、小节序号（01 / 一、/ ① 圈号等 6 种）、引用与分隔线形态、加粗是否高亮、背景卡色
+- 解析优先级：`customThemes[分类]` > `CATEGORY_THEMES[分类]` > `DEFAULT_THEME`，再被工程级八项覆盖（§4）
+- **昼夜配色贯穿导出**：日间/夜间两套配色反色，编辑器预览、复制、导出、推送一致
+
+### 7.7 贴图卡片（小红书 / 公众号贴图）
+
+- 一篇正文可转成一组**固定 1242×1656** 竖版卡片：模板注入生成 `cards/<format>/card-N.html` → offscreen 截图 → 同名 PNG
+- 两种版式 `xhs` / `wechat`，互切前把原版存 `cards-<format>.json`，可零成本来回切
+- 卡片组落 `cards.json`（含强调色与图注覆盖），支持逐张编辑与重排
+- 可直接推送公众号（`article_type=newspic`）
+
+### 7.8 多平台分发与排期
+
+- **平台画像**：`PlatformId = wechat | zhihu | toutiao | baijiahao`，各平台编辑器粘贴净化规则不同，导出/复制按画像输出对应形态（知乎零内联样式；头条/百家保守内联且当前共用同一画像，待分化；公众号与既有导出逐字节一致）
+- **交稿文件**：Word / PDF 一键落工程内 `交付/`（PDF 复用日间 `article.html` → `printToPDF` A4）
+- **内容日历**：中栏「日历」页签，月历网格（周一为首）拖拽排期写入 `plannedAt`；右栏「未排期」与「选题库」两页签均可拖入日期格，**选题拖到某天 = 立项 + 排期一步到位**（不消费选题，可多账号复用），拖回右栏 = 取消排期
 
 ---
 
@@ -210,23 +299,34 @@ status 取值：`ideating | drafting | reviewing | ready`。
 |---|---|---|
 | AI 生图 | 对话描述 → 图像模型生成 → 预览 → 存 assets/ → 插入正文 | 氛围图、封面 |
 | 代码绘图 | AI 按描述生成 figures/fig-N.html（SVG/HTML 绘制）→ offscreen 渲染 PNG → 插入正文；源文件保留，**支持"改源码→重渲染→原位替换"闭环** | 数据图、序列图、对比图、示意图 |
-| 真图导入+抠图 | 拖入图片 → 可选抠图（白底反预乘 / 形状掩码 / 拟合圆三种算法，JS 移植）→ 存 assets/ | 品牌 LOGO、实拍图（保真实性） |
+| 真图导入+抠图 | 拖入图片 → 可选抠图 → 存 assets/ | 品牌 LOGO、实拍图（保真实性） |
+
+抠图现状：三种算法（**白底反预乘 / 形状掩码 / 拟合圆**）各配一个阈值滑杆（噪声底 / 掩码阈值 / 半径缩放），120ms 防抖实时预览 + 棋盘透明底。**尚无画笔/橡皮等手工 mask 精修**（二期遗留，见 §11.2）；批量多图导入时不做抠图。
 
 统一约束：正文中的图必须位于 assets/，md 中相对路径引用；代码绘图必须保留 figure-source 注释关联。
 
 ---
 
-## 9. 导出
+## 9. 导出与发布
 
-### 9.1 MVP：公众号富文本复制
+### 9.1 复制富文本（默认路径）
 
-- 「导出」动作：article.md → 套用内联样式模板（默认模板复刻已验证的公众号排版：正文段距、图注灰字、无 class/id 全内联）→ 生成 article.html → 写入剪贴板 `text/html`（图片以 dataURL 内嵌，公众号粘贴时自动转存 CDN）
-- 提供导出预览窗（模拟手机宽度）
+article.md → 套用内联样式模板（复刻已验证的公众号排版：正文段距、图注灰字、无 class/id 全内联）→ 生成 `article.html` → 写入剪贴板 `text/html`（图片以 dataURL 内嵌，公众号粘贴时自动转存 CDN）。提供导出预览窗（模拟手机宽度）。按平台画像切换输出形态（§7.8）。
 
-### 9.2 二期
+### 9.2 交稿文件
 
-- 自动推公众号草稿（浏览器自动化：复用已验证的"section 选区替换 + paste + CDN 转存 + 保存草稿"流程）
-- Markdown / 长图（整文渲染为竖版 PNG）/ PDF 导出
+Word（`docx`）与 PDF（`printToPDF`）落工程内 `交付/`，用于对外交稿与审阅留档。
+
+### 9.3 直推公众号草稿（官方 API）
+
+**v1.0 设想的"浏览器自动化操作公众号后台"未被采用**，实际走官方接口（`main/wechatPublish.ts`）：
+
+1. 正文本地图片 → `media/uploadimg` 转微信 CDN
+2. 封面 → `material/add_material` 取 `thumb_media_id`
+3. `draft/add` 建草稿（图文）；贴图卡片走 `article_type=newspic`
+4. 凭据来自 `settings/wechat.json`（appId + 加密 appSecret）；辅助处理 IP 白名单报错
+
+同一能力也暴露给 Agent（MCP `push_draft` / `push_cards`）。
 
 ---
 
@@ -238,17 +338,21 @@ status 取值：`ideating | drafting | reviewing | ready`。
 - **本地 HTTP**：`http://127.0.0.1:<port>/api/*`，端口与 token 写入 `settings\bridge.json` 供本机工具发现
 - **「一键接入」卡片**：设置页生成 Codex（`config.toml`）/ Qoder / Claude Code 的 MCP 配置片段，一键复制
 
-### 10.2 MCP 工具面（MVP 集）
+### 10.2 MCP 工具面（当前 25 个）
+
+**关键设计变更**：v1.0 设想的 `brainstorm_topics / generate_article / review_article / generate_titles` 由应用代跑 LLM，实际改为 **`*_prompt` 返回提示词消息组、本应用不代跑 LLM**——外部 Agent 用它自己的模型跑，再调落盘工具写入。理由：Agent 侧模型更强且已有配额，避免把 API Key 与计费绑到编辑器上；同时提示词里已注入当前正文与风格 Skill，Agent 无需自行拼装上下文。
 
 ```
-list_projects / create_project / get_project        # 工程管理
-read_article / write_article / patch_article        # 正文读写（patch 为搜索替换式局部改）
-brainstorm_topics / generate_article / review_article / generate_titles   # AI 能力
-render_figure(figure_path)                          # 渲染 figures/*.html → assets/*.png
-generate_image(prompt, target)                      # AI 生图落盘
-import_image(src_path, matting_mode?)               # 导入+可选抠图
-set_cover(image, crop) / export_html                # 封面与导出
+工程管理   list_projects / create_project / set_project_category / get_project
+正文读写   read_article / write_article / patch_article（搜索替换式局部改）
+提示词     brainstorm_prompt / outline_prompt / article_prompt / review_prompt / titles_prompt
+落盘       save_ideas / save_review / set_titles / set_theme
+配图       render_figure / generate_image / import_image / set_cover
+排期       schedule_set
+导出发布   export_html / export_docx / push_draft / push_cards
 ```
+
+每个写操作后触发 `notifyChange()`，GUI 侧热载。
 
 ### 10.3 文件直改通道
 
@@ -256,28 +360,39 @@ Agent 直接编辑 article.md / figures/*.html / project.json → watcher 热载
 
 ---
 
-## 11. 范围划分
+## 11. 范围划分与下一步
 
-### MVP（一期）
+### 11.1 一期（v1.0 MVP 九项）—— 全部交付 ✅
 
-1. 工程管理（新建/打开/列表）+ 工程文件格式落地
-2. 三栏工作台：TipTap 编辑器（md 双向同步、图注渲染）+ 副驾驶对话面板
-3. 模型接入面板（预置 Agnes AI，多供应商）
-4. 五大能力流：脑暴 / 生成 / 修改（diff 确认）/ 审阅 / 标题封面
-5. 三种配图管线（AI 生图、代码绘图+offscreen 渲染、真图导入+抠图）
-6. 导出：内联样式 HTML + 富文本复制
-7. MCP 能力核（stdio + HTTP）+ 文件 watcher 热载 + 一键接入卡片
-8. Skill 导入与挂载
-9. electron-builder 打包 Windows EXE（NSIS 安装包 + portable）
+工程管理 · 三栏工作台（TipTap + 副驾驶） · 模型接入面板 · 五大能力流 · 三种配图管线 · 内联样式 HTML 导出与富文本复制 · MCP 能力核（stdio + HTTP）+ 文件热载 + 一键接入 · Skill 导入与挂载 · electron-builder 打包（NSIS 安装版 + portable）。
 
-### 二期
+超出 MVP 的额外交付：分类体系与排版调性系统、排版反向导入、贴图卡片、多平台分发、Word/PDF 交稿、官方 API 直推草稿、内容日历排期（含拖拽落点高亮反馈）、多账号预设闭环（分类级写作 Skill + 默认分发平台，新工程自动继承）、联网检索、Skill 在线导入、.md 文件关联直开、昼夜配色、新手引导 Tour、版本更新入口。
 
-- 自动推公众号草稿、Markdown/长图/PDF 导出
-- 封面模板库、选题库看板视图、抠图交互精修
-- 向导式新手流程（选题→大纲→成文→配图→标题封面 一路下一步）
-- Skill 市场/在线导入
+### 11.2 v1.0「二期」九条 —— 实际完成度
 
----
+| 二期条目 | 状态 | 说明 |
+|---|---|---|
+| 自动推公众号草稿 | ✅ 已交付 | 换方案：官方 API 直推（§9.3），非浏览器自动化 |
+| PDF 导出 | ✅ 已交付 | `printToPDF` 落 `交付/`；另交付了 PRD 未提的 Word |
+| 选题库看板视图 | 🟡 语义偏移 | 交付的是**日历排期**看板；选题本身仍是列表卡片，无状态泳道 |
+| 抠图交互精修 | 🟡 部分 | 三算法 + 滑杆 + 防抖预览已交付；无画笔/橡皮/手工 mask |
+| Skill 市场/在线导入 | 🟡 部分 | 在线导入四源 + 镜像竞速已交付；无市场（目录/浏览/搜索/评分） |
+| 封面模板库 | ❌ 未做 | 现仅 AI 生图 + 双比例裁剪 |
+| 向导式新手流程 | ❌ 未做 | 交付的是 `driver.js` **界面讲解** Tour（6 步高亮常驻 DOM，不驱动写盘），不是"选题→大纲→成文→配图→标题 一路下一步"的创作向导 |
+| Markdown 导出 | ❌ 未做 | 判定为**低优先**：`article.md` 本身即事实源，需求已被"文件即产物"消解 |
+| 长图导出 | ❌ 未做 | 无实现；贴图卡片是逐张固定尺寸 PNG，不是整文竖图 |
+
+### 11.3 三期候选（按当前判断排序）
+
+1. **多账号未收口两点**：工程改分类时是否回填目标账号预设（现不回填）；分类级公众号凭据（`wechat.json` 现为全局单账号，是「账号 = 分类」真正的收口点，涉及凭据需先设计加密——预设文件明文，凭据不得入内）
+2. **头条/百家画像真正分化**：现共用 `liteHtml`，已预留独立 id
+3. **创作向导**（原二期"向导式新手流程"）：把脑暴→大纲→成文→配图→标题串成有状态机的一路下一步
+4. **封面模板库**
+5. **选题泳道看板**：补上"选题状态流转"维度（现只有排期维度）
+6. **抠图手工精修**：画笔/橡皮 + 多参数
+7. **Skill 市场**：目录/搜索/评分
+8. **发文节奏 / 封面尺寸偏好**入账号预设：本次刻意未加，因为当前没有消费方，加了就是死字段
+9. 长图导出（待定）；Markdown 导出（建议明确不做）
 
 ## 12. 错误处理与边界
 
@@ -286,21 +401,34 @@ Agent 直接编辑 article.md / figures/*.html / project.json → watcher 热载
 | 模型 API 失败/超时 | 副驾驶面板内联报错 + 一键重试；流式中断保留已生成部分 |
 | 外部改文件 vs 编辑器未保存 | diff 对比弹窗：保留本地/接受外部/手动合并 |
 | figures 渲染失败 | 保留旧 PNG，报错定位到源 HTML 行 |
-| 抠图效果差 | 提供三算法切换 + 阈值滑杆，实时预览 |
+| 抠图效果差 | 三算法切换 + 阈值滑杆，实时预览 |
 | 富文本粘贴公众号后图片丢失 | 图片 dataURL 内嵌兜底；单图 >10MB 警告 |
 | MCP 并发写冲突 | 工程级写锁，后到操作排队 |
+| 选题库文件缺失/损坏 | 降级为空列表，不阻塞其他功能 |
+| 检索未配置 Key | 相关能力自动降级为不检索 |
+| 微信 IP 白名单未放行 | 推送报错时给出白名单配置指引 |
+| 分类重命名 | 同步迁移工程目录 + 自定义主题 key + 账号预设 key（新名已有预设则不覆盖） |
 
-## 13. 验收标准（MVP Done 的定义）
+## 13. 验收标准
 
-1. 双击 EXE 可用；断网状态下除 AI 调用外所有功能正常
-2. 填入 Agnes AI Key 后：S1–S7 场景全链路可在 30 分钟内产出一篇带 3 张配图、封面、标题的可发布图文
-3. Codex/Qoder 通过一键接入配置后，能用对话完成：建项目→生成文章→改一张代码绘图→导出 HTML（S8）
+一期验收（v1.0）已全部通过，保留原文并补当前口径：
+
+1. 双击 EXE 可用；断网状态下除 AI/检索调用与推送外所有功能正常
+2. 填入模型 Key 后：S1–S7 场景全链路可在 30 分钟内产出一篇带 3 张配图、封面、标题的可发布图文
+3. Codex/Qoder 通过一键接入配置后，能用对话完成：建项目→取提示词生成文章→改一张代码绘图→导出 HTML（S8）
 4. 直接修改 article.md / figures/*.html，编辑器 3 秒内热载生效
 5. 导出的富文本粘贴进公众号后台：排版不丢、图注完好、图片正常转存 CDN
+6. 同一篇内容可转出贴图卡片并按四平台画像复制，排版不串（S9）
+7. 工程可在日历上拖拽排期，选题可拖到日期格直接立项（S10）
+8. `npm run typecheck` 与 `npm run test` 全绿（当前 15 文件 / 265 例）
 
 ## 14. 风险与开放问题
 
 - **公众号粘贴兼容性**：不同浏览器剪贴板 text/html 行为有差异，需实测微调导出模板（验收项 5 兜底）
-- **md ↔ 富文本双向同步**是编辑器最大技术难点，MVP 允许约束子集（标题/段落/加粗/引用/图片+图注/分隔线），不支持任意嵌套富文本
-- **PDF 素材抽取**质量不稳，MVP 仅做纯文本抽取，不做版面还原
-- Agnes AI 图像接口的具体出入参需在实现前用真实 Key 联调确认
+- **md ↔ 富文本双向同步**是编辑器最大技术难点，约束子集为：标题/段落/加粗/引用/图片+图注/分隔线，不支持任意嵌套富文本
+- **PDF 素材抽取**质量不稳，仅做纯文本抽取，不做版面还原
+- **图像接口**出入参需在实现前用真实 Key 联调确认（已支持两种形态，仍可能遇到新供应商差异）
+- **`readMeta` 白名单**是回归高发点（§4 维护约束），新增 `ProjectMeta` 字段须同步透传
+- **多账号凭据边界**：`categoryPresets.json` 明文不加密，凭据不得入内；分类级凭据（§11.3-8）需先设计加密方案
+- **发布产物与网盘版本可能静默分叉**：本地 `releases/` 同名重打会覆盖旧产物，而对外分发链接指向的是上传时的那一份；发版须同步版本号与下载链接
+- **文档债**：本 PRD 曾落后实现约 6 周（v1.0 → M13），后续每加一类能力应同步回写本文，否则它不再可信
