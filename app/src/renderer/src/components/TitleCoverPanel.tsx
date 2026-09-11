@@ -275,7 +275,8 @@ export default function TitleCoverPanel({
     setRendering(true)
     try {
       let bg: string | undefined
-      if (useBg && img) {
+      // 杂志留白是纯文字底，不吃底图（见 shared/coverTemplates 的 editorial 分支）
+      if (useBg && img && template !== 'editorial') {
         bg = await window.api.invoke('project:saveAsset', project, 'assets/cover-bg.png', renderFullPng(img))
       }
       await window.api.invoke('cover:renderTemplate', {
@@ -395,7 +396,7 @@ export default function TitleCoverPanel({
       <input
         value={coverTitle}
         onChange={(e) => setCoverTitle(e.target.value)}
-        placeholder="封面标题（缺省取最高分标题候选，没有候选就取正文首行）"
+        placeholder="封面标题（用 | 手动分行可把字号撑大；缺省取最高分标题候选）"
         className="mb-1.5 w-full max-w-[560px] rounded bg-panel px-2.5 py-1.5 text-xs text-ink outline-none placeholder:text-ink-dim"
       />
       <input
@@ -404,9 +405,20 @@ export default function TitleCoverPanel({
         placeholder="副标题（选填）"
         className="mb-1.5 w-full max-w-[560px] rounded bg-panel px-2.5 py-1.5 text-xs text-ink outline-none placeholder:text-ink-dim"
       />
-      <label className={`mb-2 flex items-center gap-1.5 ${img ? 'text-ink-dim' : 'text-ink-dim opacity-50'}`}>
-        <input type="checkbox" checked={useBg} disabled={!img} onChange={(e) => setUseBg(e.target.checked)} />
-        {img ? '用当前图片作底图（存为 assets/cover-bg.png）' : '用当前图片作底图（先在下方生成或导入一张图）'}
+      <label
+        className={`mb-2 flex items-center gap-1.5 ${img && template !== 'editorial' ? 'text-ink-dim' : 'text-ink-dim opacity-50'}`}
+      >
+        <input
+          type="checkbox"
+          checked={useBg && template !== 'editorial'}
+          disabled={!img || template === 'editorial'}
+          onChange={(e) => setUseBg(e.target.checked)}
+        />
+        {template === 'editorial'
+          ? '此版式为纯文字底，不使用底图'
+          : img
+            ? '用当前图片作底图（存为 assets/cover-bg.png）'
+            : '用当前图片作底图（先在下方生成或导入一张图）'}
       </label>
       <div className="mb-2 flex flex-wrap items-center gap-2">
         <button
@@ -419,6 +431,10 @@ export default function TitleCoverPanel({
         {rendering && <span className="text-ink-dim">离屏渲染两种比例…</span>}
         <span className="text-ink-dim">强调色取自排版调性{theme?.accent ? `（${theme.accent}）` : ''}</span>
       </div>
+      <p className="mb-3 max-w-[560px] text-[11px] leading-relaxed text-ink-dim">
+        文字排在左侧，右侧是一个方形画面区：在公众号后台设封面时把 1:1 裁剪框拖到右侧那块，
+        头条大图看文字、信息流缩略图看画面，两边都不牺牲。
+      </p>
 
       {/* 成品预览：读盘上的封面文件（带版本号破缓存） */}
       {meta.cover && projectDir && (
