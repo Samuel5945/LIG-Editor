@@ -1,6 +1,6 @@
 # PRD：立格编辑器（本地优先的公众号图文创作工作台，原名图文编辑器 tuwen-editor）
 
-- 版本：**v1.1（2026-09-11，对齐已交付的 v0.5.0）**
+- 版本：**v1.1（2026-09-11，对齐已交付的 v0.6.0）**
 - 状态：一期已全部交付，本文转为**随实现滚动维护的现状文档**；下一步计划见 §11
 - 工作区：`C:\Users\PC\Desktop\tuwen-editor`（仓库目录名保留历史名 `tuwen-editor`，应用标识为 `LIG-Editor` / 立格编辑器）
 - 参考范式：[Nomi](https://github.com/aqm857886159/Nomi)（本地优先 + AI 副驾驶 + 无头能力核），本产品为其"图文版"适配
@@ -72,7 +72,8 @@
 - 交稿文档：`docx`（Word）+ `printToPDF`（PDF）；PDF 预览 `pdfjs-dist`
 - MCP：`@modelcontextprotocol/sdk`（stdio）+ 内置 HTTP server（127.0.0.1 随机端口，写入锁文件供发现）
 - 新手引导：`driver.js`
-- 测试：`vitest`（14 个文件 / 257 例，集中在 `src/shared/__tests__/` 的纯函数层）
+- 测试：`vitest`（18 文件 / 317 例）——以 `src/shared/` 的纯函数层为主，主进程 store 也可测
+  （`app/vitest.config.ts` 提供 `@shared` 别名，测试内 mock `electron` 的 safeStorage 与 `./paths` 临时目录）
 
 ### 3.2 进程结构
 
@@ -453,7 +454,7 @@ Agent 直接编辑 article.md / figures/*.html / project.json → watcher 热载
 5. 导出的富文本粘贴进公众号后台：排版不丢、图注完好、图片正常转存 CDN
 6. 同一篇内容可转出贴图卡片并按四平台画像复制，排版不串（S9）
 7. 工程可在日历上拖拽排期，选题可拖到日期格直接立项（S10）
-8. `npm run typecheck` 与 `npm run test` 全绿（当前 18 文件 / 307 例）
+8. `npm run typecheck` 与 `npm run test` 全绿（当前 18 文件 / 317 例）
 
 ## 14. 风险与开放问题
 
