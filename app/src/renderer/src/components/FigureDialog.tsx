@@ -1,5 +1,13 @@
-import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react'
-import { applyCutout, CUTOUT_ALGOS, type CutoutAlgo, type RawImage } from '@shared/cutout'
+import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactElement } from 'react'
+import {
+  applyCutoutMasked,
+  createCutoutMask,
+  hasMaskPaint,
+  paintCutoutMask,
+  CUTOUT_ALGOS,
+  type CutoutAlgo,
+  type RawImage
+} from '@shared/cutout'
 import type { GalleryImage } from '@shared/markdown'
 import { splitFigDesc } from '@shared/markdown'
 import { imageFormatFor, type ImageFormatSpec } from '@shared/imageFormats'
@@ -453,6 +461,13 @@ function ImportPane({ project, request }: { project: string; request: FigureRequ
   const [algo, setAlgo] = useState<CutoutAlgo>('none')
   const [param, setParam] = useState(0)
   const [error, setError] = useState<string | null>(null)
+  // 手工精修：蒙版放 ref（逐笔改的是同一块缓冲，不走 state 浅拷贝），重绘靠 maskVersion 驱动
+  const maskRef = useRef<Int8Array | null>(null)
+  const [maskVersion, setMaskVersion] = useState(0)
+  const [brush, setBrush] = useState<'keep' | 'erase'>('keep')
+  const [brushRadius, setBrushRadius] = useState(24)
+  const strokeRef = useRef<{ x: number; y: number } | null>(null)
+  const lastPaintRef = useRef(0)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -502,11 +517,18 @@ function ImportPane({ project, request }: { project: string; request: FigureRequ
     [multi.length]
   )
 
-  // 算法/参数变化 → 重算并画到预览 canvas（透明区棋盘格由 CSS 背景显示）
+  // 换图 → 重建蒙版与笔刷半径（笔刷按短边自适应：大图给粗笔，小图标给细笔）
+  useEffect(() => {
+    maskRef.current = raw ? createCutoutMask(raw.width, raw.height) : null
+    setBrushRadius(raw ? Math.round(Math.max(6, Math.min(raw.width, raw.height) / 22)) : 24)
+    setMaskVersion((v) => v + 1)
+  }, [raw])
+
+  // 算法/参数/涂抹变化 → 重算并画到预览 canvas（透明区棋盘格由 CSS 背景显示）
   useEffect(() => {
     if (!raw || !canvasRef.current) return
     const timer = setTimeout(() => {
-      const out = applyCutout(raw, algo, param)
+      const out = applyCutoutMasked(raw, algo, param, maskRef.current)
       const cv = canvasRef.current!
       cv.width = out.width
       cv.height = out.height
@@ -514,12 +536,88 @@ function ImportPane({ project, request }: { project: string; request: FigureRequ
       cv.getContext('2d')!.putImageData(new ImageData(new Uint8ClampedArray(out.data), out.width, out.height), 0, 0)
     }, 120)
     return () => clearTimeout(timer)
-  }, [raw, algo, param])
+  }, [raw, algo, param, maskVersion])
 
   const pickAlgo = useCallback((id: CutoutAlgo) => {
     setAlgo(id)
     setParam(CUTOUT_ALGOS.find((a) => a.id === id)!.defaultValue)
   }, [])
+
+  /** 画布坐标 → 图像坐标：预览被 CSS 缩放，必须按 rect 比例换算，否则笔迹会跑偏 */
+  const canvasPoint = useCallback((e: ReactPointerEvent<HTMLCanvasElement>): { x: number; y: number } | null => {
+    const cv = canvasRef.current
+    if (!cv) return null
+    const rect = cv.getBoundingClientRect()
+    if (rect.width <= 0 || rect.height <= 0) return null
+    return {
+      x: ((e.clientX - rect.left) / rect.width) * cv.width,
+      y: ((e.clientY - rect.top) / rect.height) * cv.height
+    }
+  }, [])
+
+  /** 落笔：与上一落点连成线段（快速拖动不断线），拖动中按约 10fps 刷新预览 */
+  const strokeTo = useCallback(
+    (to: { x: number; y: number }) => {
+      const mask = maskRef.current
+      if (!raw || !mask) return
+      const from = strokeRef.current ?? to
+      paintCutoutMask(
+        mask,
+        raw.width,
+        raw.height,
+        from.x,
+        from.y,
+        to.x,
+        to.y,
+        brushRadius,
+        0.6,
+        brush === 'keep' ? 1 : -1
+      )
+      strokeRef.current = to
+      const now = Date.now()
+      if (now - lastPaintRef.current > 100) {
+        lastPaintRef.current = now
+        setMaskVersion((v) => v + 1)
+      }
+    },
+    [raw, brushRadius, brush]
+  )
+
+  const startStroke = useCallback(
+    (e: ReactPointerEvent<HTMLCanvasElement>) => {
+      const pt = canvasPoint(e)
+      if (!pt) return
+      strokeRef.current = pt
+      strokeTo(pt)
+      e.currentTarget.setPointerCapture(e.pointerId)
+    },
+    [canvasPoint, strokeTo]
+  )
+
+  const moveStroke = useCallback(
+    (e: ReactPointerEvent<HTMLCanvasElement>) => {
+      if (!strokeRef.current) return
+      const pt = canvasPoint(e)
+      if (pt) strokeTo(pt)
+    },
+    [canvasPoint, strokeTo]
+  )
+
+  /** 抬手：一定补一次重绘（拖动中漏掉的那几笔靠这次补上） */
+  const endStroke = useCallback(() => {
+    if (!strokeRef.current) return
+    strokeRef.current = null
+    lastPaintRef.current = 0
+    setMaskVersion((v) => v + 1)
+  }, [])
+
+  const clearMask = useCallback(() => {
+    maskRef.current?.fill(0)
+    setMaskVersion((v) => v + 1)
+  }, [])
+
+  // 蒙版缓冲改动不会自动触发渲染，这里随 maskVersion 重算一次即可
+  const maskPainted = maskRef.current ? hasMaskPaint(maskRef.current) : false
 
   const insert = useCallback(async () => {
     const cv = canvasRef.current
@@ -703,6 +801,46 @@ function ImportPane({ project, request }: { project: string; request: FigureRequ
               <span className="w-10 text-right tabular-nums text-slate-300">{param.toFixed(2)}</span>
             </label>
           )}
+          {/* 手工精修：叠在算法结果之上的涂抹层（只覆盖 alpha，不动算法参数） */}
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="whitespace-nowrap text-slate-400">手工精修：</span>
+            <button
+              onClick={() => setBrush('keep')}
+              title="涂抹补回算法误删的前景（颜色取原图）"
+              className={`whitespace-nowrap rounded px-2 py-1 ${
+                brush === 'keep' ? 'bg-sky-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+              }`}
+            >
+              保留画笔
+            </button>
+            <button
+              onClick={() => setBrush('erase')}
+              title="涂抹去掉算法误留的背景"
+              className={`whitespace-nowrap rounded px-2 py-1 ${
+                brush === 'erase' ? 'bg-sky-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+              }`}
+            >
+              擦除画笔
+            </button>
+            <label className="flex items-center gap-1.5 text-slate-400">
+              <span className="whitespace-nowrap">笔刷</span>
+              <input
+                type="range"
+                min={4}
+                max={Math.max(8, Math.round(Math.min(raw.width, raw.height) / 4))}
+                value={brushRadius}
+                onChange={(e) => setBrushRadius(Number(e.target.value))}
+                className="w-24 accent-sky-500"
+              />
+            </label>
+            <button onClick={clearMask} disabled={!maskPainted} className={btnGhost}>
+              清除涂抹
+            </button>
+            {maskPainted && <span className="text-slate-500">涂抹已生效</span>}
+          </div>
+          <p className="text-[11px] text-slate-500">
+            在预览图上按住拖动即可涂抹；涂抹只覆盖 alpha、不改算法参数，换算法继续涂也成立。放大后用细笔处理边缘更准。
+          </p>
           {/* 棋盘格底：透明区可视化 */}
           <div
             className="self-center rounded border border-slate-700 p-1"
@@ -711,7 +849,15 @@ function ImportPane({ project, request }: { project: string; request: FigureRequ
                 'repeating-conic-gradient(#2a2e39 0% 25%, #1b1d23 0% 50%) 0 0 / 16px 16px'
             }}
           >
-            <canvas ref={canvasRef} className="max-h-[340px] max-w-full" style={{ objectFit: 'contain' }} />
+            <canvas
+              ref={canvasRef}
+              onPointerDown={startStroke}
+              onPointerMove={moveStroke}
+              onPointerUp={endStroke}
+              onPointerCancel={endStroke}
+              className="max-h-[340px] max-w-full cursor-crosshair"
+              style={{ objectFit: 'contain', touchAction: 'none' }}
+            />
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <button onClick={insert} className={btnPrimary}>

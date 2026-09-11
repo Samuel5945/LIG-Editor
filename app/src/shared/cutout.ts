@@ -4,6 +4,9 @@
  * - unpremultiply 白底反预乘：alpha = 1 − min(RGB)，去噪底后反预乘还原前景色（渐变/抗锯齿 LOGO）
  * - shape-mask 形状掩码：alpha = clip(alpha0/阈值)，内部实心只边缘反预乘（中间调金色等避免深底发暗）
  * - fit-circle 拟合圆：非白像素拟合圆盘，盘内全保留（圆形图标含内部白色细节）
+ *
+ * 算法之上还有一层**手工精修蒙版**（applyCutoutMasked）：算法定不下来的地方由用户涂抹补/擦，
+ * 蒙版只覆盖 alpha，不改算法参数，因此调滑杆与手工涂抹互不干扰、可反复调整。
  */
 
 export interface RawImage {
@@ -151,4 +154,106 @@ export function applyCutout(img: RawImage, algo: CutoutAlgo, param: number): Raw
     default:
       return { width: img.width, height: img.height, data: new Uint8ClampedArray(img.data) }
   }
+}
+
+// ---------- 手工精修蒙版（叠在算法结果之上） ----------
+
+/**
+ * 每像素一个有符号字节：
+ * - 0 = 未涂，交给算法结果
+ * - >0 = 保留（补回算法误删的前景），强度按比例映射到 alpha
+ * - <0 = 擦除（去掉算法误留的背景）
+ * 正负一号定向覆盖：同一处再涂会翻转符号，但不会退化成"未涂"，
+ * 因此不会出现「补过的地方被擦一笔后又变回算法原样」这种第三种状态。
+ */
+export type CutoutMask = Int8Array
+
+/** 强度上限：有符号字节的正半区 */
+export const MASK_STRENGTH = 127
+
+export function createCutoutMask(width: number, height: number): CutoutMask {
+  return new Int8Array(width * height)
+}
+
+/** 蒙版是否被涂过（UI 判断「清除涂抹」是否可用、以及是否提示已生效） */
+export function hasMaskPaint(mask: CutoutMask): boolean {
+  for (let i = 0; i < mask.length; i++) if (mask[i] !== 0) return true
+  return false
+}
+
+/**
+ * 画一笔涂抹。按线段插值分步落笔，快速拖动不会断成一串孤点。
+ * - radius 为图像像素半径；hardness=1 硬边，越小边缘越柔
+ * - value：1 = 保留画笔，-1 = 擦除画笔
+ */
+export function paintCutoutMask(
+  mask: CutoutMask,
+  width: number,
+  height: number,
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+  radius: number,
+  hardness: number,
+  value: 1 | -1
+): void {
+  const target = value * MASK_STRENGTH
+  const outer = Math.max(0.5, radius)
+  const inner = outer * Math.max(0.05, Math.min(1, hardness))
+  const dist = Math.hypot(x1 - x0, y1 - y0)
+  // 步长取半径的 0.3 倍，保证相邻落笔的圆盘有重叠
+  const steps = Math.max(1, Math.ceil(dist / Math.max(0.5, outer * 0.3)))
+  for (let s = 0; s <= steps; s++) {
+    const cx = x0 + ((x1 - x0) * s) / steps
+    const cy = y0 + ((y1 - y0) * s) / steps
+    const xa = Math.max(0, Math.floor(cx - outer))
+    const xb = Math.min(width - 1, Math.ceil(cx + outer))
+    const ya = Math.max(0, Math.floor(cy - outer))
+    const yb = Math.min(height - 1, Math.ceil(cy + outer))
+    for (let y = ya; y <= yb; y++) {
+      for (let x = xa; x <= xb; x++) {
+        const d = Math.hypot(x + 0.5 - cx, y + 0.5 - cy)
+        if (d > outer) continue
+        const falloff = d <= inner ? 1 : 1 - (d - inner) / Math.max(0.001, outer - inner)
+        const p = y * width + x
+        // 按落笔强度向目标值靠拢：反复涂同一处会逐渐逼近满强度
+        const next = mask[p] + (target - mask[p]) * falloff
+        mask[p] = Math.round(Math.max(-MASK_STRENGTH, Math.min(MASK_STRENGTH, next)))
+      }
+    }
+  }
+}
+
+/**
+ * 带手工蒙版的合成：先跑算法，再按蒙版覆盖 alpha。
+ * 补回时颜色取**原图**像素——算法已把该处判成透明，其 RGB 往往是背景色或 0，
+ * 只有原图颜色才是用户想要的前景色（这类图基本都是白底 LOGO 与实拍图）。
+ */
+export function applyCutoutMasked(
+  img: RawImage,
+  algo: CutoutAlgo,
+  param: number,
+  mask: CutoutMask | null
+): RawImage {
+  const base = applyCutout(img, algo, param)
+  if (!mask || mask.length !== img.width * img.height) return base
+  const out = base.data
+  const src = img.data
+  for (let p = 0, i = 0; p < mask.length; p++, i += 4) {
+    const m = mask[p]
+    if (m > 0) {
+      const a = Math.round((m / MASK_STRENGTH) * 255)
+      if (a > out[i + 3]) {
+        out[i] = src[i]
+        out[i + 1] = src[i + 1]
+        out[i + 2] = src[i + 2]
+        out[i + 3] = a
+      }
+    } else if (m < 0) {
+      const a = Math.round(255 + (m / MASK_STRENGTH) * 255)
+      if (a < out[i + 3]) out[i + 3] = a
+    }
+  }
+  return { width: img.width, height: img.height, data: out }
 }
