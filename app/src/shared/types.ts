@@ -104,6 +104,8 @@ export interface TitleCandidate {
 export interface CoverInfo {
   main: string // assets/cover-235.png（2.35:1）
   square: string // assets/cover-11.png（1:1）
+  /** 由封面模板渲染时记录模板 id（见 shared/coverTemplates.ts）；拖动裁剪产出时无此项 */
+  template?: string
 }
 
 export interface ProjectMeta {
@@ -433,6 +435,20 @@ export interface IpcApi {
   'mcp:accessCard': () => McpAccessCard
   /** 保存二进制资产（base64）到工程相对路径，返回相对路径 */
   'project:saveAsset': (project: string, relPath: string, base64: string) => string
+  /**
+   * 用模板渲染双比例封面（1175×500 与 800×800）并写入 project.json.cover，
+   * 与拖动裁剪流程共用同一出口；模板见 shared/coverTemplates.ts。
+   * bg 为工程相对路径（如 assets/cover-bg.png），缺省 = 纯版式
+   */
+  'cover:renderTemplate': (args: {
+    project: string
+    template: string
+    title: string
+    subtitle?: string
+    accent: string
+    bg?: string
+    brand?: string
+  }) => { main: string; square: string }
   /** 无工程上下文时脑暴选题入库到全局 idea-inbox.md */
   'inbox:append': (text: string) => void
   // ---- 全局选题库（idea-inbox.md 结构化读写）----

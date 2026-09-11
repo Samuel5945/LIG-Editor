@@ -13,6 +13,7 @@ import { webResearch, webSearch } from './webSearch'
 import { generateImage } from './imageGen'
 import { saveFigureHtml, readFigureHtml, renderFigure } from './figureRender'
 import { readCards, writeCards, renderCard, readArchivedCards, writeArchivedCards } from './cardsStore'
+import { renderCoverTemplate } from './coverStore'
 import { exportArticleHtml, copyArticleRich, exportPlatformHtml } from './exporter'
 import { exportDocx, exportPdf } from './docExport'
 import type { PlatformId } from '@shared/types'
@@ -186,6 +187,7 @@ export function registerIpc(): void {
   handle('mcp:accessCard', () => buildAccessCard())
 
   handle('project:saveAsset', (project, relPath, base64) => store.saveAsset(project, relPath, base64))
+  handle('cover:renderTemplate', (args) => renderCoverTemplate(args.project, args))
   handle('inbox:append', (text) => store.appendIdeaInbox(text))
 
   // ---- 全局选题库 ----

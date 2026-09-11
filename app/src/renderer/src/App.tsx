@@ -1134,6 +1134,8 @@ export default function App(): JSX.Element {
                   meta={meta}
                   article={article}
                   skill={skillContent}
+                  projectDir={currentDir}
+                  theme={articleTheme}
                   onMetaUpdated={refreshMeta}
                   onApplyTitle={(title) => {
                     // 草稿标题取自正文 H1：替换首个非空行的 H1，没有则前插
