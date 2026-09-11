@@ -16,7 +16,7 @@ import { readCards, writeCards, renderCard, readArchivedCards, writeArchivedCard
 import { exportArticleHtml, copyArticleRich, exportPlatformHtml } from './exporter'
 import { exportDocx, exportPdf } from './docExport'
 import type { PlatformId } from '@shared/types'
-import { getWechatSettings, setWechatSettings } from './wechatStore'
+import { getWechatConfig, saveWechatConfig, setWechatBinding } from './wechatStore'
 import { pushDraft, pushCards, invalidateToken, getPublicIp } from './wechatPublish'
 import { listCustomThemes, saveCustomTheme, deleteCustomTheme, fetchUrlHtml } from './themeStore'
 import { listCategoryPresets, saveCategoryPreset } from './categoryPresetStore'
@@ -232,13 +232,14 @@ export function registerIpc(): void {
   handle('cards:archiveRead', (project, format) => readArchivedCards(project, format))
   handle('cards:archiveWrite', (project, deck) => writeArchivedCards(project, deck))
 
-  // ---- 公众号推送（UI 接入层绑定，实现在 wechatStore / wechatPublish）----
-  handle('wechat:get-settings', () => getWechatSettings())
-  handle('wechat:set-settings', (settings) => {
-    setWechatSettings(settings)
-    // 换号后清 access_token 缓存，新凭据立即生效
+  // ---- 公众号推送（多账号：账号 = 分类，UI 接入层绑定，实现在 wechatStore / wechatPublish）----
+  handle('wechat:get-config', () => getWechatConfig())
+  handle('wechat:save-config', (config) => {
+    saveWechatConfig(config)
+    // 改密钥/增删账号后清 access_token 缓存，新凭据立即生效
     invalidateToken()
   })
+  handle('wechat:set-binding', (category, accountId) => setWechatBinding(category, accountId))
   handle('wechat:push-draft', ({ project, variant }: { project: string; variant?: string }) =>
     pushDraft(project, variant === 'night' ? 'night' : 'day')
   )

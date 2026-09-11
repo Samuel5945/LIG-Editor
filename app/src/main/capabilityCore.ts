@@ -566,7 +566,7 @@ export const TOOLS: ToolDef[] = [
   {
     name: 'push_draft',
     description:
-      '把工程推送到公众号草稿箱：正文本地图片自动上传微信 CDN，封面传永久素材，draft/add 入草稿。variant 配色（公众号读者统一看一套，二选一）：day 固定日间配色（浅卡深字，缺省；读者微信夜间会自动变深，推荐）/ night 固定夜间配色（算法变深深卡浅字，公众号夜间可能显示异常）。需先配置 AppID/AppSecret（settings/wechat.json）且本机公网 IP 已加入公众平台白名单',
+      '把工程推送到公众号草稿箱：正文本地图片自动上传微信 CDN，封面传永久素材，draft/add 入草稿。variant 配色（公众号读者统一看一套，二选一）：day 固定日间配色（浅卡深字，缺省；读者微信夜间会自动变深，推荐）/ night 固定夜间配色（算法变深深卡浅字，公众号夜间可能显示异常）。用哪个公众号按工程所属分类的绑定决定（未绑定走默认账号），账号在应用「设置 → 推送设置」里管理，且本机公网 IP 需已加入公众平台白名单',
     inputSchema: {
       type: 'object',
       properties: {

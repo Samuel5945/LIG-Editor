@@ -432,7 +432,7 @@ const CardsPanel = forwardRef<CardsPanelHandle, CardsPanelProps>(function CardsP
       const result = await window.api.invoke('wechat:push-cards', { project })
       onToast(
         result.ok
-          ? `✓ 贴图已推送到公众号草稿箱，mediaId：${result.mediaId ?? ''}`
+          ? `✓ 贴图已推送到公众号${result.accountName ? `「${result.accountName}」` : ''}草稿箱，mediaId：${result.mediaId ?? ''}`
           : `推送失败：${result.error ?? '未知错误'}`
       )
     } catch (err) {
@@ -651,7 +651,7 @@ const CardsPanel = forwardRef<CardsPanelHandle, CardsPanelProps>(function CardsP
         <button
           onClick={pushToDraft}
           disabled={globalBusy || pushing || !deck.cards.length}
-          title="以图片消息形态推送到公众号草稿箱（读者可左右滑动看图）；需先在「设置-推送设置」填好 AppID/AppSecret"
+          title="以图片消息形态推送到公众号草稿箱（读者可左右滑动看图）；推送账号按工程所属分类的绑定决定，账号在「设置-推送设置」里管理"
           className="whitespace-nowrap rounded px-2 py-0.5 hover:bg-panel-3 disabled:opacity-40"
         >
           {pushing ? '⏳ 推送中…' : '📮 推送草稿箱'}

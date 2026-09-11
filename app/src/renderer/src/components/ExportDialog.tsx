@@ -291,7 +291,7 @@ export default function ExportDialog({
           {pushResult && (
             <p className={`mt-2 break-all text-[11px] ${pushResult.ok ? 'text-green-500' : 'text-red-400'}`}>
               {pushResult.ok
-                ? `✓ 草稿已推送到公众号后台，mediaId：${pushResult.mediaId ?? ''}`
+                ? `✓ 草稿已推送到公众号${pushResult.accountName ? `「${pushResult.accountName}」` : ''}后台，mediaId：${pushResult.mediaId ?? ''}`
                 : `✗ 推送失败：${pushResult.error ?? '未知错误'}`}
             </p>
           )}
@@ -324,7 +324,8 @@ export default function ExportDialog({
             article.html 勾选「读者端自动昼夜」时，部署到自有网页/博客后读者系统深色自动看夜间配色（算法变深）、浅色看日间配色；取消勾选则固定使用所选发布配色。
           </p>
           <p className="mt-1 text-[11px] text-slate-500">
-            推送草稿前需在「设置-推送设置」填好 AppID/AppSecret，并把本机公网 IP 加入公众平台 IP 白名单；封面在「标题/封面」页设置。
+            推送草稿用哪个公众号按工程所属分类的绑定决定（未绑定走默认账号），账号在「设置-推送设置」里管理，
+            每个账号都要把本机公网 IP 加入公众平台 IP 白名单；封面在「标题/封面」页设置。
           </p>
         </div>
       </div>

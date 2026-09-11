@@ -3,17 +3,18 @@ import { existsSync, readFileSync } from 'fs'
 import { mdToDoc } from '@shared/markdown'
 import { docToExportHtml, extractTitle } from '@shared/exportHtml'
 import { resolveThemeForExport } from './exporter'
-import type { PushDraftResult, PublicIpResult } from '@shared/wechat'
+import type { PushDraftResult, PublicIpResult, WechatAccount } from '@shared/wechat'
 import { projectDir, readMeta, readTextFile } from './projectStore'
-import { getWechatSettings } from './wechatStore'
+import { resolveWechatAccount } from './wechatStore'
 import { readCards } from './cardsStore'
 
 /**
  * 公众号草稿推送：article.md → 图片上传微信 CDN → draft/add 入草稿箱
- * - 草稿箱接口对未认证个人订阅号开放；调用方 IP 必须在公众平台白名单内
+ * - 草稿箱接口对未认证个人订阅号开放；调用方 IP 必须在公众平台白名单内（每个账号各自加）
  * - 正文图片走 media/uploadimg（不占素材库额度，返回 mmbiz CDN URL）
  * - 封面走 material/add_material（永久素材，返回 thumb_media_id，草稿必填）
- * - access_token 进程内缓存，提前 5 分钟过期重取
+ * - access_token 按账号缓存（多账号各持一份），提前 5 分钟过期重取
+ * - 账号取工程所属分类的绑定账号，未绑定回退默认账号（多账号：账号 = 分类）
  */
 
 const API = 'https://api.weixin.qq.com/cgi-bin'
@@ -50,23 +51,34 @@ async function wxFetch<T extends WxError>(url: string, init?: RequestInit): Prom
 
 // ---------- access_token ----------
 
-let cachedToken: { token: string; expiresAt: number } | null = null
+// 按账号 id 索引：多账号各持一份 token，互不串用
+const tokenCache = new Map<string, { token: string; expiresAt: number }>()
 
-async function getAccessToken(): Promise<string> {
-  if (cachedToken && Date.now() < cachedToken.expiresAt) return cachedToken.token
-  const { appId, appSecret } = getWechatSettings()
-  if (!appId || !appSecret) throw new Error('未配置公众号 AppID/AppSecret（设置页或 settings/wechat.json）')
-  const data = await wxFetch<WxError & { access_token: string; expires_in: number }>(
-    `${API}/token?grant_type=client_credential&appid=${encodeURIComponent(appId)}&secret=${encodeURIComponent(appSecret)}`
-  )
-  // 提前 5 分钟过期，避免边界期调用失败
-  cachedToken = { token: data.access_token, expiresAt: Date.now() + (data.expires_in - 300) * 1000 }
-  return data.access_token
+/** 按工程所属分类解析公众号账号（分类绑定 → 默认账号 → 首个账号） */
+function accountForCategory(category?: string): WechatAccount {
+  const account = resolveWechatAccount(category)
+  if (!account) throw new Error('未配置公众号账号（设置 → 推送设置）')
+  return account
 }
 
-/** 配置变更后清缓存（换号立即生效） */
+async function getAccessToken(account: WechatAccount): Promise<string> {
+  const cached = tokenCache.get(account.id)
+  if (cached && Date.now() < cached.expiresAt) return cached.token
+  if (!account.appId || !account.appSecret) {
+    throw new Error(`公众号账号「${account.name}」未填 AppID/AppSecret（设置 → 推送设置）`)
+  }
+  const data = await wxFetch<WxError & { access_token: string; expires_in: number }>(
+    `${API}/token?grant_type=client_credential&appid=${encodeURIComponent(account.appId)}&secret=${encodeURIComponent(account.appSecret)}`
+  )
+  // 提前 5 分钟过期，避免边界期调用失败
+  const entry = { token: data.access_token, expiresAt: Date.now() + (data.expires_in - 300) * 1000 }
+  tokenCache.set(account.id, entry)
+  return entry.token
+}
+
+/** 配置变更后清缓存（改密钥、换绑定立即生效） */
 export function invalidateToken(): void {
-  cachedToken = null
+  tokenCache.clear()
 }
 
 // ---------- 公网 IP 查询（IP 白名单辅助） ----------
@@ -171,7 +183,8 @@ export async function pushDraft(project: string, variant: 'day' | 'night' = 'day
 
     const dir = projectDir(project)
     const doc = mdToDoc(md)
-    const token = await getAccessToken()
+    const account = accountForCategory(meta.category)
+    const token = await getAccessToken(account)
 
     // 第一遍：收集正文引用的本地图片（相对路径，去重；http/data 链接原样保留）
     const locals = new Set<string>()
@@ -214,7 +227,7 @@ export async function pushDraft(project: string, variant: 'day' | 'night' = 'day
       headers: { 'Content-Type': 'application/json' }
     })
 
-    return { ok: true, mediaId: data.media_id }
+    return { ok: true, mediaId: data.media_id, accountName: account.name }
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) }
   }
@@ -234,7 +247,8 @@ export async function pushCards(project: string): Promise<PushDraftResult> {
     if (missing.length) throw new Error(`以下卡片未渲染：${missing.join(' ')}，先全部渲染再推送`)
 
     const dir = projectDir(project)
-    const token = await getAccessToken()
+    const account = accountForCategory(readMeta(project).category)
+    const token = await getAccessToken(account)
     const mediaIds: string[] = []
     for (const card of deck.cards) {
       const abs = join(dir, card.png.replace(/\//g, '\\'))
@@ -260,7 +274,7 @@ export async function pushCards(project: string): Promise<PushDraftResult> {
       headers: { 'Content-Type': 'application/json' }
     })
 
-    return { ok: true, mediaId: data.media_id }
+    return { ok: true, mediaId: data.media_id, accountName: account.name }
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) }
   }

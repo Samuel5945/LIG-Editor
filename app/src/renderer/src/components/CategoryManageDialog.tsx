@@ -1,13 +1,15 @@
 import { useEffect, useState, type ReactElement } from 'react'
 import type { CategoryPreset, CategoryPresetPatch, PlatformId, SkillInfo } from '@shared/types'
 import { PLATFORM_LABELS } from '@shared/platformHtml'
+import type { WechatConfig } from '@shared/wechatIpc'
 
 /**
- * 分类管理弹窗：删除（隐藏）/ 恢复 / 重命名分类 / 账号预设（默认写作 Skill 与默认分发平台）。
+ * 分类管理弹窗：删除（隐藏）/ 恢复 / 重命名分类 / 账号预设（默认写作 Skill、默认分发平台、绑定的公众号）。
  * - 删除 = 隐藏：分类从列表消失，目录与工程保留，可在「已删除」里恢复（预设与自定义同机制）
- * - 重命名：目录 + 工程 meta + 自定义主题 + 账号预设同步；预设 key 随分类迁移
+ * - 重命名：目录 + 工程 meta + 自定义主题 + 账号预设 + 公众号绑定同步
  * - 「未分类」是兜底分类，不可删
- * - 账号预设（账号 = 分类）：分类级默认逐项即选即存，新建该分类的工程自动继承
+ * - 账号预设（账号 = 分类）：分类级默认逐项即选即存，新建该分类的工程自动继承；
+ *   公众号凭据本身在「设置 → 推送设置」里管，这里只选绑定哪个号
  */
 
 interface Props {
@@ -40,14 +42,29 @@ export default function CategoryManageDialog({
   const [renameValue, setRenameValue] = useState('')
   const [confirmDel, setConfirmDel] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  // 账号预设（分类 → 默认 Skill），挂载时自取
+  // 账号预设（分类 → 默认 Skill / 默认平台），挂载时自取
   const [presets, setPresets] = useState<Record<string, CategoryPreset>>({})
+  // 公众号账号与绑定（绑定只读账号列表，凭据本身在设置-推送设置里管）
+  const [wechat, setWechat] = useState<WechatConfig>({ accounts: [], defaultAccountId: null, bindings: {} })
   useEffect(() => {
     window.api
       .invoke('categoryPreset:list')
       .then(setPresets)
       .catch(() => setPresets({}))
+    window.api
+      .invoke('wechat:get-config')
+      .then(setWechat)
+      .catch(() => setWechat({ accounts: [], defaultAccountId: null, bindings: {} }))
   }, [])
+
+  /** 设置分类绑定的公众号账号：accountId 传 null = 解绑（回退默认账号） */
+  const doSetBinding = (category: string, accountId: string | null, accountName: string): void => {
+    void run(async () => {
+      await window.api.invoke('wechat:set-binding', category, accountId)
+      setWechat(await window.api.invoke('wechat:get-config'))
+      onToast(accountId ? `「${category}」将推送到公众号「${accountName}」` : `「${category}」已解绑，回退默认账号`)
+    })
+  }
 
   /** 设置账号预设：单字段增量提交、即选即存；字段传 null = 清除该项 */
   const doSetPreset = (category: string, patch: CategoryPresetPatch, toast: string): void => {
@@ -105,7 +122,7 @@ export default function CategoryManageDialog({
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60" onClick={onClose}>
       <div
-        className="max-h-[80vh] w-[440px] overflow-auto rounded-xl border border-panel-3 bg-panel-2 p-4 shadow-2xl"
+        className="max-h-[80vh] w-[560px] overflow-auto rounded-xl border border-panel-3 bg-panel-2 p-4 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-3 flex items-center justify-between">
@@ -116,8 +133,8 @@ export default function CategoryManageDialog({
         </div>
 
         <p className="mb-3 text-[11px] leading-relaxed text-ink-dim">
-          删除 = 隐藏：分类下的工程与目录全部保留，随时可恢复。重命名会同步移动工程目录并更新自定义排版与账号预设。
-          每个分类即一个账号，可配账号级默认：新建工程自动挂载的写作 Skill、导出时预选的分发平台。
+          删除 = 隐藏：分类下的工程与目录全部保留，随时可恢复。重命名会同步移动工程目录并更新自定义排版、账号预设与公众号绑定。
+          每个分类即一个账号，可配账号级默认：新建工程自动挂载的写作 Skill、导出时预选的分发平台、推送草稿用的公众号（凭据在「设置 → 推送设置」里管，这里只选绑哪个号）。
         </p>
 
         {/* 可见分类 */}
@@ -233,6 +250,30 @@ export default function CategoryManageDialog({
                     {(Object.keys(PLATFORM_LABELS) as PlatformId[]).map((p) => (
                       <option key={p} value={p}>
                         平台：{PLATFORM_LABELS[p]}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    value={wechat.bindings[c] ?? ''}
+                    onChange={(e) => {
+                      const accountId = e.target.value || null
+                      const account = wechat.accounts.find((a) => a.id === accountId)
+                      doSetBinding(c, accountId, account?.name ?? '')
+                    }}
+                    disabled={busy || wechat.accounts.length === 0}
+                    title={
+                      wechat.accounts.length === 0
+                        ? '还没有公众号账号：到「设置 → 推送设置」添加'
+                        : '该分类推送草稿时用哪个公众号（缺省 = 默认账号）'
+                    }
+                    className="min-w-0 shrink-0 rounded border border-panel-3 bg-panel-2 px-1 py-0.5 text-[10px] text-ink-dim outline-none disabled:opacity-50"
+                  >
+                    <option value="">
+                      {wechat.accounts.length === 0 ? '公众号：未配置' : '公众号：默认账号'}
+                    </option>
+                    {wechat.accounts.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        公众号：{a.name}
                       </option>
                     ))}
                   </select>

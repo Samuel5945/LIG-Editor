@@ -25,6 +25,7 @@ import { UNCATEGORIZED, PROJECT_CATEGORIES, isKnownCategory } from '@shared/cate
 import { getAppPaths } from './paths'
 import { listCustomThemes, saveCustomThemes } from './themeStore'
 import { listCategoryPresets, renameCategoryPreset } from './categoryPresetStore'
+import { renameWechatBinding } from './wechatStore'
 
 /** 工程目录约定（PRD §4）：article.md 为唯一事实源 */
 const TEXT_FILES: ProjectTextFile[] = ['article.md', 'ideas.md', 'review.md']
@@ -235,8 +236,10 @@ export function renameCategory(oldName: string, newName: string): void {
     delete themes[oldName]
     saveCustomThemes(themes)
   }
-  // 账号预设同步（多账号骨架：预设 key 随分类重命名迁移）
+  // 账号预设同步（账号 = 分类：预设 key 随分类重命名迁移）
   renameCategoryPreset(oldName, newName)
+  // 公众号账号绑定同步（bindings 以分类名为 key，不迁移会变成孤儿绑定）
+  renameWechatBinding(oldName, newName)
 }
 
 function metaPath(name: string): string {
