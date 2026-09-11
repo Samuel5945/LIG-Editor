@@ -176,7 +176,7 @@ C:\Users\PC\Desktop\tuwen-editor\workspace\<分类>\<项目名>\
     ├── customThemes.json     # 分类名 → 导入的自定义排版主题
     ├── categoryPresets.json  # 分类名 → 账号级预设（§4.1）
     ├── disabledCategories.json # 已隐藏分类（数组）
-    ├── wechat.json           # 公众号 appId + 加密 appSecret（当前为全局单账号）
+    ├── wechat.json           # 公众号多账号：账号列表（appId + 加密 appSecret）+ 默认账号 + 分类绑定
     └── bridge.json           # MCP 本地 HTTP 端口与 token，运行时写入供本机发现
 ```
 
@@ -193,13 +193,13 @@ C:\Users\PC\Desktop\tuwen-editor\workspace\<分类>\<项目名>\
 | 排版调性 | `CATEGORY_THEMES`（内置 6 套 + 未分类默认）与 `settings/customThemes.json`（导入） | **不落到工程**，每次读取按 `meta.category` 现算（§7.6） |
 | 写作风格 | `settings/categoryPresets.json` 的 `style_skill` | 新建工程时由 `createProject` 单点注入 `meta.style_skill`，手动新建 / 日历选题立项 / Agent `create_project` 三条路都走这里 |
 | 默认分发平台 | 同文件的 `default_platform` | **不落工程**：导出框打开时按 `meta.category` 现算并预选，未配置则公众号；改预设即刻对全账号生效 |
-| 凭据 | `settings/wechat.json`（当前全局，非分类级） | 推送草稿时使用 |
+| 公众号凭据 | `settings/wechat.json`：账号列表 + 默认账号 + 分类绑定（appSecret 经 safeStorage 加密） | 推送草稿时按工程所属分类解析：**分类绑定 → 默认账号 → 首个账号**；一个账号都没有时报错并指向设置。账号本身在「设置 → 推送设置」里增删，分类管理里只选绑哪个号 |
 
-分类重命名会同步迁移工程目录、自定义主题 key 与预设 key；删除分类实为"隐藏"，其预设保留，恢复后仍生效。
+分类重命名会同步迁移工程目录、自定义主题 key、预设 key 与公众号绑定；删除分类实为"隐藏"，其预设保留，恢复后仍生效。
 
 **当前状态：两项账号级默认已闭环。** `CategoryPreset = { style_skill?, default_platform? }`，`categoryPreset:set` 走**增量 patch**（字段传 `null` = 清除该项，缺省 = 保持原值），整条被清空才删除该分类的 key。盘上 JSON 可被外部工具改坏，读取端统一剔除空串、未知平台与非对象条目。新建工程与脑暴立项都**按侧栏当前筛选分类落档**（筛选为「全部」时落未分类），否则预设永远命中不上。
 
-仍未收口的两点见 §11.3：工程改分类时是否回填目标账号预设（现不回填，避免静默覆盖用户已手选的 Skill）；分类级公众号凭据（现全局单账号）。
+仍未收口的一点见 §11.3：工程改分类时是否回填目标账号预设（现不回填，避免静默覆盖用户已手选的 Skill）。
 
 ---
 
@@ -324,7 +324,8 @@ Word（`docx`）与 PDF（`printToPDF`）落工程内 `交付/`，用于对外�
 1. 正文本地图片 → `media/uploadimg` 转微信 CDN
 2. 封面 → `material/add_material` 取 `thumb_media_id`
 3. `draft/add` 建草稿（图文）；贴图卡片走 `article_type=newspic`
-4. 凭据来自 `settings/wechat.json`（appId + 加密 appSecret）；辅助处理 IP 白名单报错
+4. 凭据来自 `settings/wechat.json` 的多账号列表；用哪个按工程所属分类解析（绑定 → 默认 → 首个），
+   `access_token` 按账号各缓存一份，推送结果回带账号名供确认；辅助处理 IP 白名单报错（每个账号各自加白名单）
 
 同一能力也暴露给 Agent（MCP `push_draft` / `push_cards`）。
 
@@ -366,7 +367,7 @@ Agent 直接编辑 article.md / figures/*.html / project.json → watcher 热载
 
 工程管理 · 三栏工作台（TipTap + 副驾驶） · 模型接入面板 · 五大能力流 · 三种配图管线 · 内联样式 HTML 导出与富文本复制 · MCP 能力核（stdio + HTTP）+ 文件热载 + 一键接入 · Skill 导入与挂载 · electron-builder 打包（NSIS 安装版 + portable）。
 
-超出 MVP 的额外交付：分类体系与排版调性系统、排版反向导入、贴图卡片、多平台分发、Word/PDF 交稿、官方 API 直推草稿、内容日历排期（含拖拽落点高亮反馈）、多账号预设闭环（分类级写作 Skill + 默认分发平台，新工程自动继承）、联网检索、Skill 在线导入、.md 文件关联直开、昼夜配色、新手引导 Tour、版本更新入口。
+超出 MVP 的额外交付：分类体系与排版调性系统、排版反向导入、贴图卡片、多平台分发、Word/PDF 交稿、官方 API 直推草稿、分类级公众号凭据（多账号 + 分类绑定，按工程分类解析推送账号）、内容日历排期（含拖拽落点高亮反馈）、多账号预设闭环（分类级写作 Skill + 默认分发平台，新工程自动继承）、联网检索、Skill 在线导入、.md 文件关联直开、昼夜配色、新手引导 Tour、版本更新入口。
 
 ### 11.2 v1.0「二期」九条 —— 实际完成度
 
@@ -384,7 +385,7 @@ Agent 直接编辑 article.md / figures/*.html / project.json → watcher 热载
 
 ### 11.3 三期候选（按当前判断排序）
 
-1. **多账号未收口两点**：工程改分类时是否回填目标账号预设（现不回填）；分类级公众号凭据（`wechat.json` 现为全局单账号，是「账号 = 分类」真正的收口点，涉及凭据需先设计加密——预设文件明文，凭据不得入内）
+1. **工程改分类时是否回填目标账号预设**：现不回填（避免静默覆盖用户已手选的 Skill）；多账号另外两项——凭据与分类绑定——已交付（§4.1）
 2. **头条/百家画像真正分化**：现共用 `liteHtml`，已预留独立 id
 3. **创作向导**（原二期"向导式新手流程"）：把脑暴→大纲→成文→配图→标题串成有状态机的一路下一步
 4. **封面模板库**
@@ -420,7 +421,7 @@ Agent 直接编辑 article.md / figures/*.html / project.json → watcher 热载
 5. 导出的富文本粘贴进公众号后台：排版不丢、图注完好、图片正常转存 CDN
 6. 同一篇内容可转出贴图卡片并按四平台画像复制，排版不串（S9）
 7. 工程可在日历上拖拽排期，选题可拖到日期格直接立项（S10）
-8. `npm run typecheck` 与 `npm run test` 全绿（当前 15 文件 / 265 例）
+8. `npm run typecheck` 与 `npm run test` 全绿（当前 16 文件 / 274 例）
 
 ## 14. 风险与开放问题
 
@@ -429,6 +430,6 @@ Agent 直接编辑 article.md / figures/*.html / project.json → watcher 热载
 - **PDF 素材抽取**质量不稳，仅做纯文本抽取，不做版面还原
 - **图像接口**出入参需在实现前用真实 Key 联调确认（已支持两种形态，仍可能遇到新供应商差异）
 - **`readMeta` 白名单**是回归高发点（§4 维护约束），新增 `ProjectMeta` 字段须同步透传
-- **多账号凭据边界**：`categoryPresets.json` 明文不加密，凭据不得入内；分类级凭据（§11.3-8）需先设计加密方案
+- **凭据边界**：`categoryPresets.json` 明文不加密，凭据一律不得入内；公众号密钥只进 `wechat.json` 且经 safeStorage（DPAPI）加密，仅本机可解（安全存储不可用时降级明文，同 llm.json）。只改绑定的路径刻意不让密文经 safeStorage 往返，避免解密失败把密钥覆写成空
 - **发布产物与网盘版本可能静默分叉**：本地 `releases/` 同名重打会覆盖旧产物，而对外分发链接指向的是上传时的那一份；发版须同步版本号与下载链接
 - **文档债**：本 PRD 曾落后实现约 6 周（v1.0 → M13），后续每加一类能力应同步回写本文，否则它不再可信
