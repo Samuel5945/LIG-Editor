@@ -192,6 +192,7 @@ export function registerIpc(): void {
 
   // ---- 全局选题库 ----
   handle('ideas:list', () => store.listIdeas())
+  handle('ideas:stages', () => store.listIdeaStages())
   handle('ideas:add', (idea) => store.addIdea(idea))
   handle('ideas:remove', (index) => store.removeIdea(index))
   handle('ideas:schedule', (index, date, category) => store.scheduleIdea(index, date, category))

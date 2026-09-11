@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react'
 import type { ContentPart, IdeaCard, WebSearchResult } from '@shared/types'
 import { CARD_FORMAT_LABEL, parseCardItems, type CardFormat } from '@shared/cards'
+import { sanitizeProjectName } from '@shared/projectName'
 import { chatOnce, extractJsonArray } from '../copilot/llm'
 import { brainstormMessages, outlineMessages, fullArticleMessages, cardsMessages } from '../copilot/prompts'
 import { extractFileText } from '../copilot/material'
@@ -184,7 +185,7 @@ export default function BrainstormPanel({
         setOutline(full)
         // 工程名：优先大纲一级标题，否则选题标题
         const h1 = /^#\s+(.+)$/m.exec(full)
-        setProjName(sanitizeName(h1?.[1] ?? defaultName))
+        setProjName(sanitizeProjectName(h1?.[1] ?? defaultName))
         setStreamText('')
         setPhase('outline')
       } catch (err) {
@@ -254,7 +255,7 @@ export default function BrainstormPanel({
 
   /** 立项并生成正文：建工程（名字可改）→ 打开 → 流式写入 */
   const createAndWrite = useCallback(async () => {
-    const name = sanitizeName(projName)
+    const name = sanitizeProjectName(projName)
     if (!name) {
       onToast('请填写工程名')
       return
@@ -273,7 +274,7 @@ export default function BrainstormPanel({
   /** 立项并生成贴图：建工程标记 cards 形态 → 大纲提炼卡片组 → 打开工程（贴图面板自动补渲 PNG） */
   const createCards = useCallback(
     async (format: CardFormat) => {
-      const name = sanitizeName(projName)
+      const name = sanitizeProjectName(projName)
       if (!name) {
         onToast('请填写工程名')
         return
@@ -573,16 +574,6 @@ export default function BrainstormPanel({
       </div>
     </div>
   )
-}
-
-/** 选题标题 → 合法工程名（与主进程 sanitizeProjectName 一致：结尾点/空格是 Windows 病态路径，必须去掉） */
-function sanitizeName(s: string): string {
-  return s
-    .replace(/[\\/:*?"<>|]/g, '')
-    .replace(/\.\./g, '')
-    .trim()
-    .slice(0, 30)
-    .replace(/[. ]+$/, '')
 }
 
 /** 从流式 JSON 里提已完成的选题标题，避免把原始代码直接展示给用户 */

@@ -23,6 +23,7 @@ import CardsReviewPanel from './components/CardsReviewPanel'
 import TitleCoverPanel from './components/TitleCoverPanel'
 import CardsPanel, { type CardsPanelHandle } from './components/CardsPanel'
 import CalendarBoard from './components/CalendarBoard'
+import IdeaBoard from './components/IdeaBoard'
 import ArticleEditor, { type ArticleEditorHandle, type EditorSelection } from './editor/ArticleEditor'
 import { shouldAutoStart, startTour } from './components/onboardingTour'
 
@@ -70,7 +71,7 @@ export default function App(): JSX.Element {
   }, [tourHandlers])
   // M5 副驾驶
   const [leftTab, setLeftTab] = useState<'projects' | 'ideas'>('projects')
-  const [centerTab, setCenterTab] = useState<'article' | 'titlecover' | 'calendar'>('article')
+  const [centerTab, setCenterTab] = useState<'article' | 'titlecover' | 'calendar' | 'ideas'>('article')
   const [rightTab, setRightTab] = useState<'chat' | 'create' | 'review'>('chat')
   const [skills, setSkills] = useState<SkillInfo[]>([])
   const [skillName, setSkillName] = useState('')
@@ -984,6 +985,13 @@ export default function App(): JSX.Element {
             >
               📅 日历
             </button>
+            <button
+              onClick={() => setCenterTab('ideas')}
+              title="选题流转看板：待立项 / 已立项 / 已排期 / 已成稿，状态由对应工程推导"
+              className={`rounded px-2 py-0.5 ${centerTab === 'ideas' ? 'bg-panel-3 text-ink' : 'hover:bg-panel-3'}`}
+            >
+              💡 选题看板
+            </button>
             {current && centerTab === 'article' && meta?.format !== 'cards' && (
               <>
                 <button
@@ -1088,6 +1096,15 @@ export default function App(): JSX.Element {
               onScheduleIdea={async (index, date, category) =>
                 window.api.invoke('ideas:schedule', index, date, category)
               }
+              onToast={setToast}
+            />
+          ) : centerTab === 'ideas' ? (
+            <IdeaBoard
+              version={ideasVersion}
+              projects={projects}
+              onOpen={(name) => void openProject(name)}
+              onMakeOutline={handleMakeOutline}
+              onGoSchedule={() => setCenterTab('calendar')}
               onToast={setToast}
             />
           ) : current ? (

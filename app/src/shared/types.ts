@@ -335,6 +335,31 @@ export interface IdeaEntry extends IdeaCard {
   index: number
 }
 
+/**
+ * 选题流转状态。**不落库文件**——它本来就是「有没有被用起来」的副产品：
+ * 给 idea-inbox.md 加一个手工状态字段，等于多维护一份会与工程现实脱节的标记。
+ */
+export type IdeaStage = 'idle' | 'projected' | 'scheduled' | 'ready'
+
+/** 选题的状态推导结果（含命中的工程，便于在看板上直接打开） */
+export interface IdeaStageInfo {
+  stage: IdeaStage
+  project?: string
+  category?: string
+  plannedAt?: string
+}
+
+/** 推导状态的输入：工程的匹配特征（主进程从各工程 meta 组出） */
+export interface IdeaProjectRef {
+  name: string
+  status: ProjectStatus
+  category?: string
+  plannedAt?: string
+  /** project.json 的 topic：日历立项由机器写入，是权威关联 */
+  topicAngle?: string
+  topicAudience?: string
+}
+
 /** 联网搜索结果（主进程抓取，注入提示词给模型读） */
 export interface WebSearchResult {
   title: string
@@ -453,6 +478,8 @@ export interface IpcApi {
   'inbox:append': (text: string) => void
   // ---- 全局选题库（idea-inbox.md 结构化读写）----
   'ideas:list': () => IdeaEntry[]
+  /** 每条选题的流转状态（index → 推导结果）：泳道看板一次取全，推导逻辑在 shared/ideaStage.ts */
+  'ideas:stages': () => Record<number, IdeaStageInfo>
   'ideas:add': (idea: IdeaCard) => void
   'ideas:remove': (index: number) => void
   /** 选题拖拽立项：按 index 找选题 → 建工程（标题清洗后为名，带 topic 画像）→ 写排期。

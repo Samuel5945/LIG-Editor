@@ -15,13 +15,17 @@ import type {
   ChatSessionMeta,
   IdeaCard,
   IdeaEntry,
+  IdeaProjectRef,
+  IdeaStageInfo,
   OpenMdResult,
   ProjectData,
   ProjectMeta,
   ProjectSummary,
   ProjectTextFile
 } from '@shared/types'
+import { ideaStageOf } from '@shared/ideaStage'
 import { UNCATEGORIZED, PROJECT_CATEGORIES, isKnownCategory } from '@shared/categories'
+import { sanitizeProjectName } from '@shared/projectName'
 import { getAppPaths } from './paths'
 import { listCustomThemes, saveCustomThemes } from './themeStore'
 import { listCategoryPresets, presetFillFor, renameCategoryPreset } from './categoryPresetStore'
@@ -65,16 +69,6 @@ function assertSafeName(name: string): void {
   if (name !== name.trim() || name.endsWith('.')) {
     throw new Error(`非法工程名（首尾不能是空格，结尾不能是点）：${name}`)
   }
-}
-
-/** 工程名清洗：去非法字符、去首尾空白与结尾点（建工程前调用，与渲染层 sanitizeName 保持一致） */
-export function sanitizeProjectName(s: string): string {
-  return s
-    .replace(/[\\/:*?"<>|]/g, '')
-    .replace(/\.\./g, '')
-    .trim()
-    .slice(0, 30)
-    .replace(/[. ]+$/, '')
 }
 
 // 目录布局：workspace/<分类>/<工程名>/（分类子文件夹）；兼容历史平铺 workspace/<工程名>/。
@@ -623,6 +617,28 @@ export function listIdeas(): IdeaEntry[] {
     const e = parseIdeaBlock(b, i)
     if (e) out.push(e)
   })
+  return out
+}
+
+/**
+ * 选题库泳道看板：每条选题的流转状态。
+ * 这里只负责取数（工程名 + 状态 + 排期 + topic 画像），推导规则在 shared/ideaStage.ts 里可单测。
+ */
+export function listIdeaStages(): Record<number, IdeaStageInfo> {
+  const refs: IdeaProjectRef[] = []
+  for (const name of refreshDirCache().keys()) {
+    const meta = readMeta(name)
+    refs.push({
+      name,
+      status: meta.status,
+      category: meta.category,
+      plannedAt: meta.plannedAt,
+      topicAngle: meta.topic?.angle,
+      topicAudience: meta.topic?.audience
+    })
+  }
+  const out: Record<number, IdeaStageInfo> = {}
+  for (const idea of listIdeas()) out[idea.index] = ideaStageOf(idea, refs)
   return out
 }
 
