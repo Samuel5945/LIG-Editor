@@ -36,6 +36,7 @@
 - **三栏工作台**：左栏工程列表 · 中栏所见即所得编辑器（TipTap）· 右栏 AI 副驾驶
 - **三种配图管线**：代码绘图（HTML→PNG）、AI 文生图、真图抠图，产物统一进 `assets/`
 - **一键推送公众号**：正文本地图片自动上传微信 CDN，草稿直推公众号后台
+- **版本更新提醒**：启动静默检测 + 顶栏手动检查，新版本弹窗直达夸克/百度/GitHub 下载（双更新源：官网 update.json + GitHub Release）
 - **排版主题**：6 套分类预设调性，标题装饰（胶囊/下划线等）、小节序号（01/一、/① 圈号等 6 种）、引用/分隔线/加粗形态、背景色逐项自选，支持导入公众号排版自定义
 
 ## 下载
@@ -64,6 +65,10 @@ npm run dev      # 启动开发模式（热重载）
 npm run build    # 仅构建
 npm run dist     # 构建 + 打包 Windows 安装包
 ```
+
+## 发版
+
+bump `app/package.json` 版本号 → `npm run dist` → 上传夸克/百度网盘 → 发 GitHub Release（**正文必须贴网盘链接**）→ 最后更新官网 [lig-editor-update.json](docs/site/lig-editor-update.json)（这步完成，用户端更新提醒才上线）。详见 [docs/release.md](docs/release.md)。
 
 ## 架构
 

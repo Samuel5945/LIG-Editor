@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { AppPaths, ArticleTheme, H1Style, H2Style, H2Num, H3Mark, IdeaCard, ProjectData, ProjectMeta, ProjectSummary, SkillInfo } from '@shared/types'
+import type { AppPaths, ArticleTheme, H1Style, H2Style, H2Num, H3Mark, IdeaCard, ProjectData, ProjectMeta, ProjectSummary, SkillInfo, UpdateCheckResult } from '@shared/types'
 import { PROJECT_CATEGORIES, UNCATEGORIZED } from '@shared/categories'
 import { resolveArticleTheme } from '@shared/categoryThemes'
 import { CARD_FORMAT_LABEL, parseCardItems, type CardFormat } from '@shared/cards'
@@ -17,6 +17,7 @@ import FigureDialog, { type FigureRequest } from './components/FigureDialog'
 import ExportDialog from './components/ExportDialog'
 import ThemeImportDialog from './components/ThemeImportDialog'
 import CategoryManageDialog from './components/CategoryManageDialog'
+import UpdateDialog from './components/UpdateDialog'
 import HoverScrollName from './components/HoverScrollName'
 import ReviewPanel from './components/ReviewPanel'
 import CardsReviewPanel from './components/CardsReviewPanel'
@@ -49,6 +50,10 @@ export default function App(): JSX.Element {
   const [showSettings, setShowSettings] = useState(false)
   // M8 接入 / Skill 管理弹窗
   const [showIntegration, setShowIntegration] = useState(false)
+  // 版本更新：updateResult 非空 = 弹窗；updateCurrent 拿来在按钮 title 里展示当前版本号
+  const [updateResult, setUpdateResult] = useState<UpdateCheckResult | null>(null)
+  const [updateCurrent, setUpdateCurrent] = useState<string | null>(null)
+  const [checkingUpdate, setCheckingUpdate] = useState(false)
   // 主题：深色为默认，日间可切换（localStorage 持久化，main.tsx 首帧前已套用）
   const [theme, setTheme] = useState<'dark' | 'light'>(() =>
     localStorage.getItem('ui-theme') === 'light' ? 'light' : 'dark'
@@ -395,6 +400,40 @@ export default function App(): JSX.Element {
     return () => clearTimeout(t)
   }, [toast])
 
+  // ---- 版本更新检查：启动 8 秒后静默查一次（不打扰）；顶栏按钮手动查必有反馈 ----
+  const checkUpdate = useCallback(async (manual: boolean) => {
+    setCheckingUpdate(true)
+    try {
+      const result = await window.api.invoke('update:check')
+      setUpdateCurrent(result.currentVersion)
+      if (result.status === 'available' && result.latest) {
+        // 静默检查对点过「忽略此版本」的不再打扰；手动检查始终弹窗
+        if (manual || result.latest.version !== result.skippedVersion) setUpdateResult(result)
+      } else if (manual) {
+        setToast(
+          result.status === 'up-to-date'
+            ? `当前已是最新版本 v${result.currentVersion}`
+            : (result.message ?? '检查更新失败，请稍后重试')
+        )
+      }
+    } catch {
+      if (manual) setToast('检查更新失败，请稍后重试')
+    } finally {
+      setCheckingUpdate(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    const t = setTimeout(() => void checkUpdate(false), 8000)
+    return () => clearTimeout(t)
+  }, [checkUpdate])
+
+  const dismissUpdate = useCallback(async (version: string) => {
+    await window.api.invoke('update:dismiss', version)
+    setUpdateResult(null)
+    setToast(`已忽略 v${version}，发布更新版本时会再提醒`)
+  }, [])
+
   // ---- 拖拽/关联打开 .md：双击 md 文件或拖到应用图标，主进程经此转交路径 ----
   // 先注册监听再拉取积压：takePending 触发后主进程的二次实例改走推送，两段不能有空窗
   useEffect(() => {
@@ -659,11 +698,12 @@ export default function App(): JSX.Element {
             ❓ 帮助
           </button>
           <button
-            onClick={() => window.open('https://pan.quark.cn/s/1cb400aa407b')}
-            title="前往夸克网盘下载最新版本安装包"
-            className="rounded px-2 py-1 hover:bg-panel-3"
+            onClick={() => void checkUpdate(true)}
+            disabled={checkingUpdate}
+            title={updateCurrent ? `检查更新（当前版本 v${updateCurrent}）` : '检查更新：有新版本时给出网盘/GitHub 下载入口'}
+            className="rounded px-2 py-1 hover:bg-panel-3 disabled:opacity-50"
           >
-            🔄 版本更新
+            {checkingUpdate ? '检查中…' : '🔄 版本更新'}
           </button>
           <button
             onClick={() => window.open('https://ligdesign.win/')}
@@ -1339,6 +1379,15 @@ export default function App(): JSX.Element {
 
       {/* 模型接入设置 */}
       {showSettings && <SettingsDialog onClose={() => setShowSettings(false)} />}
+
+      {/* 版本更新弹窗（启动静默检查 / 顶栏手动检查共用） */}
+      {updateResult && (
+        <UpdateDialog
+          result={updateResult}
+          onDismiss={(v) => void dismissUpdate(v)}
+          onClose={() => setUpdateResult(null)}
+        />
+      )}
 
       {/* 设置（接入 / Skill / 推送） */}
       {showIntegration && (

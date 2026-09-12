@@ -22,6 +22,7 @@ import { pushDraft, pushCards, invalidateToken, getPublicIp } from './wechatPubl
 import { listCustomThemes, saveCustomTheme, deleteCustomTheme, fetchUrlHtml } from './themeStore'
 import { listCategoryPresets, saveCategoryPreset } from './categoryPresetStore'
 import { openMdFile } from './projectStore'
+import { checkForUpdate, dismissVersion } from './updateChecker'
 
 /** 类型安全的 handle 注册：通道名与出入参由 IpcApi 单一来源约束 */
 function handle<C extends keyof IpcApi>(
@@ -258,6 +259,10 @@ export function registerIpc(): void {
   // ---- 分类级账号预设（账号 = 分类：新工程自动继承账号级默认）----
   handle('categoryPreset:list', () => listCategoryPresets())
   handle('categoryPreset:set', (category, patch) => saveCategoryPreset(category, patch))
+
+  // ---- 版本更新检测（提示式，不做自动更新）----
+  handle('update:check', () => checkForUpdate())
+  handle('update:dismiss', (version) => dismissVersion(version))
 }
 
 /** 生成一键接入卡片：MCP stdio 由纯 Node 代理脚本承接（Windows 下 Electron 主进程无管道 stdio） */

@@ -387,6 +387,39 @@ export interface CategoryPreset {
 /** 预设增量写入载荷：字段显式传 null = 清除该项，缺省 = 保持原值 */
 export type CategoryPresetPatch = { [K in keyof CategoryPreset]?: CategoryPreset[K] | null }
 
+// ---------- 版本更新检测 ----------
+
+/** 更新信息来自哪个源：site = 官网 lig-editor-update.json，github = GitHub Releases */
+export type UpdateSource = 'site' | 'github'
+
+/** 一处更新源解析出的新版本信息 */
+export interface UpdateInfo {
+  /** 远端最新版本号（x.y.z，不带 v 前缀） */
+  version: string
+  /** 更新说明：官网源为 JSON notes 数组，GitHub 源取 release 正文 */
+  notes?: string
+  /** 发布日期（YYYY-MM-DD，取不到为空） */
+  releaseDate?: string
+  downloads: {
+    quark?: string
+    baidu?: string
+    github?: string
+    site?: string
+  }
+  source: UpdateSource
+}
+
+/** update:check 的返回：status=available 时 latest 为已就绪源中版本更高者 */
+export interface UpdateCheckResult {
+  status: 'available' | 'up-to-date' | 'error'
+  currentVersion: string
+  latest?: UpdateInfo
+  /** 用户点过「忽略此版本」的版本号；手动检查时弹窗仍应展示 */
+  skippedVersion?: string
+  /** status=error 时的提示语 */
+  message?: string
+}
+
 // ---------- IPC 契约 ----------
 // 所有 invoke 通道集中定义；主进程 handle 与渲染进程调用共享此单一来源
 
@@ -531,6 +564,11 @@ export interface IpcApi {
   'categoryPreset:list': () => Record<string, CategoryPreset>
   /** 增量设置分类预设：字段传 null = 清除该项，未提及 = 保持原值；整条空了删除该分类预设 */
   'categoryPreset:set': (category: string, patch: CategoryPresetPatch) => CategoryPreset
+  // ---- 版本更新检测（双源：官网 update.json 优先，GitHub Releases 兜底）----
+  /** 检查新版本：8s 超时，任一源可用即有结果；全部失败返回 status=error */
+  'update:check': () => UpdateCheckResult
+  /** 忽略指定版本：之后启动静默检查不再弹该版本（手动检查不受影响） */
+  'update:dismiss': (version: string) => void
 }
 
 export type IpcChannel = keyof IpcApi

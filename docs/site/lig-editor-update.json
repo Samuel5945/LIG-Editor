@@ -1,0 +1,15 @@
+{
+  "version": "0.0.0",
+  "releaseDate": "1970-01-01",
+  "notes": [
+    "发版时把 version 改成真实版本号（如 0.6.1），releaseDate 改成发布日期，",
+    "notes 每条一行更新点，然后整份上传到 https://ligdesign.win/lig-editor-update.json",
+    "0.0.0 是安全占位：即使误上传，应用也只会判定「已是最新」，不会弹更新提醒"
+  ],
+  "downloads": {
+    "quark": "https://pan.quark.cn/s/1cb400aa407b",
+    "baidu": "https://pan.baidu.com/s/1Y1tbciVySYOEd2gcwivqrw?pwd=35c8",
+    "github": "https://github.com/Samuel5945/LIG-Editor/releases/latest",
+    "site": "https://ligdesign.win/lig-editor.html"
+  }
+}
