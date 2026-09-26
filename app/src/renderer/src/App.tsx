@@ -10,7 +10,6 @@ import SettingsDialog from './components/SettingsDialog'
 import IntegrationDialog from './components/IntegrationDialog'
 import ChatPanel from './components/ChatPanel'
 import BrainstormPanel, { type BrainstormSeed } from './components/BrainstormPanel'
-import IdeaLibrary from './components/IdeaLibrary'
 import ModifyDialog from './components/ModifyDialog'
 import PolishDialog from './components/PolishDialog'
 import FigureDialog, { type FigureRequest } from './components/FigureDialog'
@@ -18,22 +17,15 @@ import ExportDialog from './components/ExportDialog'
 import ThemeImportDialog from './components/ThemeImportDialog'
 import CategoryManageDialog from './components/CategoryManageDialog'
 import UpdateDialog from './components/UpdateDialog'
-import HoverScrollName from './components/HoverScrollName'
 import ReviewPanel from './components/ReviewPanel'
 import CardsReviewPanel from './components/CardsReviewPanel'
 import TitleCoverPanel from './components/TitleCoverPanel'
 import CardsPanel, { type CardsPanelHandle } from './components/CardsPanel'
 import CalendarBoard from './components/CalendarBoard'
 import IdeaBoard from './components/IdeaBoard'
+import Sidebar from './components/Sidebar'
 import ArticleEditor, { type ArticleEditorHandle, type EditorSelection } from './editor/ArticleEditor'
 import { shouldAutoStart, startTour } from './components/onboardingTour'
-
-const STATUS_LABEL: Record<string, string> = {
-  ideating: '脑暴中',
-  drafting: '撰写中',
-  reviewing: '审阅中',
-  ready: '可发布'
-}
 
 /** 三栏工作台：左 项目/选题库，中 编辑器/标题封面，右 对话/脑暴/审阅（互相独立不串扰） */
 export default function App(): JSX.Element {
@@ -43,8 +35,6 @@ export default function App(): JSX.Element {
   const [meta, setMeta] = useState<ProjectMeta | null>(null)
   const [article, setArticle] = useState('')
   const [saved, setSaved] = useState('')
-  const [creating, setCreating] = useState(false)
-  const [newName, setNewName] = useState('')
   const [conflict, setConflict] = useState<{ file: string; external: string } | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [showSettings, setShowSettings] = useState(false)
@@ -74,8 +64,7 @@ export default function App(): JSX.Element {
   useEffect(() => {
     if (shouldAutoStart()) startTour(tourHandlers)
   }, [tourHandlers])
-  // M5 副驾驶
-  const [leftTab, setLeftTab] = useState<'projects' | 'ideas'>('projects')
+  // M5 副驾驶；左栏工作树替代旧「项目/选题库」双页签（leftTab 已移除）
   const [centerTab, setCenterTab] = useState<'article' | 'titlecover' | 'calendar' | 'ideas'>('article')
   const [rightTab, setRightTab] = useState<'chat' | 'create' | 'review'>('chat')
   const [skills, setSkills] = useState<SkillInfo[]>([])
@@ -98,16 +87,10 @@ export default function App(): JSX.Element {
   const [hasCards, setHasCards] = useState(false)
   // 脑暴入库后自增，驱动选题库自动刷新
   const [ideasVersion, setIdeasVersion] = useState(0)
-  // 项目分类：筛选条件（all = 全部）、可用分类列表（预设 + 自定义）与 AI 分类进行中
+  // 项目分类：选中分类（工作树上点分类节点设置；脑暴立项/新建工程落此分类，'all' = 未指定）
   const [filterCat, setFilterCat] = useState<string>('all')
   const [categorizing, setCategorizing] = useState(false)
   const [categories, setCategories] = useState<string[]>(() => [...PROJECT_CATEGORIES, UNCATEGORIZED])
-  // 新建分类内联输入（Electron 不支持 window.prompt，用行内输入框代替）
-  const [newCatFor, setNewCatFor] = useState<string | null>(null)
-  const [newCatName, setNewCatName] = useState('')
-  // 工程重命名内联输入（左栏项目行悬停 ✏️ 展开；renamingFor = 正在改名的工程名）
-  const [renamingFor, setRenamingFor] = useState<string | null>(null)
-  const [renameVal, setRenameVal] = useState('')
   // 自定义排版主题库（settings/customThemes.json）：分类调性打底时的最高优先覆盖
   const [customThemes, setCustomThemes] = useState<Record<string, ArticleTheme>>({})
   // 导入排版弹窗（粘贴 HTML / 公众号链接复用排版）
@@ -115,6 +98,10 @@ export default function App(): JSX.Element {
   // 分类管理弹窗 + 已删除（隐藏）分类列表
   const [showCatManage, setShowCatManage] = useState(false)
   const [hiddenCats, setHiddenCats] = useState<string[]>([])
+  // 设置弹窗初始页签（左栏 Skill 库「导入」直达 skill 页）
+  const [integrationTab, setIntegrationTab] = useState<'mcp' | 'skill' | 'push'>('mcp')
+  // 分类→公众号账号绑定徽标：分类管理/推送设置变更后 bump 重拉
+  const [bindingsVersion, setBindingsVersion] = useState(0)
   const editorRef = useRef<ArticleEditorHandle>(null)
   // 贴图面板句柄：右栏贴图审阅的落盘/优化/定位经这里转发
   const cardsRef = useRef<CardsPanelHandle>(null)
@@ -162,8 +149,9 @@ export default function App(): JSX.Element {
     setMeta(await window.api.invoke('project:readMeta', name))
   }, [])
 
-  /** 分类管理变更后的统一刷新：分类/隐藏列表/工程/主题全量重拉，失效的筛选回落「全部」 */
+  /** 分类管理变更后的统一刷新：分类/隐藏列表/工程/主题全量重拉，失效的筛选回落「全部」；绑定徽标同步重拉 */
   const refreshAfterCategoryChange = useCallback(() => {
+    setBindingsVersion((v) => v + 1)
     void window.api.invoke('project:listCategories').then((cats) => {
       setCategories(cats)
       setFilterCat((f) => (f === 'all' || cats.includes(f) ? f : 'all'))
@@ -231,25 +219,21 @@ export default function App(): JSX.Element {
     [mountSkill]
   )
 
-  const createProject = useCallback(async () => {
-    const name = newName.trim()
-    if (!name) return
-    try {
-      // 主进程会清洗工程名（如去结尾点），打开时用返回的最终名
-      // 按当前筛选分类创建，新工程才会命中该账号的分类预设（筛选为「全部」时落未分类）
-      const created = await window.api.invoke(
-        'project:create',
-        name,
-        filterCat === 'all' ? undefined : filterCat
-      )
-      setCreating(false)
-      setNewName('')
-      refreshProjects()
-      await openProject(created.name)
-    } catch (err) {
-      setToast(String(err instanceof Error ? err.message : err))
-    }
-  }, [newName, filterCat, openProject, refreshProjects])
+  /** 新建工程（左栏工作树行内/底部输入调用）。主进程会清洗工程名（如去结尾点），
+   *  打开时用返回的最终名；分类由树上的落点决定（未指定 = 未分类） */
+  const createProjectNamed = useCallback(
+    async (name: string, category?: string) => {
+      if (!name.trim()) return
+      try {
+        const created = await window.api.invoke('project:create', name, category)
+        refreshProjects()
+        await openProject(created.name)
+      } catch (err) {
+        setToast(String(err instanceof Error ? err.message : err))
+      }
+    },
+    [openProject, refreshProjects]
+  )
 
   /** 删除工程（确认后整目录移除；删当前工程先关闭） */
   const deleteProject = useCallback(
@@ -277,11 +261,12 @@ export default function App(): JSX.Element {
 
   /** 重命名工程：目录原地改名 + meta 同步（主进程完成）。本地文件联动：
    *  当前工程有未保存正文时先冲刷到旧目录再改名，改名后 current/meta/列表全部
-   *  切到新名接管，自动保存与监听（watcher）随 IPC 内部停挂重挂，不丢不串。 */
+   *  切到新名接管，自动保存与监听（watcher）随 IPC 内部停挂重挂，不丢不串。
+   *  返回是否成功：失败时左栏行内输入保持展开供修正 */
   const renameProject = useCallback(
-    async (oldName: string, raw: string) => {
+    async (oldName: string, raw: string): Promise<boolean> => {
       const trimmed = raw.trim()
-      if (!trimmed) return
+      if (!trimmed) return false
       try {
         if (currentRef.current === oldName && articleRef.current !== savedRef.current) {
           await window.api.invoke('project:writeFile', oldName, 'article.md', articleRef.current)
@@ -297,23 +282,18 @@ export default function App(): JSX.Element {
         setProjects((prev) =>
           prev.map((p) => (p.name === oldName ? { ...p, name: m.name, dir: p.dir.replace(/[^\\\/]+$/, m.name) } : p))
         )
-        setRenamingFor(null)
-        setRenameVal('')
         refreshProjects()
         setToast(`工程已重命名：「${oldName}」→「${m.name}」，本地文件夹已同步改名`)
+        return true
       } catch (err) {
         setToast(`重命名失败：${err instanceof Error ? err.message : err}`)
+        return false
       }
     },
     [refreshProjects]
   )
 
   // ---- 项目分类：手动切换 + AI 推荐；文件夹随分类迁移 workspace/<分类>/<工程名>/ ----
-
-  const shownProjects = useMemo(
-    () => projects.filter((p) => filterCat === 'all' || (p.category ?? UNCATEGORIZED) === filterCat),
-    [projects, filterCat]
-  )
 
   const applyCategory = useCallback(
     async (name: string, category: string) => {
@@ -523,6 +503,15 @@ export default function App(): JSX.Element {
     setBrainstormSeed({ card, ts: Date.now() })
     setRightTab('create')
   }, [])
+
+  /** 左栏工作树深链：打开工程并落指定中栏页签；已是当前工程只切页签（不重载丢未保存稿） */
+  const openProjectView = useCallback(
+    async (name: string, tab: 'article' | 'titlecover') => {
+      if (currentRef.current !== name) await openProject(name)
+      setCenterTab(tab)
+    },
+    [openProject]
+  )
 
   /** 审阅引用行 → 编辑器定位 */
   const handleLocate = useCallback((snippet: string): boolean => {
@@ -739,263 +728,34 @@ export default function App(): JSX.Element {
       </header>
 
       <div className="flex min-h-0 flex-1">
-        {/* 左栏：项目 / 选题库 */}
-        <aside data-tour="left-pane" className="flex w-60 shrink-0 flex-col border-r border-panel-3 bg-panel-2">
-          <nav className="flex gap-1 border-b border-panel-3 p-2 text-xs">
-            <button
-              onClick={() => setLeftTab('projects')}
-              className={`rounded px-2.5 py-1 ${leftTab === 'projects' ? 'bg-panel-3 text-ink' : 'text-ink-dim hover:bg-panel-3'}`}
-            >
-              项目
-            </button>
-            <button
-              onClick={() => setLeftTab('ideas')}
-              className={`rounded px-2.5 py-1 ${leftTab === 'ideas' ? 'bg-panel-3 text-ink' : 'text-ink-dim hover:bg-panel-3'}`}
-            >
-              选题库
-            </button>
-          </nav>
-          {leftTab === 'ideas' ? (
-            <IdeaLibrary version={ideasVersion} onMakeOutline={handleMakeOutline} onToast={setToast} />
-          ) : (
-            <>
-              <div className="flex flex-wrap gap-1 border-b border-panel-3 p-2">
-                {['all', ...categories].map((c) => (
-                  <button
-                    key={c}
-                    onClick={() => setFilterCat(c)}
-                    title={c === 'all' ? '显示全部项目' : `只看「${c}」`}
-                    className={`rounded px-1.5 py-0.5 text-[10px] ${
-                      filterCat === c ? 'bg-accent text-white' : 'text-ink-dim hover:bg-panel-3'
-                    }`}
-                  >
-                    {c === 'all' ? '全部' : c}
-                  </button>
-                ))}
-                <button
-                  onClick={() => setShowCatManage(true)}
-                  title="分类管理：删除（隐藏）/ 恢复 / 重命名"
-                  className="ml-auto rounded px-1.5 py-0.5 text-[10px] text-ink-dim hover:bg-panel-3"
-                >
-                  ⚙️ 管理
-                </button>
-              </div>
-              <div className="flex-1 overflow-auto p-2 text-xs">
-                {shownProjects.length === 0 && (
-                  <p className="mb-2 px-1 text-ink-dim">
-                    {projects.length === 0 ? '暂无项目' : '该分类下暂无项目'}
-                  </p>
-                )}
-                {shownProjects.map((p) => {
-                  const cat = p.category ?? UNCATEGORIZED
-                  const isCurrent = p.name === current
-                  return (
-                    <div
-                      key={p.name}
-                      onClick={() => openProject(p.name)}
-                      className={`group mb-1 cursor-pointer rounded px-2 py-1.5 text-left ${
-                        isCurrent ? 'bg-panel-3 text-ink' : 'text-ink-dim hover:bg-panel-3'
-                      }`}
-                    >
-                      {renamingFor === p.name ? (
-                        // 行内重命名：确认后目录与 meta 由主进程同步改名
-                        <div className="flex w-full items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                          <input
-                            autoFocus
-                            value={renameVal}
-                            onChange={(e) => setRenameVal(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') void renameProject(p.name, renameVal)
-                              if (e.key === 'Escape') {
-                                setRenamingFor(null)
-                                setRenameVal('')
-                              }
-                            }}
-                            placeholder="新工程名（文件夹同步改名）"
-                            className="min-w-0 flex-1 rounded bg-panel px-1.5 py-1 text-[11px] text-ink outline-none placeholder:text-ink-dim"
-                          />
-                          <button
-                            onClick={() => void renameProject(p.name, renameVal)}
-                            disabled={!renameVal.trim()}
-                            title="确认重命名"
-                            className="shrink-0 rounded bg-accent px-1.5 py-1 text-[11px] text-white disabled:opacity-40"
-                          >
-                            改
-                          </button>
-                          <button
-                            onClick={() => {
-                              setRenamingFor(null)
-                              setRenameVal('')
-                            }}
-                            className="shrink-0 rounded bg-panel px-1.5 py-1 text-[11px] text-ink-dim hover:text-ink"
-                          >
-                            取消
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="flex w-full items-center gap-2">
-                          <HoverScrollName name={p.name} />
-                          {cat !== UNCATEGORIZED && (
-                            <span
-                              className="shrink-0 rounded bg-panel px-1 py-0.5 text-[10px] text-accent"
-                              title={`分类：${cat}`}
-                            >
-                              {cat}
-                            </span>
-                          )}
-                          <span className="shrink-0 rounded bg-panel px-1.5 py-0.5 text-[10px] group-hover:hidden">
-                            {STATUS_LABEL[p.status] ?? p.status}
-                          </span>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setRenamingFor(p.name)
-                              setRenameVal(p.name)
-                            }}
-                            title="重命名工程（本地文件夹同步改名）"
-                            className="hidden shrink-0 rounded px-1 text-ink-dim hover:text-accent group-hover:block"
-                          >
-                            ✏️
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              deleteProject(p.name)
-                            }}
-                            title="删除工程"
-                            className="hidden shrink-0 rounded px-1 text-ink-dim hover:text-red-400 group-hover:block"
-                          >
-                            🗑
-                          </button>
-                        </div>
-                      )}
-                      {isCurrent && (
-                        <div className="mt-1.5 flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                          <select
-                            value={cat}
-                            onChange={(e) => {
-                              const v = e.target.value
-                              if (v === '__new__') {
-                                // Electron 不支持 window.prompt：展开行内输入框新建分类
-                                setNewCatFor(p.name)
-                                setNewCatName('')
-                                return
-                              }
-                              void applyCategory(p.name, v)
-                            }}
-                            title="切换分类（工程文件夹随之移动到对应分类目录）；底部可新建自定义分类"
-                            className="min-w-0 flex-1 rounded bg-panel px-1.5 py-1 text-[11px] text-ink outline-none"
-                          >
-                            {[...new Set([cat, ...categories])].map((c) => (
-                              <option key={c} value={c}>
-                                {c}
-                              </option>
-                            ))}
-                            <option value="__new__">＋ 新建分类…</option>
-                          </select>
-                          <button
-                            onClick={() => void aiCategorize()}
-                            disabled={categorizing}
-                            title="AI 通读正文推荐分类"
-                            className="shrink-0 rounded bg-panel px-1.5 py-1 text-[11px] text-accent hover:bg-panel-2 disabled:opacity-40"
-                          >
-                            {categorizing ? '判断中…' : '✦ AI'}
-                          </button>
-                        </div>
-                      )}
-                      {isCurrent && newCatFor === p.name && (
-                        <div className="mt-1.5 flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                          <input
-                            autoFocus
-                            value={newCatName}
-                            onChange={(e) => setNewCatName(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter' && newCatName.trim()) {
-                                void applyCategory(p.name, newCatName.trim())
-                                setNewCatFor(null)
-                                setNewCatName('')
-                              }
-                              if (e.key === 'Escape') {
-                                setNewCatFor(null)
-                                setNewCatName('')
-                              }
-                            }}
-                            placeholder="新分类名（自动建 workspace/<分类>/ 文件夹）"
-                            className="min-w-0 flex-1 rounded bg-panel px-1.5 py-1 text-[11px] text-ink outline-none placeholder:text-ink-dim"
-                          />
-                          <button
-                            onClick={() => {
-                              if (!newCatName.trim()) return
-                              void applyCategory(p.name, newCatName.trim())
-                              setNewCatFor(null)
-                              setNewCatName('')
-                            }}
-                            disabled={!newCatName.trim()}
-                            className="shrink-0 rounded bg-accent px-1.5 py-1 text-[11px] text-white disabled:opacity-40"
-                          >
-                            建
-                          </button>
-                          <button
-                            onClick={() => {
-                              setNewCatFor(null)
-                              setNewCatName('')
-                            }}
-                            className="shrink-0 rounded bg-panel px-1.5 py-1 text-[11px] text-ink-dim hover:text-ink"
-                          >
-                            取消
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-                {creating ? (
-                <div className="mt-2 flex gap-1">
-                  <input
-                    autoFocus
-                    value={newName}
-                    onChange={(e) => setNewName(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') createProject()
-                      if (e.key === 'Escape') setCreating(false)
-                    }}
-                    placeholder="工程名"
-                    className="min-w-0 flex-1 rounded bg-panel-3 px-2 py-1.5 text-ink outline-none placeholder:text-ink-dim"
-                  />
-                  <button onClick={createProject} className="shrink-0 rounded bg-accent px-2 text-white">
-                    建
-                  </button>
-                  <button
-                    onClick={() => {
-                      setCreating(false)
-                      setNewName('')
-                    }}
-                    className="shrink-0 rounded bg-panel-3 px-2 text-ink-dim hover:text-ink"
-                  >
-                    取消
-                  </button>
-                </div>
-              ) : (
-                <button
-                  onClick={() => setCreating(true)}
-                  className="mt-2 w-full rounded border border-dashed border-panel-3 py-2 text-ink-dim hover:border-accent hover:text-accent"
-                >
-                  + 新建图文工程
-                </button>
-              )}
-              </div>
-            </>
-          )}
-          {paths && (
-            <footer
-              onClick={() => window.api.invoke('export:openFile', paths.workspace).catch(() => {})}
-              title={`点击打开工作区文件夹\n${paths.workspace}`}
-              className="cursor-pointer truncate border-t border-panel-3 p-2 text-[10px] text-ink-dim hover:bg-panel-3 hover:text-ink"
-            >
-              📂 {paths.workspace}
-            </footer>
-          )}
-        </aside>
+        {/* 左栏：工作树（分类→工程→资产；钉住选题收件箱与 Skill 库） */}
+        <Sidebar
+          paths={paths}
+          projects={projects}
+          categories={categories}
+          skills={skills}
+          ideasVersion={ideasVersion}
+          current={current}
+          filterCat={filterCat}
+          categorizing={categorizing}
+          bindingsVersion={bindingsVersion}
+          onOpenProject={(name) => void openProject(name)}
+          onOpenProjectView={(name, tab) => void openProjectView(name, tab)}
+          onCreateProject={createProjectNamed}
+          onRenameProject={renameProject}
+          onDeleteProject={(name) => void deleteProject(name)}
+          onApplyCategory={(name, category) => void applyCategory(name, category)}
+          onAiCategorize={() => void aiCategorize()}
+          onSkillsChanged={refreshSkills}
+          onOpenCatManage={() => setShowCatManage(true)}
+          onOpenIntegration={(tab) => {
+            setIntegrationTab(tab)
+            setShowIntegration(true)
+          }}
+          onSetFilterCat={setFilterCat}
+          onMakeOutline={handleMakeOutline}
+          onToast={setToast}
+        />
 
         {/* 中栏：正文编辑器 / 标题封面 */}
         <main className="flex min-w-0 flex-1 flex-col bg-panel">
@@ -1389,12 +1149,17 @@ export default function App(): JSX.Element {
         />
       )}
 
-      {/* 设置（接入 / Skill / 推送） */}
+      {/* 设置（接入 / Skill / 推送）：initialTab 供左栏 Skill 库「导入」直达 */}
       {showIntegration && (
         <IntegrationDialog
+          initialTab={integrationTab}
           onToast={setToast}
           onSkillsChanged={refreshSkills}
-          onClose={() => setShowIntegration(false)}
+          onClose={() => {
+            setShowIntegration(false)
+            // 推送页签可能改过账号/绑定：关弹窗统一刷新工作树的账号徽标
+            setBindingsVersion((v) => v + 1)
+          }}
         />
       )}
 

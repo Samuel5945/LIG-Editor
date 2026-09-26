@@ -159,6 +159,24 @@ export interface ProjectSummary {
 /** 工程内直接可编辑的文本文件（约定文件名即 ID）；cards-review.md 按需创建不预建 */
 export type ProjectTextFile = 'article.md' | 'ideas.md' | 'review.md' | 'cards-review.md'
 
+/**
+ * 工程内可入左栏工作树的资产清单（左栏工作树用，见 shared/workTree.ts）。
+ * 相对路径一律正斜杠；只收白名单子目录（assets/figures/covers/cards/交付），
+ * chat/、project.json、article.md 等内部文件永不入树。目录缺失 = 空数组。
+ */
+export interface ProjectAssets {
+  /** figures/*.html 图表源（可改源码重渲染） */
+  figures: string[]
+  /** assets/ 下图片（扩展名白名单） */
+  assets: string[]
+  /** covers/*.html 封面模板渲染源 */
+  covers: string[]
+  /** cards/<format>/card-N.png 贴图卡片产物 */
+  cards: string[]
+  /** 交付/ 交稿产物（docx/pdf 等） */
+  deliveries: string[]
+}
+
 /** 打开工程时一次性返回的数据 */
 export interface ProjectData {
   meta: ProjectMeta
@@ -461,6 +479,10 @@ export interface IpcApi {
   'project:writeFile': (project: string, file: ProjectTextFile, content: string) => void
   'project:readMeta': (project: string) => ProjectMeta
   'project:writeMeta': (project: string, meta: ProjectMeta) => void
+  /** 工程内可入树的资产清单（白名单目录，相对路径正斜杠；见 ProjectAssets） */
+  'project:listAssets': (project: string) => ProjectAssets
+  /** 左栏工作树按需监听：以展开的工程全量集合做差量挂/卸，变化推 workspace:assets-changed */
+  'project:setWatchedProjects': (names: string[]) => void
   // ---- 模型接入（M4）----
   'settings:getLlm': () => LlmSettings
   'settings:setLlm': (settings: LlmSettings) => void
@@ -588,6 +610,8 @@ export interface IpcEvents {
   'llm:done': { requestId: string; error?: string }
   /** figures/*.html 被外部修改后自动重渲染完成；png 为新图相对路径 */
   'figure:rendered': { project: string; html: string; png: string }
+  /** 左栏工作树监听的工程内资产有增删改（Agent 直改/导入等）；渲染层刷新该工程资产节点 */
+  'workspace:assets-changed': { project: string }
 }
 
 export type IpcEventChannel = keyof IpcEvents

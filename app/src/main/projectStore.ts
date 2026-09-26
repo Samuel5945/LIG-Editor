@@ -1,4 +1,4 @@
-import { join, normalize, basename } from 'path'
+import { join, normalize, basename, extname } from 'path'
 import {
   existsSync,
   mkdirSync,
@@ -18,6 +18,7 @@ import type {
   IdeaProjectRef,
   IdeaStageInfo,
   OpenMdResult,
+  ProjectAssets,
   ProjectData,
   ProjectMeta,
   ProjectSummary,
@@ -299,6 +300,43 @@ export function listProjects(): ProjectSummary[] {
     }
   }
   return out.sort((a, b) => b.updated_at.localeCompare(a.updated_at))
+}
+
+// ---------- 工程资产清单（左栏工作树） ----------
+
+/** 可入树的资产子目录白名单；其余（chat/、project.json 等）一律不出现 */
+const ASSET_DIRS = ['assets', 'figures', 'covers', 'cards', '交付'] as const
+const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.svg', '.bmp'])
+
+/** 列出工程内可入左栏工作树的资产（相对路径正斜杠；目录缺失 = 空数组） */
+export function listProjectAssets(project: string): ProjectAssets {
+  const dir = resolveDir(project)
+  if (!dir) throw new Error(`工程不存在：${project}`)
+  const out: ProjectAssets = { figures: [], assets: [], covers: [], cards: [], deliveries: [] }
+  for (const sub of ASSET_DIRS) {
+    const base = join(dir, sub)
+    if (!existsSync(base)) continue
+    if (sub === 'cards') {
+      // cards/<format>/card-N.png 两层结构，只收图片产物
+      for (const fmt of readdirSync(base, { withFileTypes: true })) {
+        if (!fmt.isDirectory()) continue
+        for (const f of readdirSync(join(base, fmt.name), { withFileTypes: true })) {
+          if (f.isFile() && IMAGE_EXTS.has(extname(f.name))) {
+            out.cards.push(`${sub}/${fmt.name}/${f.name}`)
+          }
+        }
+      }
+      continue
+    }
+    for (const f of readdirSync(base, { withFileTypes: true })) {
+      if (!f.isFile()) continue
+      if (sub === 'assets' && !IMAGE_EXTS.has(extname(f.name))) continue
+      if ((sub === 'figures' || sub === 'covers') && extname(f.name).toLowerCase() !== '.html') continue
+      out[sub === '交付' ? 'deliveries' : sub].push(`${sub}/${f.name}`)
+    }
+  }
+  for (const key of Object.keys(out) as (keyof ProjectAssets)[]) out[key].sort()
+  return out
 }
 
 export function createProject(name: string, category?: string): ProjectSummary {

@@ -18,6 +18,8 @@ interface IntegrationDialogProps {
   onToast: (msg: string) => void
   /** Skill 列表有增删/启停后回调（App 刷新挂载下拉） */
   onSkillsChanged: () => void
+  /** 初始页签（左栏 Skill 库「导入」直达 skill 页）；缺省 mcp */
+  initialTab?: 'mcp' | 'skill' | 'push'
   onClose: () => void
 }
 
@@ -27,9 +29,10 @@ const btnGhost =
 export default function IntegrationDialog({
   onToast,
   onSkillsChanged,
+  initialTab,
   onClose
 }: IntegrationDialogProps): ReactElement {
-  const [tab, setTab] = useState<'mcp' | 'skill' | 'push'>('mcp')
+  const [tab, setTab] = useState<'mcp' | 'skill' | 'push'>(initialTab ?? 'mcp')
   const [card, setCard] = useState<McpAccessCard | null>(null)
   const [skills, setSkills] = useState<SkillInfo[]>([])
   const [importPath, setImportPath] = useState('')

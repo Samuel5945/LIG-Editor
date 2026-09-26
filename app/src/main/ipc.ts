@@ -4,7 +4,7 @@ import { join, resolve } from 'path'
 import type { IpcApi, IpcEvents, IpcEventChannel, McpAccessCard } from '@shared/types'
 import { getAppPaths } from './paths'
 import * as store from './projectStore'
-import { watchProject, stopProjectWatch } from './watcher'
+import { watchProject, stopProjectWatch, setWatchedProjects, unwatchProjectAssets } from './watcher'
 import { getLlmSettings, setLlmSettings } from './settingsStore'
 import { testProvider, chatStart, abortChat, fetchModels } from './llm'
 import { listSkills, readSkill, importSkill, setSkillEnabled, saveSkill, removeSkill } from './skillStore'
@@ -114,6 +114,7 @@ export function registerIpc(): void {
       await stopProjectWatch()
       watchedProject = null
     }
+    unwatchProjectAssets(project)
     const meta = store.setProjectCategory(project, category)
     if (rewatching) {
       watchProject(project, store.projectDir(project))
@@ -126,6 +127,7 @@ export function registerIpc(): void {
       await stopProjectWatch()
       watchedProject = null
     }
+    unwatchProjectAssets(name)
     store.deleteProject(name)
   })
   handle('project:rename', async (oldName, newName) => {
@@ -135,6 +137,7 @@ export function registerIpc(): void {
       await stopProjectWatch()
       watchedProject = null
     }
+    unwatchProjectAssets(oldName)
     const meta = store.renameProject(oldName, newName)
     if (rewatching) {
       watchProject(newName, store.projectDir(newName))
@@ -156,6 +159,9 @@ export function registerIpc(): void {
   handle('project:writeFile', (project, file, content) => store.writeTextFile(project, file, content))
   handle('project:readMeta', (project) => store.readMeta(project))
   handle('project:writeMeta', (project, meta) => store.writeMeta(project, meta))
+  // ---- 左栏工作树：资产清单 + 按需监听 ----
+  handle('project:listAssets', (project) => store.listProjectAssets(project))
+  handle('project:setWatchedProjects', (names) => setWatchedProjects(names))
 
   handle('project:setSchedule', (project, date) => store.setSchedule(project, date))
 

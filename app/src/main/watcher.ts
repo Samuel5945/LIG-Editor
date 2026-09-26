@@ -1,7 +1,8 @@
 import chokidar, { type FSWatcher } from 'chokidar'
 import { relative } from 'path'
+import { existsSync } from 'fs'
 import { broadcast } from './ipc'
-import { isOwnWrite } from './projectStore'
+import { isOwnWrite, projectDir as resolveDir } from './projectStore'
 import { renderFigure } from './figureRender'
 import { getAppPaths } from './paths'
 
@@ -59,4 +60,60 @@ export function watchWorkspace(): void {
       broadcast('workspace:changed', null)
     }
   })
+}
+
+// ---------- 左栏工作树的按需资产监听 ----------
+// 树上展开哪个工程就监听哪个（渲染层以展开集合差量同步），与编辑器热载的
+// 单例 projectWatcher 互不干扰；树刷新不要求低延迟，轮询间隔放宽省 CPU。
+
+const assetWatchers = new Map<string, FSWatcher>()
+
+function stopAssetWatch(name: string): void {
+  const w = assetWatchers.get(name)
+  if (!w) return
+  assetWatchers.delete(name)
+  void w.close()
+}
+
+/** 以展开的工程集合做差量挂/卸；names 之外的已有监听一律卸掉 */
+export function setWatchedProjects(names: string[]): void {
+  const want = new Set(names)
+  for (const name of [...assetWatchers.keys()]) {
+    if (!want.has(name)) stopAssetWatch(name)
+  }
+  for (const name of want) {
+    if (assetWatchers.has(name)) continue
+    const dir = watchedAssetDir(name)
+    if (!dir) continue
+    const w = chokidar.watch(dir, {
+      ignoreInitial: true,
+      depth: 2,
+      usePolling: true,
+      interval: 1500,
+      binaryInterval: 3000,
+      awaitWriteFinish: { stabilityThreshold: 300, pollInterval: 100 }
+    })
+    w.on('all', (event, filePath) => {
+      // 目录增删不单独报——文件 add/unlink 事件本身就会让树重新计数
+      if (event === 'addDir' || event === 'unlinkDir') return
+      if ((event === 'change' || event === 'add') && isOwnWrite(filePath)) return
+      broadcast('workspace:assets-changed', { project: name })
+    })
+    assetWatchers.set(name, w)
+  }
+}
+
+/** 工程目录定位复用 projectStore 的缓存；目录已不在（删除/迁移中）返回 null 跳过 */
+function watchedAssetDir(name: string): string | null {
+  try {
+    const dir = resolveDir(name)
+    return dir && existsSync(dir) ? dir : null
+  } catch {
+    return null
+  }
+}
+
+/** 工程被删除/改名/迁移分类时调用，避免继续监听已失效路径 */
+export function unwatchProjectAssets(name: string): void {
+  stopAssetWatch(name)
 }
