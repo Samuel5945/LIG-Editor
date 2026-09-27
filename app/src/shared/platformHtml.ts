@@ -1,18 +1,23 @@
 /**
  * 多平台分发适配（M11）：同一篇 article 按目标平台编辑器的粘贴净化规则输出对应形态的富文本
  *
- * 平台画像 v1（以主流编辑器粘贴行为为准，实际效果以平台为准；画像在本文件单点调优）：
+ * 平台画像（画像在本文件单点调优）：
  * - wechat：委托 exportHtml.docToExportHtml（全内联样式 + 背景卡 + 装饰 + 自动序号），本模块不碰
  * - zhihu：语义化 HTML——知乎净化器只留结构（h1-h3/strong/blockquote/table/img），
  *   主动输出零内联样式的干净结构，避免残留垃圾 span/section；加粗强调统一 <strong>
- * - toutiao / baijiahao：保守内联形态——保留标题/正文颜色、加粗、引用左条、分隔线、图片；
- *   去背景卡片、胶囊色块、圆角拼图等复杂装饰（净化器会打碎它们）。两平台 v1 共用同一画像，
- *   预留独立 id 以便后续分化
+ * - toutiao：语义化 HTML + 图片/图注居中。依据 2026-09-27 在 mp.toutiao.com **发布页**的 26 条逐条实测：
+ *   text-align 存活；color / background-color / font-size / line-height / margin / text-indent 全部剥离；
+ *   引用左竖线、表格边框与表头加粗都是平台原生渲染（不给样式的 16/20 与给了内联样式的 17/21 发布页同形）；
+ *   h1-h3 走平台自有标题样式表（还注入装饰），我们给的标题样式一律无效。
+ *   故除 text-align 外不给任何内联样式，手动字色/高亮主动剥除，不给平台留垃圾标签
+ * - baijiahao：保守内联形态——保留标题/正文颜色、加粗、引用左条、分隔线、图片；去背景卡片、
+ *   胶囊色块、圆角拼图等复杂装饰。**尚未实测**，沿用与头条分化前的 v1 画像，等它自己那一轮探针再改
  *
  * 通用规则：
  * - 主题 h2Num 自动序号保留为标题文本（01 / 一、…），手写序号剥除避免双号（与公众号导出同源）
- * - 手动内联样式：字色/高亮保留（lite）/剥除（zhihu）；手动字号一律不给（平台统一正文字号）
- * - 图片走 resolveImg（复制 = dataURL 内嵌，平台粘贴时自动转存；导出文件 = 相对路径）
+ * - 手动内联样式：字色/高亮保留（baijiahao）/剥除（zhihu、toutiao）；手动字号一律不给（平台统一正文字号）
+ * - 图片走 resolveImg（复制 = dataURL 内嵌，导出文件 = 相对路径）。头条编辑器内实测 dataURL 图与外链图
+ *   都能渲染且被纳入平台图片模型，故不需要 dataURL 降级路径（发布页与存草稿重开两环仍未测）
  * - 图集：逐张竖排（平台不支持横滑容器/拼图），图注挂整组末张之后
  * - fig-suggest 占位卡不导出
  */
@@ -90,9 +95,18 @@ function stripSeq(content: InlineNode[] | undefined): InlineNode[] | undefined {
   return content.map((n, i) => (i === 0 && n.type === 'text' ? { ...n, text: (n.text ?? '').slice(m[0].length) } : n))
 }
 
-// ---------- 知乎：零内联样式的语义化结构 ----------
+// ---------- 语义化画像（知乎 / 头条号）：除对齐外零内联样式 ----------
 
-function zhihuInline(content: InlineNode[] | undefined): string {
+interface SemanticOpts {
+  /** 头条发布页实测 text-align 存活（探针 10/11）→ 图片与图注居中；知乎维持零内联样式契约，不给 */
+  centerMedia: boolean
+}
+
+function semanticP(inner: string, opts: SemanticOpts): string {
+  return opts.centerMedia ? `<p style="text-align:center">${inner}</p>` : `<p>${inner}</p>`
+}
+
+function semanticInline(content: InlineNode[] | undefined): string {
   if (!content) return ''
   return content
     .map((n) => {
@@ -103,30 +117,44 @@ function zhihuInline(content: InlineNode[] | undefined): string {
     .join('')
 }
 
-function zhihuCaption(text: string): string {
-  return `<p>${escapeHtml(text)}</p>`
+/** 头条侧图注的字号与色值都会被剥，居中是它与正文唯一的区分手段 */
+function semanticCaption(text: string, opts: SemanticOpts): string {
+  return semanticP(escapeHtml(text), opts)
 }
 
-function zhihuImages(images: FigureGalleryAttrs['images'], caption: string, resolveImg: (src: string) => string): string {
-  const imgs = images.map((im) => `<p><img src="${escapeHtml(resolveImg(im.src))}" alt="${escapeHtml(im.alt)}"></p>`)
-  if (caption) imgs.push(zhihuCaption(caption))
+function semanticImages(
+  images: FigureGalleryAttrs['images'],
+  caption: string,
+  resolveImg: (src: string) => string,
+  opts: SemanticOpts
+): string {
+  const imgs = images.map((im) =>
+    semanticP(`<img src="${escapeHtml(resolveImg(im.src))}" alt="${escapeHtml(im.alt)}">`, opts)
+  )
+  if (caption) imgs.push(semanticCaption(caption, opts))
   return imgs.join('\n')
 }
 
-function zhihuHtml(doc: ArticleDoc, resolveImg: (src: string) => string, theme: ArticleTheme): string {
+function semanticHtml(
+  doc: ArticleDoc,
+  resolveImg: (src: string) => string,
+  theme: ArticleTheme,
+  opts: SemanticOpts
+): string {
   let h2Seq = 0
   const out: string[] = []
   for (const b of doc.content ?? []) {
-    out.push(zhihuBlock(b, resolveImg, theme, () => h2NumText(theme.h2Num!, ++h2Seq)))
+    out.push(semanticBlock(b, resolveImg, theme, () => h2NumText(theme.h2Num!, ++h2Seq), opts))
   }
   return out.filter(Boolean).join('\n')
 }
 
-function zhihuBlock(
+function semanticBlock(
   b: BlockNode,
   resolveImg: (src: string) => string,
   theme: ArticleTheme,
-  nextSeq: () => string
+  nextSeq: () => string,
+  opts: SemanticOpts
 ): string {
   switch (b.type) {
     case 'heading': {
@@ -134,23 +162,26 @@ function zhihuBlock(
       const tag = `h${level}`
       const autoNum = level === 2 && theme.h2Num ? nextSeq() : ''
       const content = level === 2 && theme.h2Num ? stripSeq(b.content) : b.content
-      return `<${tag}>${autoNum}${zhihuInline(content)}</${tag}>`
+      return `<${tag}>${autoNum}${semanticInline(content)}</${tag}>`
     }
     case 'paragraph': {
       const text = plainText(b.content)
       if (!text || isDecorative(text)) return ''
-      return `<p>${zhihuInline(b.content)}</p>`
+      return `<p>${semanticInline(b.content)}</p>`
     }
     case 'blockquote':
-      return `<blockquote>${b.content.map((p) => `<p>${zhihuInline(p.content)}</p>`).join('')}</blockquote>`
+      return `<blockquote>${b.content.map((p) => `<p>${semanticInline(p.content)}</p>`).join('')}</blockquote>`
     case 'horizontalRule':
       return '<hr>'
     case 'figureImage': {
-      const img = `<p><img src="${escapeHtml(resolveImg(b.attrs.src))}" alt="${escapeHtml(b.attrs.alt)}"></p>`
-      return b.attrs.caption ? img + zhihuCaption(b.attrs.caption) : img
+      const img = semanticP(
+        `<img src="${escapeHtml(resolveImg(b.attrs.src))}" alt="${escapeHtml(b.attrs.alt)}">`,
+        opts
+      )
+      return b.attrs.caption ? img + semanticCaption(b.attrs.caption, opts) : img
     }
     case 'figureGallery':
-      return zhihuImages(b.attrs.images, b.attrs.caption, resolveImg)
+      return semanticImages(b.attrs.images, b.attrs.caption, resolveImg, opts)
     case 'table': {
       const rows = b.attrs.rows
       if (!rows.length) return ''
@@ -168,7 +199,7 @@ function zhihuBlock(
   }
 }
 
-// ---------- 头条号 / 百家号：保守内联（保留颜色加粗，去卡片与复杂装饰） ----------
+// ---------- 百家号：保守内联（保留颜色加粗，去卡片与复杂装饰）——未实测，勿据此推广到其他平台 ----------
 
 interface LiteCtx {
   accent: string
@@ -294,11 +325,13 @@ export function docToPlatformHtml(
 ): string {
   if (platform === 'wechat') return docToExportHtml(doc, resolveImg, theme, uiDark)
   const t = theme ?? DEFAULT_THEME
-  return platform === 'zhihu' ? zhihuHtml(doc, resolveImg, t) : liteHtml(doc, resolveImg, t)
+  if (platform === 'baijiahao') return liteHtml(doc, resolveImg, t)
+  return semanticHtml(doc, resolveImg, t, { centerMedia: platform === 'toutiao' })
 }
 
 /** 平台适配片段 → 完整独立页面（article-<platform>.html 落盘 / 弹窗预览共用；白底桌面专栏宽）。
- *  img 约束挂页壳样式表而非片段：知乎画像保持零内联样式契约，大图不按原始像素撑爆视口 */
+ *  img 约束挂页壳样式表而非片段：语义化画像（知乎/头条）保持零内联视觉样式契约，
+ *  大图不按原始像素撑爆视口 */
 export function wrapPlatformPage(fragment: string, title: string): string {
   return `<!DOCTYPE html>
 <html lang="zh-CN">
