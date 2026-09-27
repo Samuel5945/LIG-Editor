@@ -56,10 +56,11 @@ function Chevron({ open }: { open: boolean }): ReactElement {
 const rowBase = 'group mb-0.5 flex cursor-pointer items-center gap-1 rounded px-2 py-1 text-left'
 
 /**
- * 左栏工作树（半树化）：镜像 workspace 目录（分类→工程→资产）作导航骨架，
- * 钉住「选题收件箱」「Skill 库」两节点；树只读，点击深链既有面板，
- * 状态/排期等推导值由 ProjectSummary 现场标注。资产计数来自 project:listAssets，
- * 展开的工程经 project:setWatchedProjects 按需监听，Agent 直改文件即自动刷新。
+ * 左栏：工作树 / 选题库 双页签。
+ * 「工作树」镜像 workspace 目录（分类→工程→正文/交付）作导航骨架，钉住 Skill 库节点；
+ * 树只读，点击深链既有面板，状态/排期等推导值由 ProjectSummary 现场标注。资产计数来自
+ * project:listAssets，展开的工程经 project:setWatchedProjects 按需监听，Agent 直改文件即自动刷新。
+ * 「选题库」沿用原版整栏列表（idea-inbox.md），与树分开，切换页签不丢树的展开状态。
  */
 export default function Sidebar(props: SidebarProps): ReactElement {
   const {
@@ -88,10 +89,11 @@ export default function Sidebar(props: SidebarProps): ReactElement {
   } = props
 
   // null = 全部分类展开（首次使用的默认态，直到手动折叠才落具体清单）
+  // 左栏页签：工作树 / 选题库（选题库沿用原版整栏列表，与树分开）
+  const [leftTab, setLeftTab] = useState<'tree' | 'ideas'>('tree')
   const [openCats, setOpenCats] = useState<string[] | null>(null)
   const [expanded, setExpanded] = useState<string[]>([])
   const [openGroups, setOpenGroups] = useState<string[]>([])
-  const [ideasOpen, setIdeasOpen] = useState(false)
   const [skillsOpen, setSkillsOpen] = useState(false)
   // 置顶工程（渲染层本地偏好，不入 project.json，避开 readMeta 白名单坑）
   const [pinned, setPinned] = useState<string[]>(() => {
@@ -499,24 +501,33 @@ export default function Sidebar(props: SidebarProps): ReactElement {
 
   return (
     <aside data-tour="left-pane" className="flex w-60 shrink-0 flex-col border-r border-panel-3 bg-panel-2">
-      <div className="flex items-center gap-1 border-b border-panel-3 p-2 text-xs">
-        <span className="font-bold text-ink">工作树</span>
+      <nav className="flex items-center gap-1 border-b border-panel-3 p-2 text-xs">
         <button
-          onClick={onOpenCatManage}
-          title="分类管理：删除（隐藏）/ 恢复 / 重命名"
-          className="ml-auto rounded px-1.5 py-0.5 text-[10px] text-ink-dim hover:bg-panel-3"
+          onClick={() => setLeftTab('tree')}
+          className={`rounded px-2.5 py-1 ${leftTab === 'tree' ? 'bg-panel-3 text-ink' : 'text-ink-dim hover:bg-panel-3'}`}
         >
-          ⚙️ 管理
+          工作树
         </button>
-      </div>
-      <div className="min-h-0 flex-1 overflow-auto p-2 text-xs">
-        {/* 钉住：选题收件箱（全局 idea-inbox.md） */}
-        <div className={rowBase} onClick={() => setIdeasOpen((v) => !v)}>
-          <Chevron open={ideasOpen} />
-          <span>📥</span>
-          <span className="min-w-0 flex-1 truncate text-ink">选题收件箱</span>
-        </div>
-        {ideasOpen && <IdeaLibrary version={ideasVersion} onMakeOutline={onMakeOutline} onToast={onToast} />}
+        <button
+          onClick={() => setLeftTab('ideas')}
+          className={`rounded px-2.5 py-1 ${leftTab === 'ideas' ? 'bg-panel-3 text-ink' : 'text-ink-dim hover:bg-panel-3'}`}
+        >
+          选题库
+        </button>
+        {leftTab === 'tree' && (
+          <button
+            onClick={onOpenCatManage}
+            title="分类管理：删除（隐藏）/ 恢复 / 重命名"
+            className="ml-auto rounded px-1.5 py-0.5 text-[10px] text-ink-dim hover:bg-panel-3"
+          >
+            ⚙️ 管理
+          </button>
+        )}
+      </nav>
+      {leftTab === 'ideas' ? (
+        <IdeaLibrary version={ideasVersion} onMakeOutline={onMakeOutline} onToast={onToast} />
+      ) : (
+        <div className="min-h-0 flex-1 overflow-auto p-2 text-xs">
         {/* 钉住：Skill 库（skills/ 目录，轻量启停；导入走设置弹窗） */}
         <div className={rowBase} onClick={() => setSkillsOpen((v) => !v)}>
           <Chevron open={skillsOpen} />
@@ -673,7 +684,8 @@ export default function Sidebar(props: SidebarProps): ReactElement {
             + 新建图文工程
           </button>
         )}
-      </div>
+        </div>
+      )}
       {/* 工程右键菜单：打开工程目录 / 置顶（点击遮罩或再次右键关闭） */}
       {menu && (
         <>

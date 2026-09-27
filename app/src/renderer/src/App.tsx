@@ -728,7 +728,7 @@ export default function App(): JSX.Element {
       </header>
 
       <div className="flex min-h-0 flex-1">
-        {/* 左栏：工作树（分类→工程→资产；钉住选题收件箱与 Skill 库） */}
+        {/* 左栏：工作树 / 选题库双页签（树：分类→工程→正文/交付；选题库沿用原版整栏列表） */}
         <Sidebar
           paths={paths}
           projects={projects}
