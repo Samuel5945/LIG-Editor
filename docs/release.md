@@ -19,6 +19,9 @@
 2. **构建**：`cd app && npm run dist`，产物在 `releases/`（`LIG-Editor-setup-<版本>.exe` + portable）。
 3. **上传网盘**：夸克 + 百度网盘（分享链接若变动，记下新链接）。
 4. **发 GitHub Release**：tag `v<版本>`，正文写更新说明，**正文必须贴夸克/百度网盘链接**（裸链或 markdown 链接均可）。
+   > ⚠️ 创建 Release 前**必须先把本地提交推上远端**（`git push origin master`）——tag 会打在远端
+   > master 的当前顶端，先建后推就会指向旧提交（v0.7.0 就吃过这个亏）。且本仓库 tag 一经创建
+   > 不可改删（Settings → Tags 有保护模式，API 无法解除），打错了只能进设置页临时解除再强推。
 5. **更新官网 update.json**：把 `docs/site/lig-editor-update.json` 内容改成真实版本后上传到 `https://ligdesign.win/lig-editor-update.json`——**这一步完成，应用内提醒才正式上线**。
 
 ## update.json 格式
