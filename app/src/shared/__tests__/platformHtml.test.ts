@@ -4,7 +4,8 @@
  * - toutiao：语义化 + 两处例外（图注 text-align:center、表头包 strong）——2026-09-27 发布页目视与
  *   粘贴后编辑器 DOM / 发布预览 DOM 三方核对：平台按计算后样式转 mark 并丢弃 CSS，只有段落级对齐存活，
  *   thead/th 与 h2/h3 被压平，图片被抽成 div.pgc-img 转存平台图床
- * - baijiahao：保守内联（保留 color、引用左条、表格边框）、无背景卡/装饰——未实测，沿用分化前的 v1 画像
+ * - baijiahao：与知乎逐字节一致的同形态语义化——2026-09-27 决定不再为它做画像验证，故不给任何
+ *   猜出来的内联样式（原 liteHtml 保守内联画像已删除）
  * - wechat：委托 exportHtml 原路径，输出与 docToExportHtml 逐字节一致（回归保证）
  * - 页壳 wrapPlatformPage：标题转义、720px 专栏宽
  */
@@ -138,26 +139,32 @@ describe('头条画像（toutiao）：语义化 + 图注居中 + 表头 strong',
   })
 })
 
-describe('百家号画像（baijiahao）：保守内联，未实测沿用 v1', () => {
-  it('保留颜色与引用左条，去卡片装饰', () => {
-    const html = docToPlatformHtml(mdToDoc(SAMPLE_MD), RESOLVE, THEME, 'baijiahao')
-    expect(html).toContain('<h2 style=')
-    expect(html).toContain('border-left:4px solid #4a7c59') // 引用主题色左条
-    expect(html).toContain('border-collapse:collapse') // 表格保留边框
-    expect(html).not.toContain('border-radius:9999px') // 无胶囊装饰
-    // 无背景卡：bodyText/背景色容器不出现
-    expect(html).not.toContain('background-color:#')
-    expect((html.match(/<img /g) ?? []).length).toBe(2)
-    // 自动序号同样替换手写序号
-    expect(html).toContain('01 手写序号小节')
-    expect(html).not.toContain('0101')
+describe('百家号画像（baijiahao）：与知乎同形态，不再做独立验证', () => {
+  // 2026-09-27 决定不为百家号跑画像验证 → 不给任何猜出来的内联样式。
+  // 原 liteHtml 保守内联画像已删除（头条实测证明那一类样式在同类净化器下几乎全被丢弃）
+  it('输出与知乎逐字节一致（同一套语义化画像，两处头条例外都不给）', () => {
+    const doc = mdToDoc(SAMPLE_MD)
+    expect(docToPlatformHtml(doc, RESOLVE, THEME, 'baijiahao')).toBe(
+      docToPlatformHtml(doc, RESOLVE, THEME, 'zhihu')
+    )
   })
 
-  it('加粗强调走主题色（strongStyle=color），手动字色优先', () => {
-    const doc = mdToDoc('# T\n\n强调 **关键词** 与 <span style="color:#123456">**手色**</span>')
-    const html = docToPlatformHtml(doc, RESOLVE, THEME, 'baijiahao')
-    expect(html).toContain('<strong style="color:#4a7c59">关键词</strong>')
-    expect(html).toContain('<span style="color:#123456">手色</span>') // 手动色不被主题色覆盖
+  it('零内联样式：无 style/div/span，表头不包 strong，手动色与主题色加粗都不给', () => {
+    const html = docToPlatformHtml(mdToDoc(SAMPLE_MD), RESOLVE, THEME, 'baijiahao')
+    expect(html).not.toContain('style=')
+    expect(html).not.toContain('<div')
+    expect(html).not.toContain('<span')
+    expect(html).not.toContain('border-left')
+    expect(html).not.toContain('border-collapse')
+    expect(html).not.toContain('background-color:#')
+    expect(html).not.toContain('#4a7c59') // 主题色加粗不给
+    expect(html).toContain('<h2>01 手写序号小节</h2>') // 裸标题，自动序号仍替换手写序号
+    expect(html).not.toContain('0101')
+    expect((html.match(/<img /g) ?? []).length).toBe(2)
+    // 与头条的差别：表头不包 strong（知乎/百家号保留 th 语义）、图注不居中
+    expect(html).toContain('<th>列A</th>')
+    expect(html).not.toContain('<th><strong>')
+    expect(html).not.toContain('<p style=')
   })
 })
 

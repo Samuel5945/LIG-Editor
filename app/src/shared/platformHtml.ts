@@ -14,13 +14,16 @@
  *   （粘贴后 th 计数为 0），h1/h2/h3 → 同一个 `<h1 class="pgc-h-forward-slash">`，图片被抽成 `div.pgc-img`。
  *   引用左竖线与表格边框都由平台 CSS 渲染（不给样式的 16/20 与给了内联样式的 17/21 同形，所以
  *   「有竖线/有边框」不等于内联样式生效）。两处例外正是被压平之后仅剩的区分手段
- * - baijiahao：保守内联形态——保留标题/正文颜色、加粗、引用左条、分隔线、图片；去背景卡片、
- *   胶囊色块、圆角拼图等复杂装饰。**尚未实测**，沿用与头条分化前的 v1 画像，等它自己那一轮探针再改
+ * - baijiahao：与知乎同形态（走同一套语义化输出，头条那两处例外都不给）。2026-09-27 决定**不再为它做
+ *   画像验证**，所以不给任何猜出来的内联样式：原先它与头条共用 `liteHtml` 保守内联画像，而头条实测已
+ *   证明那一类样式在同类净化器下几乎全被丢弃，留着只是垃圾。语义化在任何编辑器下都是安全形态——
+ *   要么原样保留结构，要么被平台套上自己的样式，不会残留空标签
  *
  * 通用规则：
  * - 主题 h2Num 自动序号保留为标题文本（01 / 一、…），手写序号剥除避免双号（与公众号导出同源）。
  *   头条侧这条尤其要紧：三级标题被压平成同一种，文本序号是唯一的层级信号
- * - 手动内联样式：字色/高亮保留（baijiahao）/剥除（zhihu、toutiao）；手动字号一律不给（平台统一正文字号）
+ * - 手动内联样式：三个语义化平台（zhihu / toutiao / baijiahao）一律剥除，强调只留 `<strong>`；
+ *   手动字号一律不给（平台统一正文字号）
  * - 图片走 resolveImg（复制 = dataURL 内嵌，导出文件 = 相对路径）。头条已端到端验证：粘贴时 dataURL 图与
  *   外链图都被转存到平台图床（`image-tt-private.toutiao.com`，`from=image_upload`），发布预览里是
  *   `p*-sign.toutiaoimg.com` 的 CDN 地址 → 不需要 dataURL 降级路径
@@ -28,9 +31,7 @@
  * - fig-suggest 占位卡不导出
  */
 import type { ArticleDoc, BlockNode, FigureGalleryAttrs, InlineNode } from './markdown'
-import { textStyleAttrs } from './markdown'
 import type { ArticleTheme, PlatformId } from './types'
-import { isHexColor } from './cards'
 import { DEFAULT_THEME } from './categoryThemes'
 import { docToExportHtml, SEQ_PREFIX } from './exportHtml'
 
@@ -101,16 +102,16 @@ function stripSeq(content: InlineNode[] | undefined): InlineNode[] | undefined {
   return content.map((n, i) => (i === 0 && n.type === 'text' ? { ...n, text: (n.text ?? '').slice(m[0].length) } : n))
 }
 
-// ---------- 语义化画像（知乎 / 头条号）：除对齐外零内联样式 ----------
+// ---------- 语义化画像（知乎 / 百家号 / 头条号）：除头条例外零内联样式 ----------
 
 interface SemanticOpts {
   /** 头条实测：段落级 `text-align` 是唯一存活的内联样式（探针 10/11，编辑器内与发布页 DOM 都只有它）。
    *  但图片会被平台抽成 `div.pgc-img`、连同包裹段的样式一起丢弃，所以只有**图注**值得居中——
-   *  图注的字号与色值必被剥，居中是它与正文唯一的区分手段。知乎维持零内联样式契约，不给 */
+   *  图注的字号与色值必被剥，居中是它与正文唯一的区分手段。知乎/百家号维持零内联样式契约，不给 */
   centerCaptions: boolean
   /** 头条把 `thead`/`th` 压平成 `tbody`/`td`（粘贴后编辑器内与发布页 DOM 里 th 计数均为 0），
    *  表头行只剩内容本身。实测探针 21 的 `font-weight:bold` 被转成了 bold mark（`<strong>`），
-   *  而纯语义的 20 表头与内容行完全无异 → 表头的视觉区分只能靠 `<strong>` 保住。知乎保留 th 语义，不加 */
+   *  而纯语义的 20 表头与内容行完全无异 → 表头的视觉区分只能靠 `<strong>` 保住。知乎/百家号保留 th 语义，不加 */
   markTableHeader: boolean
 }
 
@@ -206,117 +207,6 @@ function semanticBlock(
   }
 }
 
-// ---------- 百家号：保守内联（保留颜色加粗，去卡片与复杂装饰）——未实测，勿据此推广到其他平台 ----------
-
-interface LiteCtx {
-  accent: string
-  strongStyle: 'color' | 'highlight' | 'plain'
-  strongColor: string
-}
-
-function liteInline(content: InlineNode[] | undefined, ctx: LiteCtx): string {
-  if (!content) return ''
-  return content
-    .map((n) => {
-      if (n.type === 'hardBreak') return '<br>'
-      const bold = n.marks?.some((mk) => mk.type === 'bold')
-      const ts = n.marks?.find((mk) => mk.type === 'textStyle')
-      const a = ts ? textStyleAttrs(ts) : undefined
-      const text = escapeHtml(n.text)
-      // 主题加粗强调：color → 强调色；highlight → 平台会剥底色，降级为强调色；手动字色优先
-      const strongColor = a?.color && isHexColor(a.color) ? '' : ctx.strongStyle === 'plain' ? '' : ctx.strongColor
-      const styleParts: string[] = []
-      if (a?.color && isHexColor(a.color)) styleParts.push(`color:${a.color.trim()}`)
-      if (a?.bg && isHexColor(a.bg)) styleParts.push(`background-color:${a.bg.trim()}`)
-      const span = styleParts.length ? `<span style="${styleParts.join(';')}">${text}</span>` : text
-      if (!bold) return span
-      return strongColor ? `<strong style="color:${strongColor}">${span}</strong>` : `<strong>${span}</strong>`
-    })
-    .join('')
-}
-
-function liteHtml(doc: ArticleDoc, resolveImg: (src: string) => string, theme: ArticleTheme): string {
-  const accent = theme.accent && isHexColor(theme.accent) ? theme.accent.trim() : '#0d9488'
-  const strongColor =
-    theme.strongColor && isHexColor(theme.strongColor) ? theme.strongColor.trim() : accent
-  const ctx: LiteCtx = { accent, strongStyle: theme.strongStyle ?? 'color', strongColor }
-  let h2Seq = 0
-  const out: string[] = []
-  for (const b of doc.content ?? []) {
-    out.push(liteBlock(b, resolveImg, theme, ctx, () => h2NumText(theme.h2Num!, ++h2Seq)))
-  }
-  const body = out.filter(Boolean).join('\n')
-  return `<div style="font-size:15px;line-height:1.8;color:#333;word-break:break-word;">\n${body}\n</div>`
-}
-
-function liteBlock(
-  b: BlockNode,
-  resolveImg: (src: string) => string,
-  theme: ArticleTheme,
-  ctx: LiteCtx,
-  nextSeq: () => string
-): string {
-  switch (b.type) {
-    case 'heading': {
-      const level = Math.min(Math.max(b.attrs.level, 1), 3)
-      const autoNum = level === 2 && theme.h2Num ? nextSeq() : ''
-      const content = level === 2 && theme.h2Num ? stripSeq(b.content) : b.content
-      const inner = liteInline(content, ctx)
-      if (level === 1)
-        return `<h1 style="font-size:22px;font-weight:bold;color:#1a1a1a;text-align:center;margin:8px 0 24px;">${inner}</h1>`
-      if (level === 2)
-        return `<h2 style="font-size:19px;font-weight:bold;color:#1a1a1a;margin:28px 0 14px;">${autoNum}${inner}</h2>`
-      return `<h3 style="font-size:17px;font-weight:600;color:#1a1a1a;margin:22px 0 10px;">${inner}</h3>`
-    }
-    case 'paragraph': {
-      const text = plainText(b.content)
-      if (!text || isDecorative(text)) return ''
-      return `<p style="margin:14px 0;">${liteInline(b.content, ctx)}</p>`
-    }
-    case 'blockquote':
-      return `<blockquote style="margin:16px 0;padding:6px 14px;border-left:4px solid ${ctx.accent};color:#555;">${b.content
-        .map((p) => `<p style="margin:6px 0;">${liteInline(p.content, ctx)}</p>`)
-        .join('')}</blockquote>`
-    case 'horizontalRule':
-      return '<hr style="border:none;border-top:1px solid #e5e5e5;margin:28px auto;width:80%;">'
-    case 'figureImage': {
-      const img = `<p style="text-align:center;margin:16px 0;"><img src="${escapeHtml(resolveImg(b.attrs.src))}" alt="${escapeHtml(b.attrs.alt)}" style="max-width:100%;"></p>`
-      return b.attrs.caption ? img + liteCaption(b.attrs.caption) : img
-    }
-    case 'figureGallery': {
-      const parts = b.attrs.images.map(
-        (im) =>
-          `<p style="text-align:center;margin:16px 0;"><img src="${escapeHtml(resolveImg(im.src))}" alt="${escapeHtml(im.alt)}" style="max-width:100%;"></p>`
-      )
-      if (b.attrs.caption) parts.push(liteCaption(b.attrs.caption))
-      return parts.join('\n')
-    }
-    case 'table': {
-      const rows = b.attrs.rows
-      if (!rows.length) return ''
-      const [header, ...body] = rows
-      const td = 'border:1px solid #e5e5e5;padding:8px 10px;'
-      const head = header.length
-        ? `<thead><tr>${header
-            .map((c) => `<th style="${td}background:#f7f7f7;font-weight:bold;">${escapeHtml(c)}</th>`)
-            .join('')}</tr></thead>`
-        : ''
-      const tbody = body.length
-        ? `<tbody>${body
-            .map((r) => `<tr>${r.map((c) => `<td style="${td}">${escapeHtml(c)}</td>`).join('')}</tr>`)
-            .join('')}</tbody>`
-        : ''
-      return `<table style="border-collapse:collapse;width:100%;margin:16px 0;font-size:14px;">${head}${tbody}</table>`
-    }
-    case 'figSuggest':
-      return ''
-  }
-}
-
-function liteCaption(text: string): string {
-  return `<p style="text-align:center;font-size:12px;color:#888;margin:6px 0 16px;">${escapeHtml(text)}</p>`
-}
-
 // ---------- 入口 ----------
 
 /**
@@ -332,13 +222,12 @@ export function docToPlatformHtml(
 ): string {
   if (platform === 'wechat') return docToExportHtml(doc, resolveImg, theme, uiDark)
   const t = theme ?? DEFAULT_THEME
-  if (platform === 'baijiahao') return liteHtml(doc, resolveImg, t)
   const toutiao = platform === 'toutiao'
   return semanticHtml(doc, resolveImg, t, { centerCaptions: toutiao, markTableHeader: toutiao })
 }
 
 /** 平台适配片段 → 完整独立页面（article-<platform>.html 落盘 / 弹窗预览共用；白底桌面专栏宽）。
- *  img 约束挂页壳样式表而非片段：语义化画像（知乎/头条）保持零内联视觉样式契约，
+ *  img 约束挂页壳样式表而非片段：语义化画像（知乎/百家号/头条）保持零内联视觉样式契约，
  *  大图不按原始像素撑爆视口 */
 export function wrapPlatformPage(fragment: string, title: string): string {
   return `<!DOCTYPE html>
