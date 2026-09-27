@@ -5,19 +5,25 @@
  * - wechat：委托 exportHtml.docToExportHtml（全内联样式 + 背景卡 + 装饰 + 自动序号），本模块不碰
  * - zhihu：语义化 HTML——知乎净化器只留结构（h1-h3/strong/blockquote/table/img），
  *   主动输出零内联样式的干净结构，避免残留垃圾 span/section；加粗强调统一 <strong>
- * - toutiao：语义化 HTML + 图片/图注居中。依据 2026-09-27 在 mp.toutiao.com **发布页**的 26 条逐条实测：
- *   text-align 存活；color / background-color / font-size / line-height / margin / text-indent 全部剥离；
- *   引用左竖线、表格边框与表头加粗都是平台原生渲染（不给样式的 16/20 与给了内联样式的 17/21 发布页同形）；
- *   h1-h3 走平台自有标题样式表（还注入装饰），我们给的标题样式一律无效。
- *   故除 text-align 外不给任何内联样式，手动字色/高亮主动剥除，不给平台留垃圾标签
+ * - toutiao：语义化 HTML + 两处例外（图注居中、表头包 strong）。依据 2026-09-27 在 mp.toutiao.com 的
+ *   26 条探针实测：先由用户在发布页目视判定，再取到**粘贴后的编辑器 DOM 与发布预览 DOM** 逐条核对。
+ *   机制不是「过滤 CSS」而是「按计算后样式转成平台 schema 的 mark，CSS 本身丢弃」——
+ *   `font-weight:bold` 变成 `<strong>`（探针 21 表头因此保住加粗），`font-style:italic` 无对应 mark 直接消失，
+ *   `color` / `background-color` / `font-size` / `line-height` / `margin` / `padding` / `text-indent` / `border`
+ *   全部丢弃；段落级 `text-align` 是唯一存活的内联样式。结构上还会被压平：`thead`/`th` → `tbody`/`td`
+ *   （粘贴后 th 计数为 0），h1/h2/h3 → 同一个 `<h1 class="pgc-h-forward-slash">`，图片被抽成 `div.pgc-img`。
+ *   引用左竖线与表格边框都由平台 CSS 渲染（不给样式的 16/20 与给了内联样式的 17/21 同形，所以
+ *   「有竖线/有边框」不等于内联样式生效）。两处例外正是被压平之后仅剩的区分手段
  * - baijiahao：保守内联形态——保留标题/正文颜色、加粗、引用左条、分隔线、图片；去背景卡片、
  *   胶囊色块、圆角拼图等复杂装饰。**尚未实测**，沿用与头条分化前的 v1 画像，等它自己那一轮探针再改
  *
  * 通用规则：
- * - 主题 h2Num 自动序号保留为标题文本（01 / 一、…），手写序号剥除避免双号（与公众号导出同源）
+ * - 主题 h2Num 自动序号保留为标题文本（01 / 一、…），手写序号剥除避免双号（与公众号导出同源）。
+ *   头条侧这条尤其要紧：三级标题被压平成同一种，文本序号是唯一的层级信号
  * - 手动内联样式：字色/高亮保留（baijiahao）/剥除（zhihu、toutiao）；手动字号一律不给（平台统一正文字号）
- * - 图片走 resolveImg（复制 = dataURL 内嵌，导出文件 = 相对路径）。头条编辑器内实测 dataURL 图与外链图
- *   都能渲染且被纳入平台图片模型，故不需要 dataURL 降级路径（发布页与存草稿重开两环仍未测）
+ * - 图片走 resolveImg（复制 = dataURL 内嵌，导出文件 = 相对路径）。头条已端到端验证：粘贴时 dataURL 图与
+ *   外链图都被转存到平台图床（`image-tt-private.toutiao.com`，`from=image_upload`），发布预览里是
+ *   `p*-sign.toutiaoimg.com` 的 CDN 地址 → 不需要 dataURL 降级路径
  * - 图集：逐张竖排（平台不支持横滑容器/拼图），图注挂整组末张之后
  * - fig-suggest 占位卡不导出
  */
@@ -98,12 +104,14 @@ function stripSeq(content: InlineNode[] | undefined): InlineNode[] | undefined {
 // ---------- 语义化画像（知乎 / 头条号）：除对齐外零内联样式 ----------
 
 interface SemanticOpts {
-  /** 头条发布页实测 text-align 存活（探针 10/11）→ 图片与图注居中；知乎维持零内联样式契约，不给 */
-  centerMedia: boolean
-}
-
-function semanticP(inner: string, opts: SemanticOpts): string {
-  return opts.centerMedia ? `<p style="text-align:center">${inner}</p>` : `<p>${inner}</p>`
+  /** 头条实测：段落级 `text-align` 是唯一存活的内联样式（探针 10/11，编辑器内与发布页 DOM 都只有它）。
+   *  但图片会被平台抽成 `div.pgc-img`、连同包裹段的样式一起丢弃，所以只有**图注**值得居中——
+   *  图注的字号与色值必被剥，居中是它与正文唯一的区分手段。知乎维持零内联样式契约，不给 */
+  centerCaptions: boolean
+  /** 头条把 `thead`/`th` 压平成 `tbody`/`td`（粘贴后编辑器内与发布页 DOM 里 th 计数均为 0），
+   *  表头行只剩内容本身。实测探针 21 的 `font-weight:bold` 被转成了 bold mark（`<strong>`），
+   *  而纯语义的 20 表头与内容行完全无异 → 表头的视觉区分只能靠 `<strong>` 保住。知乎保留 th 语义，不加 */
+  markTableHeader: boolean
 }
 
 function semanticInline(content: InlineNode[] | undefined): string {
@@ -117,9 +125,9 @@ function semanticInline(content: InlineNode[] | undefined): string {
     .join('')
 }
 
-/** 头条侧图注的字号与色值都会被剥，居中是它与正文唯一的区分手段 */
 function semanticCaption(text: string, opts: SemanticOpts): string {
-  return semanticP(escapeHtml(text), opts)
+  const inner = escapeHtml(text)
+  return opts.centerCaptions ? `<p style="text-align:center">${inner}</p>` : `<p>${inner}</p>`
 }
 
 function semanticImages(
@@ -128,8 +136,8 @@ function semanticImages(
   resolveImg: (src: string) => string,
   opts: SemanticOpts
 ): string {
-  const imgs = images.map((im) =>
-    semanticP(`<img src="${escapeHtml(resolveImg(im.src))}" alt="${escapeHtml(im.alt)}">`, opts)
+  const imgs = images.map(
+    (im) => `<p><img src="${escapeHtml(resolveImg(im.src))}" alt="${escapeHtml(im.alt)}"></p>`
   )
   if (caption) imgs.push(semanticCaption(caption, opts))
   return imgs.join('\n')
@@ -158,6 +166,8 @@ function semanticBlock(
 ): string {
   switch (b.type) {
     case 'heading': {
+      // 头条把 h1/h2/h3 一律压成同一个 <h1 class="pgc-h-forward-slash">（粘贴后 DOM 实测），层级差由平台统一给，
+      // 所以主题的 h2Num 文本序号是头条侧唯一的层级信号，必须作为标题文本保留
       const level = Math.min(Math.max(b.attrs.level, 1), 3)
       const tag = `h${level}`
       const autoNum = level === 2 && theme.h2Num ? nextSeq() : ''
@@ -174,10 +184,7 @@ function semanticBlock(
     case 'horizontalRule':
       return '<hr>'
     case 'figureImage': {
-      const img = semanticP(
-        `<img src="${escapeHtml(resolveImg(b.attrs.src))}" alt="${escapeHtml(b.attrs.alt)}">`,
-        opts
-      )
+      const img = `<p><img src="${escapeHtml(resolveImg(b.attrs.src))}" alt="${escapeHtml(b.attrs.alt)}"></p>`
       return b.attrs.caption ? img + semanticCaption(b.attrs.caption, opts) : img
     }
     case 'figureGallery':
@@ -186,9 +193,9 @@ function semanticBlock(
       const rows = b.attrs.rows
       if (!rows.length) return ''
       const [header, ...body] = rows
-      const head = header.length
-        ? `<thead><tr>${header.map((c) => `<th>${escapeHtml(c)}</th>`).join('')}</tr></thead>`
-        : ''
+      const th = (c: string): string =>
+        opts.markTableHeader ? `<th><strong>${escapeHtml(c)}</strong></th>` : `<th>${escapeHtml(c)}</th>`
+      const head = header.length ? `<thead><tr>${header.map(th).join('')}</tr></thead>` : ''
       const tbody = body.length
         ? `<tbody>${body.map((r) => `<tr>${r.map((c) => `<td>${escapeHtml(c)}</td>`).join('')}</tr>`).join('')}</tbody>`
         : ''
@@ -326,7 +333,8 @@ export function docToPlatformHtml(
   if (platform === 'wechat') return docToExportHtml(doc, resolveImg, theme, uiDark)
   const t = theme ?? DEFAULT_THEME
   if (platform === 'baijiahao') return liteHtml(doc, resolveImg, t)
-  return semanticHtml(doc, resolveImg, t, { centerMedia: platform === 'toutiao' })
+  const toutiao = platform === 'toutiao'
+  return semanticHtml(doc, resolveImg, t, { centerCaptions: toutiao, markTableHeader: toutiao })
 }
 
 /** 平台适配片段 → 完整独立页面（article-<platform>.html 落盘 / 弹窗预览共用；白底桌面专栏宽）。

@@ -1,7 +1,9 @@
 /**
  * 多平台分发适配测试（M11）：同一篇 md 在不同平台画像下的形态契约——
  * - zhihu：零内联样式（无 style= 属性、无 section/div 包裹）、语义标签齐全、自动序号替换手写序号
- * - toutiao：语义化 + 仅 text-align:center（2026-09-27 发布页实测：对齐存活，其余内联视觉属性全剥离）
+ * - toutiao：语义化 + 两处例外（图注 text-align:center、表头包 strong）——2026-09-27 发布页目视与
+ *   粘贴后编辑器 DOM / 发布预览 DOM 三方核对：平台按计算后样式转 mark 并丢弃 CSS，只有段落级对齐存活，
+ *   thead/th 与 h2/h3 被压平，图片被抽成 div.pgc-img 转存平台图床
  * - baijiahao：保守内联（保留 color、引用左条、表格边框）、无背景卡/装饰——未实测，沿用分化前的 v1 画像
  * - wechat：委托 exportHtml 原路径，输出与 docToExportHtml 逐字节一致（回归保证）
  * - 页壳 wrapPlatformPage：标题转义、720px 专栏宽
@@ -82,8 +84,10 @@ describe('知乎画像（zhihu）', () => {
   })
 })
 
-describe('头条画像（toutiao）：语义化 + 媒体居中', () => {
-  // 依据 2026-09-27 mp.toutiao.com 发布页 26 条探针实测：只有 text-align 存活
+describe('头条画像（toutiao）：语义化 + 图注居中 + 表头 strong', () => {
+  // 依据 2026-09-27 mp.toutiao.com 26 条探针：发布页目视 + 粘贴后编辑器 DOM + 发布预览 DOM 三方核对。
+  // 机制是按计算后样式转 mark、丢弃 CSS：只有段落级 text-align 存活，font-weight 变成 <strong>，
+  // thead/th 与 h2/h3 被压平，图片被抽成 div.pgc-img 并转存平台图床
   const html = docToPlatformHtml(mdToDoc(SAMPLE_MD), RESOLVE, THEME, 'toutiao')
 
   it('除 text-align 外零内联样式：字号/行高/段距/颜色/底色/边框/缩进一律不给', () => {
@@ -106,16 +110,22 @@ describe('头条画像（toutiao）：语义化 + 媒体居中', () => {
     expect(html).toContain('<strong>加粗强调</strong>')
     expect(html).toContain('<blockquote><p>引用内容一行</p></blockquote>')
     expect(html).toContain('<hr>')
-    expect(html).toContain('<table><thead><tr><th>列A</th>')
+    expect(html).toContain('<table><thead><tr><th><strong>列A</strong></th>')
     expect(html).not.toContain('0101')
     expect(html).not.toContain('<p>01</p>') // 纯序号装饰段跳过
   })
 
-  it('图片与图注居中（10/11 text-align 存活，是头条侧唯一的排版杠杆）', () => {
-    expect((html.match(/<p style="text-align:center"><img /g) ?? []).length).toBe(2)
-    // 图注的字号色值都会被剥，居中是它与正文唯一的区分手段
+  it('图注居中、图片不居中（图片会被平台抽成 div.pgc-img，包裹段的样式一并丢弃）', () => {
+    expect((html.match(/<p><img /g) ?? []).length).toBe(2)
+    expect(html).not.toContain('<p style="text-align:center"><img')
+    // 图注是真正的段落，text-align 存活（探针 10/11）；字号色值必被剥，居中是它与正文唯一的区分手段
     expect(html).toContain('<p style="text-align:center">图集注</p>')
     expect((html.match(/图集注/g) ?? []).length).toBe(1)
+  })
+
+  it('表头包 strong：头条把 thead/th 压平成 tbody/td（粘贴后 th 计数为 0），加粗是表头行唯一的视觉区分', () => {
+    expect(html).toContain('<th><strong>列A</strong></th>')
+    expect(html).toContain('<td>甲</td>') // 内容行不加粗
   })
 
   it('手动字色与主题色加粗都不给：strong 裸出', () => {
