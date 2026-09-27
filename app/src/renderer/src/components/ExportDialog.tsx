@@ -80,7 +80,8 @@ export default function ExportDialog({
 
   // 预览页：图片解析为 asset:// 绝对地址，配色跟随发布配色选择（所见即所得——
   // 复制/推送/固定导出的是哪套配色，预览就显示哪套）；
-  // 非公众号平台按平台画像渲染（知乎零样式语义结构 / 头条·百家保守内联），白底桌面专栏宽
+  // 非公众号平台按平台画像渲染（知乎/头条走语义化结构，头条另给图片与图注居中；百家号保守内联），白底桌面专栏宽。
+  // 头条的预览会比实际发布页更素：实测它只吃 text-align，其余内联样式一律剥掉，标题/引用/表格再套平台自己的样式
   const previewHtml = useMemo(() => {
     const doc = mdToDoc(markdown)
     const resolveAsset = (src: string): string =>
