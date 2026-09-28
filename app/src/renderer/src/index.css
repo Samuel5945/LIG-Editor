@@ -307,13 +307,21 @@ body {
 }
 
 /* 左栏项目名：超长截断，悬停按实际溢出量滚动显示全名
-   （--scroll-dist / --scroll-dur 由 HoverScrollName 组件测量注入，不溢出时为 0 不动） */
+   （--scroll-dist / --scroll-dur 由 HoverScrollName 组件测量注入，不溢出时为 0 不动）
+   box 必须 block 化：行内元素的 overflow:hidden 不生效，滚动文字会滑出名称区，
+   盖住展开箭头（点击被截走）并从右侧按钮底下穿过 */
 .name-scroll-box {
+  display: block;
   overflow: hidden;
 }
 .name-scroll-text {
   display: inline-block;
   white-space: nowrap;
+}
+/* 悬停行时名称右端渐隐：滚动的文字在动作按钮（✏️🗄🗑）下方淡出，不做硬截断 */
+.group:hover .name-scroll-box {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 76px), rgba(0, 0, 0, 0));
+  mask-image: linear-gradient(to right, #000 calc(100% - 76px), rgba(0, 0, 0, 0));
 }
 .group:hover .name-scroll-text {
   animation: name-scroll var(--scroll-dur, 4s) linear infinite;
