@@ -26,6 +26,7 @@ import CalendarBoard from './components/CalendarBoard'
 import IdeaBoard from './components/IdeaBoard'
 import Sidebar from './components/Sidebar'
 import ArticleEditor, { type ArticleEditorHandle, type EditorSelection } from './editor/ArticleEditor'
+import type { FigPipeline } from './editor/FigSuggest'
 import { shouldAutoStart, startTour } from './components/onboardingTour'
 
 /** 三栏工作台：左 项目/选题库，中 编辑器/标题封面，右 对话/脑暴/审阅（互相独立不串扰） */
@@ -605,10 +606,10 @@ export default function App(): JSX.Element {
 
   // ---- 创作向导·配图步（清单/缩略图复用配图弹窗，成品做正文行替换） ----
 
-  /** 清单「处理」：占位描述交给配图弹窗（默认 AI 生图，弹窗内可换管线），成品替换正文对应占位行 */
-  const handleFigFromList = useCallback((desc: string, line: number) => {
+  /** 清单「处理」：管线与描述交给配图弹窗（与编辑器占位卡同款，弹窗按管线锁面板），成品替换正文对应占位行 */
+  const handleFigFromList = useCallback((pipeline: FigPipeline, desc: string, line: number) => {
     setFigRequest({
-      pipeline: 'ai',
+      pipeline,
       desc,
       onDone: (attrs) => {
         setFigRequest(null)

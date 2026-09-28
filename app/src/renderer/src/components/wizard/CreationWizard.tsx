@@ -14,6 +14,7 @@ import {
 import { chatOnce, extractJsonArray } from '../../copilot/llm'
 import { brainstormMessages, outlineMessages, fullArticleMessages, cardsMessages } from '../../copilot/prompts'
 import { extractFileText } from '../../copilot/material'
+import type { FigPipeline } from '../../editor/FigSuggest'
 import BrainstormIdeas from './BrainstormIdeas'
 import type { Attachment } from './BrainstormIdeas'
 import OutlineStep from './OutlineStep'
@@ -57,8 +58,8 @@ export interface CreationWizardProps {
   onOpenProject: (name: string) => Promise<void>
   onProjectsChanged: () => void
   onIdeasChanged: () => void
-  /** 配图步：占位「处理」→ 开配图弹窗，成品由 App 做正文行替换 */
-  onFigFromList: (desc: string, line: number) => void
+  /** 配图步：占位「处理」（三管线任一）→ 开配图弹窗，成品由 App 做正文行替换 */
+  onFigFromList: (pipeline: FigPipeline, desc: string, line: number) => void
   /** 配图步：缩略图「替换」→ 开导入管线替换该图行 */
   onFigReplaceImage: (img: FigureOccurrence) => void
   /** 配图步「去正文」→ 切成文步并滚动定位 */
@@ -560,7 +561,7 @@ export default function CreationWizard({
                 suggestions={figSuggestions}
                 images={figImages}
                 projectDir={projectDir}
-                onProcess={(s) => onFigFromList(s.desc, s.line)}
+                onProcess={(s, pipeline) => onFigFromList(pipeline, s.desc, s.line)}
                 onReplaceImage={onFigReplaceImage}
                 onLocateInEditor={onLocateInEditor}
               />
