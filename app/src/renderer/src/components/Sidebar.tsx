@@ -400,7 +400,7 @@ export default function Sidebar(props: SidebarProps): ReactElement {
                 setRenameVal(p.name)
               }}
               title="重命名工程（本地文件夹同步改名）"
-              className="hidden shrink-0 rounded px-1 text-ink-dim hover:text-accent group-hover:block"
+              className="hidden shrink-0 rounded px-1.5 py-0.5 text-ink hover:bg-panel-2 hover:text-accent group-hover:block"
             >
               ✏️
             </button>
@@ -410,7 +410,7 @@ export default function Sidebar(props: SidebarProps): ReactElement {
                 onDeleteProject(p.name)
               }}
               title="删除工程"
-              className="hidden shrink-0 rounded px-1 text-ink-dim hover:text-red-400 group-hover:block"
+              className="hidden shrink-0 rounded px-1.5 py-0.5 text-ink hover:bg-panel-2 hover:text-red-400 group-hover:block"
             >
               🗑
             </button>
