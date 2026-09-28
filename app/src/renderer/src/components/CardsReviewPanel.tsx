@@ -12,6 +12,8 @@ interface CardsReviewPanelProps {
   onOptimize: (review: string) => void
   /** 点「第 N 张」→ 贴图面板滚动定位到对应卡片（0 起） */
   onLocate: (index: number) => void
+  /** 报告写入成功后通知（创作向导的审阅步完成判定靠它重算） */
+  onReviewSaved?: () => void
   onToast: (msg: string) => void
 }
 
@@ -34,6 +36,7 @@ export default function CardsReviewPanel({
   onFlush,
   onOptimize,
   onLocate,
+  onReviewSaved,
   onToast
 }: CardsReviewPanelProps): ReactElement {
   const [sections, setSections] = useState<Section[]>([])
@@ -94,6 +97,7 @@ export default function CardsReviewPanel({
       const full = await promise
       await window.api.invoke('project:writeFile', project, 'cards-review.md', full.trim() + '\n')
       await load()
+      onReviewSaved?.()
       onToast('审阅报告已写入 cards-review.md')
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))

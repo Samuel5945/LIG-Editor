@@ -4,7 +4,14 @@
  * 这里钉死规格 §7 的全状态矩阵（未立项/文章各阶段/贴图 5 步/全完成）和占位解析的边界。
  */
 import { describe, expect, it } from 'vitest'
-import { deriveWizardSteps, firstPendingStep, parseFigSuggestions, type WizardFacts } from '../wizardProgress'
+import {
+  deriveWizardSteps,
+  firstPendingStep,
+  parseFigImages,
+  parseFigSuggestions,
+  replaceFigSuggestion,
+  type WizardFacts
+} from '../wizardProgress'
 
 const facts = (over: Partial<WizardFacts> = {}): WizardFacts => ({
   hasProject: false,
@@ -103,8 +110,8 @@ describe('parseFigSuggestions', () => {
       '<!-- fig-suggest: 夜晚的城市天际线延时 | 城市夜景 -->'
     ].join('\n')
     expect(parseFigSuggestions(md)).toEqual([
-      { prompt: '山间晨雾中的索道', caption: '晨雾索道', desc: '山间晨雾中的索道 | 晨雾索道' },
-      { prompt: '夜晚的城市天际线延时', caption: '城市夜景', desc: '夜晚的城市天际线延时 | 城市夜景' }
+      { prompt: '山间晨雾中的索道', caption: '晨雾索道', desc: '山间晨雾中的索道 | 晨雾索道', line: 2 },
+      { prompt: '夜晚的城市天际线延时', caption: '城市夜景', desc: '夜晚的城市天际线延时 | 城市夜景', line: 4 }
     ])
   })
 
@@ -113,7 +120,8 @@ describe('parseFigSuggestions', () => {
     expect(parseFigSuggestions(md)[0]).toEqual({
       prompt: '对比图 A',
       caption: 'B 两种方案 | 对比',
-      desc: '对比图 A | B 两种方案 | 对比'
+      desc: '对比图 A | B 两种方案 | 对比',
+      line: 0
     })
   })
 
@@ -121,6 +129,91 @@ describe('parseFigSuggestions', () => {
     const md = '<!-- fig-suggest: 素色背景特写 -->\r\n\r\n<!-- fig-suggest：全角不匹配整行注释，跳过 -->'
     const out = parseFigSuggestions(md)
     expect(out).toHaveLength(1)
-    expect(out[0]).toEqual({ prompt: '素色背景特写', caption: '素色背景特写', desc: '素色背景特写' })
+    expect(out[0]).toEqual({ prompt: '素色背景特写', caption: '素色背景特写', desc: '素色背景特写', line: 0 })
+  })
+
+  it('占位解析带行号，CRLF 场景行号也正确', () => {
+    const md = '# 标题\r\n\r\n<!-- fig-suggest: 甲 | 注一 -->\r\n正文\r\n<!-- fig-suggest: 乙 -->'
+    const out = parseFigSuggestions(md)
+    expect(out.map((s) => s.line)).toEqual([2, 4])
+  })
+})
+
+describe('parseFigImages', () => {
+  it('提取单图与紧随的图注；图集内部图片不单列', () => {
+    const md = [
+      '# 标题',
+      '',
+      '![甲](assets/a.png)',
+      '<!-- caption: 图注甲 -->',
+      '<!-- gallery: swipe-h -->',
+      '![乙](assets/b.png)',
+      '<!-- caption: 图注乙 -->',
+      '<!-- /gallery -->',
+      '',
+      '![丙](assets/c.png)'
+    ].join('\n')
+    expect(parseFigImages(md)).toEqual([
+      { line: 2, src: 'assets/a.png', alt: '甲', caption: '图注甲' },
+      { line: 9, src: 'assets/c.png', alt: '丙', caption: '' }
+    ])
+  })
+})
+
+describe('replaceFigSuggestion', () => {
+  const md = ['# 标题', '', '<!-- fig-suggest: 山间晨雾 | 晨雾 -->', '正文。'].join('\n')
+
+  it('单图替换：占位行换成图片行 + 图注注释', () => {
+    const out = replaceFigSuggestion(md, 2, {
+      src: 'assets/fig-1.png',
+      alt: '晨雾',
+      caption: '晨雾',
+      figureSource: ''
+    })
+    expect(out.split('\n')).toEqual([
+      '# 标题',
+      '',
+      '![晨雾](assets/fig-1.png)',
+      '<!-- caption: 晨雾 -->',
+      '正文。'
+    ])
+  })
+
+  it('图表源替换：带 figure-source 注释', () => {
+    const out = replaceFigSuggestion(md, 2, {
+      src: 'assets/fig-2.png',
+      alt: '图表',
+      caption: '',
+      figureSource: 'figures/fig-2.html'
+    })
+    expect(out).toContain('![图表](assets/fig-2.png)')
+    expect(out).toContain('<!-- figure-source: figures/fig-2.html -->')
+    expect(out).not.toContain('<!-- caption:')
+  })
+
+  it('图集替换：占位一行换成 gallery 块', () => {
+    const out = replaceFigSuggestion(md, 2, {
+      images: [
+        { src: 'assets/a.png', alt: '一' },
+        { src: 'assets/b.png', alt: '二' }
+      ],
+      layout: 'grid',
+      frame: '3:4',
+      caption: '组图'
+    })
+    expect(out.split('\n')).toEqual([
+      '# 标题',
+      '',
+      '<!-- gallery: grid 3:4 -->',
+      '![一](assets/a.png)',
+      '![二](assets/b.png)',
+      '<!-- caption: 组图 -->',
+      '<!-- /gallery -->',
+      '正文。'
+    ])
+  })
+
+  it('行号越界原样返回', () => {
+    expect(replaceFigSuggestion(md, 99, { src: 'x', alt: '', caption: '', figureSource: '' })).toBe(md)
   })
 })

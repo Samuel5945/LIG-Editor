@@ -5,15 +5,16 @@ import { resolveArticleTheme } from '@shared/categoryThemes'
 import { CARD_FORMAT_LABEL, parseCardItems, type CardFormat } from '@shared/cards'
 import { chatOnce } from './copilot/llm'
 import { cardsMessages, categoryMessages } from './copilot/prompts'
+import { replaceFigSuggestion, type FigureOccurrence, type WizardStepId } from '@shared/wizardProgress'
 import ConflictDialog from './components/ConflictDialog'
 import SettingsDialog from './components/SettingsDialog'
 import IntegrationDialog from './components/IntegrationDialog'
 import ChatPanel from './components/ChatPanel'
-import BrainstormPanel, { type BrainstormSeed } from './components/BrainstormPanel'
+import CreationWizard, { type BrainstormSeed } from './components/wizard/CreationWizard'
 import ModifyDialog from './components/ModifyDialog'
 import PolishDialog from './components/PolishDialog'
 import FigureDialog, { type FigureRequest } from './components/FigureDialog'
-import ExportDialog from './components/ExportDialog'
+import ExportPanel from './components/wizard/ExportPanel'
 import ThemeImportDialog from './components/ThemeImportDialog'
 import CategoryManageDialog from './components/CategoryManageDialog'
 import UpdateDialog from './components/UpdateDialog'
@@ -64,9 +65,10 @@ export default function App(): JSX.Element {
   useEffect(() => {
     if (shouldAutoStart()) startTour(tourHandlers)
   }, [tourHandlers])
-  // M5 副驾驶；左栏工作树替代旧「项目/选题库」双页签（leftTab 已移除）
-  const [centerTab, setCenterTab] = useState<'article' | 'titlecover' | 'calendar' | 'ideas'>('article')
-  const [rightTab, setRightTab] = useState<'chat' | 'create' | 'review'>('chat')
+  // M5 副驾驶；中栏 = 创作向导（主工作面）+ 两个跨工程页签
+  const [centerTab, setCenterTab] = useState<'create' | 'calendar' | 'ideas'>('create')
+  // 向导深链跳步（工作树/对话/审阅定位等）：ts 变化即生效（仿 reviewRequest 模式）
+  const [stepRequest, setStepRequest] = useState<{ id: WizardStepId; ts: number } | null>(null)
   const [skills, setSkills] = useState<SkillInfo[]>([])
   const [skillName, setSkillName] = useState('')
   const [skillContent, setSkillContent] = useState<string | null>(null)
@@ -78,8 +80,6 @@ export default function App(): JSX.Element {
   const [polish, setPolish] = useState<{ review?: string } | null>(null)
   // 三配图管线弹窗（M6）
   const [figRequest, setFigRequest] = useState<FigureRequest | null>(null)
-  // 导出弹窗（M7）
-  const [showExport, setShowExport] = useState(false)
   // 文章转贴图：展开风格选择 / 转换进行中
   const [showConvert, setShowConvert] = useState(false)
   const [converting, setConverting] = useState(false)
@@ -87,6 +87,9 @@ export default function App(): JSX.Element {
   const [hasCards, setHasCards] = useState(false)
   // 脑暴入库后自增，驱动选题库自动刷新
   const [ideasVersion, setIdeasVersion] = useState(0)
+  // 审阅报告写入后自增：驱动 review.md / cards-review.md 存在性重查（向导审阅步完成判定）
+  const [reviewVersion, setReviewVersion] = useState(0)
+  const [reviewExists, setReviewExists] = useState(false)
   // 项目分类：选中分类（工作树上点分类节点设置；脑暴立项/新建工程落此分类，'all' = 未指定）
   const [filterCat, setFilterCat] = useState<string>('all')
   const [categorizing, setCategorizing] = useState(false)
@@ -212,8 +215,8 @@ export default function App(): JSX.Element {
       setArticle(data.article)
       setSaved(data.article)
       setConflict(null)
-      setCenterTab('article')
-      // 不动 rightTab：脑暴面板立项后还要继续生成正文，不能被切走
+      setCenterTab('create')
+      // 不切向导步骤：脑暴立项后向导自己停在成文步看流式
       await mountSkill(data.meta.style_skill ?? '', false)
     },
     [mountSkill]
@@ -481,42 +484,43 @@ export default function App(): JSX.Element {
   const handleAiReview = useCallback(() => {
     const sel = editorRef.current?.getSelection()
     setReviewSelection(sel?.text.trim() ? sel.text : null)
-    setRightTab('review')
+    setCenterTab('create')
+    setStepRequest({ id: 'review', ts: Date.now() })
     setReviewRequest((n) => n + 1)
   }, [])
 
-  /** 脑暴完成「去审阅」→ 强制全文审阅 */
-  const handleFullReview = useCallback(() => {
-    setReviewSelection(null)
-    setRightTab('review')
-    setReviewRequest((n) => n + 1)
-  }, [])
-
-  /** 全文生成流式落编辑器（唯一事实源是 md 字符串，直接覆盖） */
+  /** 全文生成流式落编辑器（唯一事实源是 md 字符串，直接覆盖；向导自己停在成文步） */
   const handleArticleGenerated = useCallback((md: string) => {
-    setCenterTab('article')
     setArticle(md)
   }, [])
 
-  /** 选题库「生成大纲」→ 送入脑暴面板大纲流程 */
+  /** 选题库「生成大纲」→ 送入创作向导大纲流程 */
   const handleMakeOutline = useCallback((card: IdeaCard) => {
     setBrainstormSeed({ card, ts: Date.now() })
-    setRightTab('create')
+    setCenterTab('create')
   }, [])
 
-  /** 左栏工作树深链：打开工程并落指定中栏页签；已是当前工程只切页签（不重载丢未保存稿） */
+  /** 左栏工作树深链：打开工程并落到向导对应步；已是当前工程只跳步（不重载丢未保存稿） */
   const openProjectView = useCallback(
     async (name: string, tab: 'article' | 'titlecover') => {
       if (currentRef.current !== name) await openProject(name)
-      setCenterTab(tab)
+      setCenterTab('create')
+      setStepRequest({ id: tab === 'article' ? 'draft' : 'titlecover', ts: Date.now() })
     },
     [openProject]
   )
 
-  /** 审阅引用行 → 编辑器定位 */
+  /** 审阅引用行 → 向导切成文步并定位（编辑器常驻挂载，兜底轮询等挂载完成再滚） */
   const handleLocate = useCallback((snippet: string): boolean => {
-    setCenterTab('article')
-    return editorRef.current?.scrollToText(snippet) ?? false
+    setCenterTab('create')
+    setStepRequest({ id: 'draft', ts: Date.now() })
+    void (async () => {
+      for (let t = 0; t < 20 && !editorRef.current; t++) {
+        await new Promise((r) => setTimeout(r, 50))
+      }
+      editorRef.current?.scrollToText(snippet)
+    })()
+    return true
   }, [])
 
   // ---- 三配图管线（M6）----
@@ -599,17 +603,44 @@ export default function App(): JSX.Element {
     })
   }, [])
 
-  // ---- 导出（M7）----
+  // ---- 创作向导·配图步（清单/缩略图复用配图弹窗，成品做正文行替换） ----
 
-  /** 打开导出弹窗前先把未保存正文落盘，主进程导出读的是磁盘 article.md */
-  const handleOpenExport = useCallback(async () => {
+  /** 清单「处理」：占位描述交给配图弹窗（默认 AI 生图，弹窗内可换管线），成品替换正文对应占位行 */
+  const handleFigFromList = useCallback((desc: string, line: number) => {
+    setFigRequest({
+      pipeline: 'ai',
+      desc,
+      onDone: (attrs) => {
+        setFigRequest(null)
+        if (!attrs) return
+        setArticle((prev) => replaceFigSuggestion(prev, line, attrs))
+        setToast('配图已插入正文')
+      }
+    })
+  }, [])
+
+  /** 缩略图「替换」：重开导入管线，成品替换正文对应图片行 */
+  const handleFigReplaceImage = useCallback((img: FigureOccurrence) => {
+    setFigRequest({
+      pipeline: 'import',
+      desc: img.caption || img.alt,
+      onDone: (attrs) => {
+        setFigRequest(null)
+        if (!attrs) return
+        setArticle((prev) => replaceFigSuggestion(prev, img.line, attrs))
+        setToast('已替换配图')
+      }
+    })
+  }, [])
+
+  // ---- 导出（向导步 7 激活时先落盘） ----
+
+  /** 把未保存正文落盘：导出/推送读的是磁盘 article.md */
+  const flushArticle = useCallback(async () => {
     const name = currentRef.current
-    if (!name) return
-    if (articleRef.current !== savedRef.current) {
-      await window.api.invoke('project:writeFile', name, 'article.md', articleRef.current)
-      setSaved(articleRef.current)
-    }
-    setShowExport(true)
+    if (!name || articleRef.current === savedRef.current) return
+    await window.api.invoke('project:writeFile', name, 'article.md', articleRef.current)
+    setSaved(articleRef.current)
   }, [])
 
   // 形态切换/转换后刷新：有 cards.json 才露出「回到贴图」回退入口
@@ -623,6 +654,27 @@ export default function App(): JSX.Element {
       .then((d) => setHasCards(Boolean(d?.cards.length)))
       .catch(() => setHasCards(false))
   }, [current, meta?.format])
+
+  // 审阅报告存在性：向导「审阅」步完成判定的事实源（写入成功/外部变更后重查）
+  useEffect(() => {
+    if (!current) {
+      setReviewExists(false)
+      return
+    }
+    const file = meta?.format === 'cards' ? 'cards-review.md' : 'review.md'
+    let alive = true
+    window.api
+      .invoke('project:readFile', current, file)
+      .then((md) => {
+        if (alive) setReviewExists(Boolean(md.trim()))
+      })
+      .catch(() => {
+        if (alive) setReviewExists(false)
+      })
+    return () => {
+      alive = false
+    }
+  }, [current, reviewVersion, meta?.format])
 
   /** 回退：不重新生成，只切回贴图形态（article.md 与 cards.json 各自保留） */
   const backToCards = useCallback(async () => {
@@ -757,26 +809,15 @@ export default function App(): JSX.Element {
           onToast={setToast}
         />
 
-        {/* 中栏：正文编辑器 / 标题封面 */}
+        {/* 中栏：创作向导（主工作面）/ 选题看板 / 日历 */}
         <main className="flex min-w-0 flex-1 flex-col bg-panel">
           <div data-tour="center-toolbar" className="flex h-9 shrink-0 items-center gap-2 border-b border-panel-3 px-4 text-xs text-ink-dim">
             <button
-              onClick={() => setCenterTab('article')}
-              className={`rounded px-2 py-0.5 ${centerTab === 'article' ? 'bg-panel-3 text-ink' : 'hover:bg-panel-3'}`}
+              onClick={() => setCenterTab('create')}
+              title="创作向导：选题 → 大纲 → 成文 → 配图 → 标题封面 → 审阅 → 导出"
+              className={`rounded px-2 py-0.5 ${centerTab === 'create' ? 'bg-panel-3 text-ink' : 'hover:bg-panel-3'}`}
             >
-              {meta?.format === 'cards' ? '贴图' : '正文'}
-            </button>
-            {current && centerTab === 'article' && meta?.format === 'cards' && cardsInfo && (
-              <span className="whitespace-nowrap text-ink-dim">
-                {CARD_FORMAT_LABEL[cardsInfo.format]} · {cardsInfo.count} 张 · 1242×1656
-              </span>
-            )}
-            <button
-              onClick={() => setCenterTab('titlecover')}
-              disabled={!current}
-              className={`rounded px-2 py-0.5 ${centerTab === 'titlecover' ? 'bg-panel-3 text-ink' : 'hover:bg-panel-3'} disabled:opacity-40`}
-            >
-              标题/封面
+              🧭 创作
             </button>
             <button
               onClick={() => setCenterTab('ideas')}
@@ -792,92 +833,6 @@ export default function App(): JSX.Element {
             >
               📅 日历
             </button>
-            {current && centerTab === 'article' && meta?.format !== 'cards' && (
-              <>
-                <button
-                  onClick={() => setPolish({})}
-                  disabled={!article.trim()}
-                  className="rounded px-2 py-0.5 hover:bg-panel-3 disabled:opacity-40"
-                >
-                  ✦ 排版优化
-                </button>
-                <button
-                  onClick={() => setShowThemeImport(true)}
-                  title="粘贴公众号 HTML 或链接，复用它的排版"
-                  className="rounded px-2 py-0.5 hover:bg-panel-3"
-                >
-                  🎨 排版
-                </button>
-                <button
-                  onClick={handleOpenExport}
-                  disabled={!article.trim()}
-                  className="rounded px-2 py-0.5 hover:bg-panel-3 disabled:opacity-40"
-                >
-                  📤 导出
-                </button>
-                <button
-                  onClick={() => setShowConvert((v) => !v)}
-                  disabled={!article.trim() || converting}
-                  title="把正文提炼成多张竖版图片卡片，工程切换为贴图形态"
-                  className="rounded px-2 py-0.5 hover:bg-panel-3 disabled:opacity-40"
-                >
-                  {converting ? '转贴图中…' : '🖼 转贴图'}
-                </button>
-                {showConvert && !converting && (
-                  <>
-                    <button
-                      onClick={() => {
-                        setShowConvert(false)
-                        void convertToCards('wechat')
-                      }}
-                      className="rounded bg-panel-3 px-2 py-0.5 text-ink hover:bg-panel"
-                    >
-                      → 公众号贴图
-                    </button>
-                    <button
-                      onClick={() => {
-                        setShowConvert(false)
-                        void convertToCards('xhs')
-                      }}
-                      className="rounded bg-panel-3 px-2 py-0.5 text-ink hover:bg-panel"
-                    >
-                      → 小红书贴图
-                    </button>
-                  </>
-                )}
-                {hasCards && !converting && (
-                  <button
-                    onClick={backToCards}
-                    title="不重新生成，直接切回已有卡片组；正文保留可随时切回来"
-                    className="rounded px-2 py-0.5 hover:bg-panel-3"
-                  >
-                    ↩ 回到贴图
-                  </button>
-                )}
-              </>
-            )}
-            {current && centerTab === 'titlecover' && meta?.format !== 'cards' && (
-              <button
-                onClick={handleOpenExport}
-                disabled={!article.trim()}
-                className="rounded px-2 py-0.5 hover:bg-panel-3 disabled:opacity-40"
-              >
-                📤 导出
-              </button>
-            )}
-            {/* 右侧只留字数与保存状态：项目名挪到左栏（悬停滚动显示全名，✏️ 改名） */}
-            <span className="ml-auto">
-              {current ? (
-                <>
-                  {wordCount > 0 && <span className="mr-2">{wordCount} 字</span>}
-                  <span className={dirty ? 'text-amber-400' : 'text-green-500'}>
-                    {dirty ? '● 未保存' : '✓ 已保存'}
-                  </span>
-                </>
-              ) : (
-                '未打开工程'
-              )}
-            </span>
           </div>
           {centerTab === 'calendar' ? (
             <CalendarBoard
@@ -907,99 +862,236 @@ export default function App(): JSX.Element {
               onGoSchedule={() => setCenterTab('calendar')}
               onToast={setToast}
             />
-          ) : current ? (
-            centerTab === 'article' ? (
-              meta?.format === 'cards' ? (
-                <CardsPanel
-                  key={current}
-                  ref={cardsRef}
-                  project={current}
-                  projectDir={currentDir}
-                  skill={skillContent}
-                  hasArticle={Boolean(article.trim())}
-                  onArticleGenerated={handleArticleGenerated}
-                  onMetaUpdated={refreshMeta}
-                  onDeckChanged={setCardsInfo}
-                  onToast={setToast}
-                />
-              ) : (
-                <div className="min-h-0 flex-1 overflow-auto">
-                  <ArticleEditor
-                    key={current}
-                    ref={editorRef}
+          ) : null}
+          {/* 向导常驻挂载（hidden 保活）：流式/编辑器/贴图渲染状态切页签不丢——沿用原右栏三面板模式 */}
+          <div className={`min-h-0 flex-1 flex-col ${centerTab === 'create' ? 'flex' : 'hidden'}`}>
+            <CreationWizard
+              project={current}
+              meta={meta}
+              article={article}
+              skill={skillContent}
+              category={filterCat === 'all' ? undefined : filterCat}
+              seed={brainstormSeed}
+              hasCards={hasCards}
+              reviewExists={reviewExists}
+              stepRequest={stepRequest}
+              projectDir={currentDir}
+              headerRight={
+                current ? (
+                  <>
+                    {wordCount > 0 && <span className="mr-2 text-ink-dim">{wordCount} 字</span>}
+                    <span className={dirty ? 'text-amber-400' : 'text-green-500'}>
+                      {dirty ? '● 未保存' : '✓ 已保存'}
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-ink-dim">未打开工程</span>
+                )
+              }
+              draftBody={
+                current ? (
+                  meta?.format === 'cards' ? (
+                    <>
+                      {cardsInfo && (
+                        <div className="shrink-0 border-b border-panel-3 px-4 py-1.5 text-xs text-ink-dim">
+                          {CARD_FORMAT_LABEL[cardsInfo.format]} · {cardsInfo.count} 张 · 1242×1656
+                        </div>
+                      )}
+                      <CardsPanel
+                        key={current}
+                        ref={cardsRef}
+                        project={current}
+                        projectDir={currentDir}
+                        skill={skillContent}
+                        hasArticle={Boolean(article.trim())}
+                        onArticleGenerated={handleArticleGenerated}
+                        onMetaUpdated={refreshMeta}
+                        onDeckChanged={setCardsInfo}
+                        onToast={setToast}
+                      />
+                    </>
+                  ) : (
+                    <>
+                      {/* 步内工具条：排版优化/排版导入/转贴图（导出在步 7，不设重复入口） */}
+                      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-panel-3 px-4 py-1.5 text-xs text-ink-dim">
+                        <button
+                          onClick={() => setPolish({})}
+                          disabled={!article.trim()}
+                          className="rounded px-2 py-0.5 hover:bg-panel-3 disabled:opacity-40"
+                        >
+                          ✦ 排版优化
+                        </button>
+                        <button
+                          onClick={() => setShowThemeImport(true)}
+                          title="粘贴公众号 HTML 或链接，复用它的排版"
+                          className="rounded px-2 py-0.5 hover:bg-panel-3"
+                        >
+                          🎨 排版
+                        </button>
+                        <button
+                          onClick={() => setShowConvert((v) => !v)}
+                          disabled={!article.trim() || converting}
+                          title="把正文提炼成多张竖版图片卡片，工程切换为贴图形态"
+                          className="rounded px-2 py-0.5 hover:bg-panel-3 disabled:opacity-40"
+                        >
+                          {converting ? '转贴图中…' : '🖼 转贴图'}
+                        </button>
+                        {showConvert && !converting && (
+                          <>
+                            <button
+                              onClick={() => {
+                                setShowConvert(false)
+                                void convertToCards('wechat')
+                              }}
+                              className="rounded bg-panel-3 px-2 py-0.5 text-ink hover:bg-panel"
+                            >
+                              → 公众号贴图
+                            </button>
+                            <button
+                              onClick={() => {
+                                setShowConvert(false)
+                                void convertToCards('xhs')
+                              }}
+                              className="rounded bg-panel-3 px-2 py-0.5 text-ink hover:bg-panel"
+                            >
+                              → 小红书贴图
+                            </button>
+                          </>
+                        )}
+                        {hasCards && !converting && (
+                          <button
+                            onClick={backToCards}
+                            title="不重新生成，直接切回已有卡片组；正文保留可随时切回来"
+                            className="rounded px-2 py-0.5 hover:bg-panel-3"
+                          >
+                            ↩ 回到贴图
+                          </button>
+                        )}
+                      </div>
+                      <div className="min-h-0 flex-1 overflow-auto">
+                        <ArticleEditor
+                          key={current}
+                          ref={editorRef}
+                          project={current}
+                          markdown={article}
+                          projectDir={currentDir}
+                          accent={articleTheme.accent}
+                          theme={articleTheme}
+                          typography={meta ?? undefined}
+                          uiDark={theme === 'dark'}
+                          onChange={setArticle}
+                          onAiModify={handleAiModify}
+                          onAiReview={handleAiReview}
+                          onFigAction={handleFigAction}
+                          onEditFigureSource={handleEditFigureSource}
+                          onAccentChange={handleApplyArticleAccent}
+                          onTypographyChange={handleApplyTypography}
+                        />
+                      </div>
+                    </>
+                  )
+                ) : (
+                  <div className="flex flex-1 items-center justify-center text-sm text-ink-dim">立项或打开工程后解锁此步</div>
+                )
+              }
+              titlecoverBody={
+                current && meta ? (
+                  <TitleCoverPanel
                     project={current}
-                    markdown={article}
+                    meta={meta}
+                    article={article}
+                    skill={skillContent}
                     projectDir={currentDir}
-                    accent={articleTheme.accent}
                     theme={articleTheme}
-                    typography={meta ?? undefined}
-                    uiDark={theme === 'dark'}
-                    onChange={setArticle}
-                    onAiModify={handleAiModify}
-                    onAiReview={handleAiReview}
-                    onFigAction={handleFigAction}
-                    onEditFigureSource={handleEditFigureSource}
-                    onAccentChange={handleApplyArticleAccent}
-                    onTypographyChange={handleApplyTypography}
+                    onMetaUpdated={refreshMeta}
+                    onApplyTitle={(title) => {
+                      // 草稿标题取自正文 H1：替换首个非空行的 H1，没有则前插
+                      setArticle((md) => {
+                        const lines = md.split('\n')
+                        const i = lines.findIndex((l) => l.trim())
+                        if (i >= 0 && lines[i].trim().startsWith('# ')) {
+                          lines[i] = `# ${title}`
+                          return lines.join('\n')
+                        }
+                        return `# ${title}\n\n${md}`
+                      })
+                    }}
+                    onToast={setToast}
                   />
-                </div>
-              )
-            ) : (
-              meta && (
-                <TitleCoverPanel
-                  project={current}
-                  meta={meta}
-                  article={article}
-                  skill={skillContent}
-                  projectDir={currentDir}
-                  theme={articleTheme}
-                  onMetaUpdated={refreshMeta}
-                  onApplyTitle={(title) => {
-                    // 草稿标题取自正文 H1：替换首个非空行的 H1，没有则前插
-                    setArticle((md) => {
-                      const lines = md.split('\n')
-                      const i = lines.findIndex((l) => l.trim())
-                      if (i >= 0 && lines[i].trim().startsWith('# ')) {
-                        lines[i] = `# ${title}`
-                        return lines.join('\n')
-                      }
-                      return `# ${title}\n\n${md}`
-                    })
-                  }}
-                  onToast={setToast}
-                />
-              )
-            )
-          ) : (
-            <div className="selectable flex flex-1 items-center justify-center text-sm text-ink-dim">
-              打开或新建一个图文工程开始创作
-            </div>
-          )}
+                ) : (
+                  <div className="flex flex-1 items-center justify-center text-sm text-ink-dim">立项或打开工程后解锁此步</div>
+                )
+              }
+              reviewBody={
+                current ? (
+                  meta?.format === 'cards' ? (
+                    <CardsReviewPanel
+                      project={current}
+                      skill={skillContent}
+                      onFlush={async () => {
+                        await cardsRef.current?.flush()
+                      }}
+                      onOptimize={(review) => {
+                        setStepRequest({ id: 'draft', ts: Date.now() })
+                        void cardsRef.current?.refine(review)
+                      }}
+                      onLocate={(i) => {
+                        setStepRequest({ id: 'draft', ts: Date.now() })
+                        cardsRef.current?.scrollToCard(i)
+                      }}
+                      onReviewSaved={() => setReviewVersion((v) => v + 1)}
+                      onToast={setToast}
+                    />
+                  ) : (
+                    <ReviewPanel
+                      project={current}
+                      article={article}
+                      skill={skillContent}
+                      runRequest={reviewRequest}
+                      selection={reviewSelection}
+                      onLocate={handleLocate}
+                      onOptimize={(review) => setPolish({ review })}
+                      onReviewSaved={() => setReviewVersion((v) => v + 1)}
+                      onToast={setToast}
+                    />
+                  )
+                ) : (
+                  <div className="flex flex-1 items-center justify-center text-sm text-ink-dim">立项或打开工程后解锁此步</div>
+                )
+              }
+              exportBody={
+                current && currentDir ? (
+                  <ExportPanel
+                    project={current}
+                    projectDir={currentDir}
+                    markdown={article}
+                    theme={articleTheme}
+                    category={meta?.category}
+                    onExported={() => void refreshMeta()}
+                    onToast={setToast}
+                  />
+                ) : (
+                  <div className="flex flex-1 items-center justify-center text-sm text-ink-dim">立项或打开工程后解锁此步</div>
+                )
+              }
+              onFlushArticle={flushArticle}
+              onArticleGenerated={handleArticleGenerated}
+              onOpenProject={openProject}
+              onProjectsChanged={refreshProjects}
+              onIdeasChanged={() => setIdeasVersion((v) => v + 1)}
+              onFigFromList={handleFigFromList}
+              onFigReplaceImage={handleFigReplaceImage}
+              onLocateInEditor={handleLocate}
+              onToast={setToast}
+            />
+          </div>
         </main>
 
-        {/* 右栏：AI 副驾驶（对话 / 脑暴创作 / 审阅，三面板互相独立） */}
+        {/* 右栏：AI 对话副驾驶（脑暴/审阅已并入中栏创作向导） */}
         <aside className="flex w-80 shrink-0 flex-col border-l border-panel-3 bg-panel-2">
           <div data-tour="right-tabs" className="flex h-9 shrink-0 items-center gap-1 border-b border-panel-3 px-3 text-xs">
-            <button
-              onClick={() => setRightTab('chat')}
-              className={`rounded px-2 py-0.5 ${rightTab === 'chat' ? 'bg-panel-3 text-ink' : 'text-ink-dim hover:bg-panel-3'}`}
-            >
-              对话
-            </button>
-            <button
-              onClick={() => setRightTab('create')}
-              className={`rounded px-2 py-0.5 ${rightTab === 'create' ? 'bg-panel-3 text-ink' : 'text-ink-dim hover:bg-panel-3'}`}
-            >
-              脑暴创作
-            </button>
-            <button
-              onClick={() => setRightTab('review')}
-              disabled={!current}
-              className={`rounded px-2 py-0.5 ${rightTab === 'review' ? 'bg-panel-3 text-ink' : 'text-ink-dim hover:bg-panel-3'} disabled:opacity-40`}
-            >
-              审阅
-            </button>
-            {/* Skill 挂载：注入系统提示 */}
+            <span className="text-ink">对话</span>
+            {/* Skill 挂载：注入系统提示（作用范围=对话；向导各步按任务类型自动推荐挂载） */}
             <select
               value={skillName}
               onChange={(e) => mountSkill(e.target.value)}
@@ -1016,8 +1108,8 @@ export default function App(): JSX.Element {
                 ))}
             </select>
           </div>
-          {/* 三面板常驻挂载（隐藏不卸载，保住各自流式中的状态，互不影响） */}
-          <div className={`min-h-0 flex-1 flex-col ${rightTab === 'chat' ? 'flex' : 'hidden'}`}>
+          {/* 常驻挂载保住流式状态 */}
+          <div className="flex min-h-0 flex-1 flex-col">
             <ChatPanel
               project={current}
               article={article}
@@ -1026,74 +1118,31 @@ export default function App(): JSX.Element {
               onToast={setToast}
               onSkillsChanged={refreshSkills}
               onApplyAccent={async (color) => {
-                // 贴图面板只在中栏「正文」页签挂载：先切过去，等 ref 就绪再应用
-                setCenterTab('article')
+                // 贴图面板在向导贴图步常驻挂载：等 ref 就绪再应用
+                setCenterTab('create')
                 for (let t = 0; t < 20 && !cardsRef.current; t++) {
                   await new Promise((r) => setTimeout(r, 50))
                 }
-                if (!cardsRef.current) throw new Error('贴图面板未就绪，请切到贴图页再试')
+                if (!cardsRef.current) throw new Error('贴图面板未就绪，请切到贴图步再试')
                 await cardsRef.current.setAccent(color)
               }}
               onApplyArticleAccent={handleApplyArticleAccent}
               onApplyArticle={(md) => {
-                // 对话修改稿写回唯一事实源，切到正文页给作者看结果（自动保存/撤销照常接管）
-                setCenterTab('article')
+                // 对话修改稿写回唯一事实源，跳到向导成文步给作者看结果（自动保存/撤销照常接管）
+                setCenterTab('create')
+                setStepRequest({ id: 'draft', ts: Date.now() })
                 setArticle(md)
               }}
-              onGoBrainstorm={() => setRightTab('create')}
-              onGoReview={() => setRightTab('review')}
+              onGoBrainstorm={() => {
+                setCenterTab('create')
+                setStepRequest({ id: 'ideas', ts: Date.now() })
+              }}
+              onGoReview={() => {
+                setCenterTab('create')
+                setStepRequest({ id: 'review', ts: Date.now() })
+              }}
             />
           </div>
-          <div className={`min-h-0 flex-1 flex-col ${rightTab === 'create' ? 'flex' : 'hidden'}`}>
-            <BrainstormPanel
-              project={current}
-              article={article}
-              skill={skillContent}
-              category={filterCat === 'all' ? undefined : filterCat}
-              seed={brainstormSeed}
-              onArticleGenerated={handleArticleGenerated}
-              onOpenProject={openProject}
-              onProjectsChanged={refreshProjects}
-              onGoReview={handleFullReview}
-              onGoTitles={() => setCenterTab('titlecover')}
-              onGoArticle={() => setCenterTab('article')}
-              onIdeasChanged={() => setIdeasVersion((v) => v + 1)}
-              onToast={setToast}
-            />
-          </div>
-          {current && (
-            <div className={`min-h-0 flex-1 flex-col ${rightTab === 'review' ? 'flex' : 'hidden'}`}>
-              {meta?.format === 'cards' ? (
-                <CardsReviewPanel
-                  project={current}
-                  skill={skillContent}
-                  onFlush={async () => {
-                    await cardsRef.current?.flush()
-                  }}
-                  onOptimize={(review) => {
-                    setCenterTab('article')
-                    void cardsRef.current?.refine(review)
-                  }}
-                  onLocate={(i) => {
-                    setCenterTab('article')
-                    cardsRef.current?.scrollToCard(i)
-                  }}
-                  onToast={setToast}
-                />
-              ) : (
-                <ReviewPanel
-                  project={current}
-                  article={article}
-                  skill={skillContent}
-                  runRequest={reviewRequest}
-                  selection={reviewSelection}
-                  onLocate={handleLocate}
-                  onOptimize={(review) => setPolish({ review })}
-                  onToast={setToast}
-                />
-              )}
-            </div>
-          )}
         </aside>
       </div>
 
@@ -1172,19 +1221,6 @@ export default function App(): JSX.Element {
           request={figRequest}
           skill={skillContent}
           onClose={() => setFigRequest(null)}
-        />
-      )}
-
-      {/* 导出弹窗（M7） */}
-      {showExport && current && paths && (
-        <ExportDialog
-          project={current}
-          projectDir={currentDir}
-          markdown={article}
-          theme={articleTheme}
-          category={meta?.category}
-          onToast={setToast}
-          onClose={() => setShowExport(false)}
         />
       )}
 

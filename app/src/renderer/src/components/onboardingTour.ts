@@ -59,9 +59,19 @@ const MAIN_STEPS: DriveStep[] = [
   {
     element: '[data-tour="center-toolbar"]',
     popover: {
-      title: '中栏 · 编辑与排版',
+      title: '中栏 · 创作向导',
       description:
-        '「正文」页签实时预览公众号效果：✦ 排版优化让 AI 全文调整，🎨 排版可导入别人文章的样式，📤 导出复制进公众号后台，🖼 转贴图生成小红书竖版卡片。编辑器顶栏「版式」面板还能自选标题样式、H2 序号（含 ① 圈号）与文章背景色。',
+        '一篇图文从这里一路走到黑：「创作」向导按 选题 → 大纲 → 成文 → 配图 → 标题封面 → 审阅 → 导出 七步推进，完成状态由工程事实自动判定；「选题看板」与「日历」是跨工程视角，也在这条栏上。',
+      side: 'bottom',
+      align: 'start'
+    }
+  },
+  {
+    element: '[data-tour="wizard-stepper"]',
+    popover: {
+      title: '向导 · 步进器',
+      description:
+        '完成打 ✓、当前亮 ●、未到 ○，点哪步去哪步，随时可跳可回。大纲步立项后正文在「成文」步流式生成，切去别的步也不会打断。',
       side: 'bottom',
       align: 'start'
     }
@@ -69,9 +79,9 @@ const MAIN_STEPS: DriveStep[] = [
   {
     element: '[data-tour="right-tabs"]',
     popover: {
-      title: '右栏 · AI 副驾驶',
+      title: '右栏 · 对话副驾驶',
       description:
-        '「对话」随问随改，可圈选文字直接下指令；「脑暴创作」从选题一路走到初稿；「审阅」出 AI 审稿意见并按报告修订。下拉可挂载写作风格 Skill。',
+        '随问随改，可圈选文字直接下指令，修改稿一键落回正文；创作相关的脑暴与审阅都在中栏向导里。下拉可挂载写作风格 Skill。',
       side: 'left',
       align: 'end'
     }

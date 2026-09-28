@@ -16,6 +16,8 @@ interface ReviewPanelProps {
   onLocate: (snippet: string) => boolean
   /** 「按报告优化正文」：把审阅报告全文交给 App 开修订弹窗 */
   onOptimize: (review: string) => void
+  /** 报告写入成功后通知（创作向导的审阅步完成判定靠它重算） */
+  onReviewSaved?: () => void
   onToast: (msg: string) => void
 }
 
@@ -38,6 +40,7 @@ export default function ReviewPanel({
   selection,
   onLocate,
   onOptimize,
+  onReviewSaved,
   onToast
 }: ReviewPanelProps): ReactElement {
   const [sections, setSections] = useState<Section[]>([])
@@ -127,6 +130,7 @@ export default function ReviewPanel({
         const full = await promise
         await window.api.invoke('project:writeFile', project, 'review.md', full.trim() + '\n')
         await load()
+        onReviewSaved?.()
         onToast(sel?.trim() ? '选段审阅报告已写入 review.md' : '审阅报告已写入 review.md')
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err))

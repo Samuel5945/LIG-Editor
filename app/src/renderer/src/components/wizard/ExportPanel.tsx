@@ -7,7 +7,7 @@ import type { PlatformId } from '@shared/types'
 import type { PushDraftResult } from '@shared/wechatIpc'
 
 /**
- * 导出面板体（从 ExportDialog 抽出，弹窗与创作向导「导出」步双用）：
+ * 导出面板体（创作向导「导出」步工作面；自 ExportDialog 抽出，原弹窗壳已随页签体系退役）：
  * 手机宽度实时预览 + 复制富文本 / 导出 article.html / 推送草稿 / Word-PDF 交稿。
  * 预览与导出共用同一套内联样式模板，所见即所得。
  * 配色：预览跟随所选发布配色；发布（复制/推送）默认日间——日间排版推到公众号后，
@@ -24,6 +24,8 @@ export interface ExportPanelProps {
   theme?: ArticleTheme
   /** 所属分类（= 账号）：用于取账号预设里预选的分发平台 */
   category?: string
+  /** 任一导出/复制/推送成功后通知（App 刷新 meta.lastExportAt，创作向导据此判定导出步完成） */
+  onExported?: () => void
   onToast: (msg: string) => void
 }
 
@@ -37,7 +39,7 @@ const btnGhost =
 const segBtn = (active: boolean) =>
   `px-2.5 py-1 text-[11px] ${active ? 'bg-sky-600 text-white' : 'text-ink-dim hover:bg-panel-3'}`
 
-export default function ExportPanel({ project, projectDir, markdown, theme, category, onToast }: ExportPanelProps) {
+export default function ExportPanel({ project, projectDir, markdown, theme, category, onExported, onToast }: ExportPanelProps) {
   const [busy, setBusy] = useState(false)
   const [exportedPath, setExportedPath] = useState<string | null>(null)
   // 交稿产物路径（Word/PDF 导出后展示打开按钮）
@@ -94,6 +96,7 @@ export default function ExportPanel({ project, projectDir, markdown, theme, cate
     setBusy(true)
     try {
       await window.api.invoke('export:copyRich', { project, variant: pubVariant, platform })
+      onExported?.()
       onToast(
         platform === 'wechat'
           ? `已复制富文本（${pubVariant === 'night' ? '夜间配色' : '日间配色'}），去公众号后台正文区直接粘贴`
@@ -104,7 +107,7 @@ export default function ExportPanel({ project, projectDir, markdown, theme, cate
     } finally {
       setBusy(false)
     }
-  }, [busy, project, pubVariant, platform, onToast])
+  }, [busy, project, pubVariant, platform, onToast, onExported])
 
   const exportHtml = useCallback(async () => {
     if (busy) return
@@ -115,6 +118,7 @@ export default function ExportPanel({ project, projectDir, markdown, theme, cate
         variant: htmlAuto ? 'auto' : pubVariant
       })
       setExportedPath(abs)
+      onExported?.()
       onToast(
         htmlAuto
           ? 'article.html 已导出（读者端自动昼夜：系统深色看夜间配色）'
@@ -125,7 +129,7 @@ export default function ExportPanel({ project, projectDir, markdown, theme, cate
     } finally {
       setBusy(false)
     }
-  }, [busy, project, htmlAuto, pubVariant, onToast])
+  }, [busy, project, htmlAuto, pubVariant, onToast, onExported])
 
   const openExported = useCallback(async () => {
     if (!exportedPath) return
@@ -143,13 +147,14 @@ export default function ExportPanel({ project, projectDir, markdown, theme, cate
     try {
       const abs = await window.api.invoke('export:docx', project)
       setDocPath(abs)
+      onExported?.()
       onToast(`Word 交稿已导出（可编辑）：${abs}`)
     } catch (err) {
       onToast(`Word 导出失败：${err instanceof Error ? err.message : err}`)
     } finally {
       setBusy(false)
     }
-  }, [busy, project, onToast])
+  }, [busy, project, onToast, onExported])
 
   /** 导出打印用 PDF（公众号日间排版，A4） */
   const exportPdf = useCallback(async () => {
@@ -158,13 +163,14 @@ export default function ExportPanel({ project, projectDir, markdown, theme, cate
     try {
       const abs = await window.api.invoke('export:pdf', project)
       setDocPath(abs)
+      onExported?.()
       onToast(`PDF 交稿已导出（A4 打印）：${abs}`)
     } catch (err) {
       onToast(`PDF 导出失败：${err instanceof Error ? err.message : err}`)
     } finally {
       setBusy(false)
     }
-  }, [busy, project, onToast])
+  }, [busy, project, onToast, onExported])
 
   /** 用系统默认应用打开交稿产物（Word/PDF） */
   const openDocFile = useCallback(async () => {
@@ -184,12 +190,13 @@ export default function ExportPanel({ project, projectDir, markdown, theme, cate
     try {
       const result = await window.api.invoke('wechat:push-draft', { project, variant: pubVariant })
       setPushResult(result)
+      if (result.ok) onExported?.()
     } catch (err) {
       setPushResult({ ok: false, error: err instanceof Error ? err.message : String(err) })
     } finally {
       setPushing(false)
     }
-  }, [pushing, busy, project, pubVariant])
+  }, [pushing, busy, project, pubVariant, onExported])
 
   return (
     <>

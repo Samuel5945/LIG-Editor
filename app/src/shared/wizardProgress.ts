@@ -3,7 +3,7 @@
  * 完成判定全部来自工程事实、渲染时现算，零持久化向导状态——Agent 改文件、外部编辑、
  * 多窗口打开都如实反映，与选题看板「状态由工程推导」的哲学同源。
  */
-import { FIG_SUGGEST_RE, splitFigDesc } from './markdown'
+import { FIG_SUGGEST_RE, splitFigDesc, type FigureGalleryNode, type FigureImageNode } from './markdown'
 
 export type WizardStepId = 'ideas' | 'outline' | 'draft' | 'figures' | 'titlecover' | 'review' | 'export'
 
@@ -73,17 +73,82 @@ export interface FigSuggestion {
   caption: string
   /** 原始 desc（编辑器占位节点的 attrs，替换/定位用） */
   desc: string
+  /** 占位所在行号（0 基；替换正文用） */
+  line: number
 }
 
 /** 从 markdown 提取 fig-suggest 占位清单（按出现顺序）；配图步批量清单的数据源 */
 export function parseFigSuggestions(md: string): FigSuggestion[] {
   const out: FigSuggestion[] = []
-  for (const line of md.split(/\r?\n/)) {
-    const m = line.match(FIG_SUGGEST_RE)
+  const lines = md.split(/\r?\n/)
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(FIG_SUGGEST_RE)
     if (m) {
       const { prompt, caption } = splitFigDesc(m[1])
-      out.push({ prompt, caption, desc: m[1] })
+      out.push({ prompt, caption, desc: m[1], line: i })
     }
   }
   return out
+}
+
+/** 正文里已插入的单图（配图步「已插图」缩略图条的数据源） */
+export interface FigureOccurrence {
+  line: number
+  src: string
+  alt: string
+  /** 紧随其后的 caption 注释；缺省 = 无图注 */
+  caption: string
+}
+
+const IMG_LINE_RE = /^!\[([^\]]*)\]\(([^)]+)\)\s*$/
+const CAPTION_LINE_RE = /^<!--\s*caption:\s*(.*?)\s*-->\s*$/
+
+/** 提取正文里的单图（按出现顺序）；图集内部的图片行跳过（图集是一个整体，替换走正文） */
+export function parseFigImages(md: string): FigureOccurrence[] {
+  const out: FigureOccurrence[] = []
+  const lines = md.split(/\r?\n/)
+  let inGallery = false
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    if (/^<!--\s*gallery:\s/.test(line)) {
+      inGallery = true
+      continue
+    }
+    if (inGallery) {
+      if (/^<!--\s*\/gallery\s*-->\s*$/.test(line)) inGallery = false
+      continue
+    }
+    const m = line.match(IMG_LINE_RE)
+    if (!m) continue
+    const next = lines[i + 1]?.match(CAPTION_LINE_RE)
+    out.push({ line: i, src: m[2], alt: m[1], caption: next?.[1] ?? '' })
+  }
+  return out
+}
+
+/** 占位/图片行替换成的新内容：单图属性（figureImage）或图集属性（figureGallery） */
+export type FigReplacement = FigureImageNode['attrs'] | FigureGalleryNode['attrs']
+
+/** 把 md 的第 lineIndex 行（占位或单图）替换为成图 markdown（序列化规则与 docToMd 同源） */
+export function replaceFigSuggestion(md: string, lineIndex: number, fig: FigReplacement): string {
+  const lines = md.split(/\r?\n/)
+  if (lineIndex < 0 || lineIndex >= lines.length) return md
+  let rep: string[]
+  if ('images' in fig) {
+    const body = fig.images.map((im) => `![${im.alt}](${im.src})`).join('\n')
+    rep = [
+      `<!-- gallery: ${fig.layout}${fig.frame ? ' ' + fig.frame : ''} -->`,
+      body,
+      ...(fig.caption ? [`<!-- caption: ${fig.caption} -->`] : []),
+      '<!-- /gallery -->'
+    ]
+  } else {
+    rep = [
+      `![${fig.alt}](${fig.src})`,
+      ...(fig.caption ? [`<!-- caption: ${fig.caption} -->`] : []),
+      ...(fig.figureSource ? [`<!-- figure-source: ${fig.figureSource} -->`] : [])
+    ]
+  }
+  lines.splice(lineIndex, 1, ...rep)
+  return lines.join('\n')
 }
