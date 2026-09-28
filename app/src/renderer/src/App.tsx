@@ -779,18 +779,18 @@ export default function App(): JSX.Element {
               标题/封面
             </button>
             <button
-              onClick={() => setCenterTab('calendar')}
-              title="跨工程发布排期看板：拖拽工程卡片到日期即排期"
-              className={`rounded px-2 py-0.5 ${centerTab === 'calendar' ? 'bg-panel-3 text-ink' : 'hover:bg-panel-3'}`}
-            >
-              📅 日历
-            </button>
-            <button
               onClick={() => setCenterTab('ideas')}
               title="选题流转看板：待立项 / 已立项 / 已排期 / 已成稿，状态由对应工程推导"
               className={`rounded px-2 py-0.5 ${centerTab === 'ideas' ? 'bg-panel-3 text-ink' : 'hover:bg-panel-3'}`}
             >
               💡 选题看板
+            </button>
+            <button
+              onClick={() => setCenterTab('calendar')}
+              title="跨工程发布排期看板：拖拽工程卡片到日期即排期"
+              className={`rounded px-2 py-0.5 ${centerTab === 'calendar' ? 'bg-panel-3 text-ink' : 'hover:bg-panel-3'}`}
+            >
+              📅 日历
             </button>
             {current && centerTab === 'article' && meta?.format !== 'cards' && (
               <>
