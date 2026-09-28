@@ -34,7 +34,9 @@ interface SidebarProps {
   onCreateProject: (name: string, category?: string) => Promise<void>
   /** 返回是否成功，失败时行内重命名输入保持展开 */
   onRenameProject: (oldName: string, newName: string) => Promise<boolean>
-  onDeleteProject: (name: string) => void
+          onDeleteProject: (name: string) => void
+          /** 批量管理：一次确认批量删除 */
+          onDeleteProjects: (names: string[]) => void
   onApplyCategory: (name: string, category: string) => void
   onAiCategorize: () => void
   onSkillsChanged: () => void
@@ -82,6 +84,7 @@ export default function Sidebar(props: SidebarProps): ReactElement {
     onCreateProject,
     onRenameProject,
     onDeleteProject,
+    onDeleteProjects,
     onApplyCategory,
     onAiCategorize,
     onSkillsChanged,
@@ -154,6 +157,25 @@ export default function Sidebar(props: SidebarProps): ReactElement {
       onToast(going ? '已归档——树尾「已归档」区可找回' : '已恢复到原分类')
     },
     [archived, onToast]
+  )
+
+  // 批量管理（分类内）：☑ 进入选选模式，行点击=勾选；批量归档/删除
+  const [batchCat, setBatchCat] = useState<string | null>(null)
+  const [batchSel, setBatchSel] = useState<string[]>([])
+  const exitBatch = useCallback(() => {
+    setBatchCat(null)
+    setBatchSel([])
+  }, [])
+  const toggleBatchSel = useCallback((name: string) => {
+    setBatchSel((prev) => (prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]))
+  }, [])
+  const batchArchive = useCallback(
+    (names: string[]) => {
+      if (names.length === 0) return
+      setArchived((prev) => Array.from(new Set([...prev, ...names])))
+      onToast(`已归档 ${names.length} 个工程——树尾「已归档」区可找回`)
+    },
+    [onToast]
   )
 
   const activeProjects = useMemo(() => projects.filter((p) => !archived.includes(p.name)), [projects, archived])
@@ -350,6 +372,8 @@ export default function Sidebar(props: SidebarProps): ReactElement {
     const a = assets[p.name]
     const cat = p.category ?? UNCATEGORIZED
     const isOpen = expanded.includes(p.name)
+    const inBatch = batchCat === cat
+    const checked = batchSel.includes(p.name)
     const imgCount = a?.assets.length ?? 0
     const figCount = a?.figures.length ?? 0
     return (
@@ -392,13 +416,19 @@ export default function Sidebar(props: SidebarProps): ReactElement {
           </div>
         ) : (
           <div
-            onClick={() => onOpenProject(p.name)}
+            onClick={() => (inBatch ? toggleBatchSel(p.name) : onOpenProject(p.name))}
             onContextMenu={(e) => {
               e.preventDefault()
               setMenu({ x: e.clientX, y: e.clientY, name: p.name })
             }}
             className={`${rowBase} relative pl-5 ${
-              isArchived ? 'text-ink-dim/50 hover:bg-panel-3' : isCurrent ? 'bg-panel-3 text-ink' : 'text-ink-dim hover:bg-panel-3'
+              inBatch && checked
+                ? 'bg-accent/20 text-ink'
+                : isArchived
+                  ? 'text-ink-dim/50 hover:bg-panel-3'
+                  : isCurrent
+                    ? 'bg-panel-3 text-ink'
+                    : 'text-ink-dim hover:bg-panel-3'
             }`}
           >
             <span
@@ -411,6 +441,11 @@ export default function Sidebar(props: SidebarProps): ReactElement {
             >
               {isOpen ? '▾' : '▸'}
             </span>
+            {inBatch && (
+              <span className={`w-3 shrink-0 text-center text-[11px] ${checked ? 'text-accent' : 'text-ink-dim/50'}`}>
+                {checked ? '☑' : '☐'}
+              </span>
+            )}
             <span className="min-w-0 flex-1">
               <HoverScrollName name={p.name} />
             </span>
@@ -439,7 +474,7 @@ export default function Sidebar(props: SidebarProps): ReactElement {
             <span className={`h-2 w-2 shrink-0 rounded-full ${STATUS_COLOR[p.status] ?? 'bg-panel-3'}`} />
             {/* 悬停动作浮层：绝对定位不占布局宽度——名称永不被挤出，行尾也不再跳动 */}
             <span
-              className={`absolute right-1 hidden items-center gap-0.5 rounded px-0.5 group-hover:flex ${
+              className={`absolute right-1 hidden items-center gap-0.5 rounded px-0.5 ${inBatch ? '' : 'group-hover:flex'} ${
                 isCurrent ? 'bg-panel-3' : 'bg-panel-2'
               }`}
             >
@@ -504,9 +539,13 @@ export default function Sidebar(props: SidebarProps): ReactElement {
             </span>
           </div>
         )}
-        {isCurrent && !renamingFor && (
+        {/* 分类选项：归到展开态内（收起工程即收起选项）；行样式与资产子行同层对齐 */}
+        {isCurrent && isOpen && !renamingFor && (
           <div className="py-0.5 pl-8 pr-2">
             <div className="flex items-center gap-1">
+              <span className="shrink-0 text-[11px] text-ink-dim" title="所属分类（=账号）">
+                📁
+              </span>
               <select
                 value={cat}
                 onChange={(e) => {
@@ -519,7 +558,7 @@ export default function Sidebar(props: SidebarProps): ReactElement {
                   onApplyCategory(p.name, v)
                 }}
                 title="切换分类（工程文件夹随之移动到对应分类目录）"
-                className="min-w-0 flex-1 rounded bg-panel px-1.5 py-1 text-[11px] text-ink outline-none"
+                className="min-w-0 flex-1 rounded bg-panel px-1.5 py-0.5 text-[11px] text-ink outline-none"
               >
                 {[...new Set([cat, ...categories])].map((c) => (
                   <option key={c} value={c}>
@@ -532,7 +571,7 @@ export default function Sidebar(props: SidebarProps): ReactElement {
                 onClick={onAiCategorize}
                 disabled={categorizing}
                 title="AI 通读正文推荐分类"
-                className="shrink-0 rounded bg-panel px-1.5 py-1 text-[11px] text-accent hover:bg-panel-2 disabled:opacity-40"
+                className="shrink-0 rounded bg-panel px-1.5 py-0.5 text-[10px] text-accent hover:bg-panel-2 disabled:opacity-40"
               >
                 {categorizing ? '判断中…' : '✦ AI'}
               </button>
@@ -615,7 +654,7 @@ export default function Sidebar(props: SidebarProps): ReactElement {
       {leftTab === 'ideas' ? (
         <IdeaLibrary version={ideasVersion} onMakeOutline={onMakeOutline} onToast={onToast} />
       ) : (
-        <div className="min-h-0 flex-1 overflow-auto p-2 text-xs">
+        <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-2 text-xs">
         {/* 钉住：Skill 库（skills/ 目录，轻量启停；导入走设置弹窗） */}
         <div className={rowBase} onClick={() => setSkillsOpen((v) => !v)}>
           <Chevron open={skillsOpen} />
@@ -656,6 +695,7 @@ export default function Sidebar(props: SidebarProps): ReactElement {
         {groups.map((g) => {
           const badge = wechatBadge.byCat[g.category]
           const isOpen = openCats === null || openCats.includes(g.category)
+          const allSel = g.projects.length > 0 && g.projects.every((p) => batchSel.includes(p.name))
           return (
             <div key={g.category} className="mt-1">
               <div
@@ -681,6 +721,22 @@ export default function Sidebar(props: SidebarProps): ReactElement {
                 <button
                   onClick={(e) => {
                     e.stopPropagation()
+                    if (batchCat === g.category) exitBatch()
+                    else {
+                      setBatchCat(g.category)
+                      setBatchSel([])
+                    }
+                  }}
+                  title="批量管理：勾选工程后批量归档/删除"
+                  className={`shrink-0 rounded px-1 text-[11px] ${
+                    batchCat === g.category ? 'text-accent' : 'hidden text-ink-dim hover:text-accent group-hover:block'
+                  }`}
+                >
+                  ☑
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
                     setCreatingFor(g.category)
                     setNewName('')
                   }}
@@ -696,6 +752,41 @@ export default function Sidebar(props: SidebarProps): ReactElement {
                     <p className="py-0.5 pl-8 text-[11px] text-ink-dim">暂无工程</p>
                   )}
                   {g.projects.map(renderProjectRow)}
+                  {batchCat === g.category && (
+                    <div className="mb-1 flex flex-wrap items-center gap-1 rounded border border-panel-3 bg-panel-2 px-2 py-1 text-[11px]">
+                      <button
+                        onClick={() => setBatchSel(allSel ? [] : g.projects.map((p) => p.name))}
+                        className="text-ink-dim hover:text-ink"
+                      >
+                        {allSel ? '全不选' : '全选'}
+                      </button>
+                      <span className="text-ink-dim/60">已选 {batchSel.length}</span>
+                      <button
+                        onClick={() => {
+                          batchArchive(batchSel)
+                          exitBatch()
+                        }}
+                        disabled={!batchSel.length}
+                        className="rounded bg-panel px-1.5 py-0.5 text-ink hover:bg-panel-3 disabled:opacity-40"
+                      >
+                        🗄 归档
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (!batchSel.length) return
+                          onDeleteProjects(batchSel)
+                          exitBatch()
+                        }}
+                        disabled={!batchSel.length}
+                        className="rounded bg-panel px-1.5 py-0.5 text-red-400 hover:bg-panel-3 disabled:opacity-40"
+                      >
+                        🗑 删除
+                      </button>
+                      <button onClick={exitBatch} title="退出批量管理" className="ml-auto text-ink-dim hover:text-ink">
+                        ✕
+                      </button>
+                    </div>
+                  )}
                   {creatingFor === g.category && (
                     <div className="flex gap-1 py-1 pl-5 pr-2">
                       <input

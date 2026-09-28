@@ -250,6 +250,35 @@ export default function App(): JSX.Element {
     [openProject, refreshProjects]
   )
 
+  /** 批量删除（工作树批量管理）：一次确认，逐个移除；单个失败不阻塞其余 */
+  const deleteProjects = useCallback(
+    async (names: string[]) => {
+      if (names.length === 0) return
+      if (!window.confirm(`删除选中的 ${names.length} 个工程？\n整个文件夹（正文/素材/会话）将被移除，不可恢复。`)) return
+      let ok = 0
+      for (const name of names) {
+        try {
+          if (currentRef.current === name) {
+            await window.api.invoke('project:close')
+            setCurrent(null)
+            currentRef.current = null
+            setMeta(null)
+            setArticle('')
+            setSaved('')
+            setConflict(null)
+          }
+          await window.api.invoke('project:delete', name)
+          ok++
+        } catch {
+          // 单个失败继续删其余，最后汇总提示
+        }
+      }
+      refreshProjects()
+      setToast(ok === names.length ? `已删除 ${ok} 个工程` : `已删除 ${ok}/${names.length} 个（其余删除失败）`)
+    },
+    [refreshProjects]
+  )
+
   /** 删除工程（确认后整目录移除；删当前工程先关闭） */
   const deleteProject = useCallback(
     async (name: string) => {
@@ -853,6 +882,7 @@ export default function App(): JSX.Element {
           onCreateProject={createProjectNamed}
           onRenameProject={renameProject}
           onDeleteProject={(name) => void deleteProject(name)}
+          onDeleteProjects={(names) => void deleteProjects(names)}
           onApplyCategory={(name, category) => void applyCategory(name, category)}
           onAiCategorize={() => void aiCategorize()}
           onSkillsChanged={refreshSkills}
@@ -878,9 +908,7 @@ export default function App(): JSX.Element {
           <button
             onClick={toggleLeftCollapse}
             title={leftCollapsed ? '展开左栏' : '收起左栏'}
-            className={`absolute left-1/2 top-8 -translate-x-1/2 rounded bg-panel-3 px-0.5 py-1 text-[9px] text-ink-dim hover:text-ink ${
-              leftCollapsed ? 'block' : 'hidden group-hover/rs:block'
-            }`}
+            className="absolute left-1/2 top-8 -translate-x-1/2 rounded bg-panel-3 px-1 py-1 text-[10px] text-ink-dim hover:text-ink"
           >
             {leftCollapsed ? '❯' : '❮'}
           </button>
@@ -1175,9 +1203,7 @@ export default function App(): JSX.Element {
           <button
             onClick={toggleRightCollapse}
             title={rightCollapsed ? '展开右栏' : '收起右栏'}
-            className={`absolute left-1/2 top-8 -translate-x-1/2 rounded bg-panel-3 px-0.5 py-1 text-[9px] text-ink-dim hover:text-ink ${
-              rightCollapsed ? 'block' : 'hidden group-hover/rs:block'
-            }`}
+            className="absolute left-1/2 top-8 -translate-x-1/2 rounded bg-panel-3 px-1 py-1 text-[10px] text-ink-dim hover:text-ink"
           >
             {rightCollapsed ? '❮' : '❯'}
           </button>
