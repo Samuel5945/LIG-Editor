@@ -374,8 +374,6 @@ export default function Sidebar(props: SidebarProps): ReactElement {
     const isOpen = expanded.includes(p.name)
     const inBatch = batchCat === cat
     const checked = batchSel.includes(p.name)
-    const imgCount = a?.assets.length ?? 0
-    const figCount = a?.figures.length ?? 0
     return (
       <div key={p.name}>
         {renamingFor === p.name ? (
@@ -450,22 +448,6 @@ export default function Sidebar(props: SidebarProps): ReactElement {
               <HoverScrollName name={p.name} />
             </span>
             {isPinned && <span className="shrink-0 text-[10px]" title="已置顶">📌</span>}
-            {/* 资产计数一枚角标，只显示数量占优的一类（明细进 tooltip）——
-                大计数（如配图 24）时多枚角标会把行顶爆、日期被裁，这里保证徽标区恒窄 */}
-            {(imgCount > 0 || figCount > 0) && (
-              <span
-                className="shrink-0 rounded bg-panel px-1 py-0.5 text-[10px] text-ink-dim"
-                title={
-                  imgCount && figCount
-                    ? `配图 ${imgCount} 张 · 图表源 ${figCount} 个（外部改动实时反映）`
-                    : imgCount
-                      ? `配图 ${imgCount} 张`
-                      : `图表源 ${figCount} 个（外部改动实时反映）`
-                }
-              >
-                {imgCount >= figCount ? `🖼${imgCount}` : `📈${figCount}`}
-              </span>
-            )}
             {p.plannedAt && (
               <span className="shrink-0 rounded bg-panel px-1 py-0.5 text-[10px] text-accent" title={`排期：${p.plannedAt}`}>
                 📅{p.plannedAt.slice(5)}

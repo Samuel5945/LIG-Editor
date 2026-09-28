@@ -46,18 +46,39 @@ export default function App(): JSX.Element {
   const [updateResult, setUpdateResult] = useState<UpdateCheckResult | null>(null)
   const [updateCurrent, setUpdateCurrent] = useState<string | null>(null)
   const [checkingUpdate, setCheckingUpdate] = useState(false)
-  // 主题：深色为默认，日间可切换（localStorage 持久化，main.tsx 首帧前已套用）
-  const [theme, setTheme] = useState<'dark' | 'light'>(() =>
-    localStorage.getItem('ui-theme') === 'light' ? 'light' : 'dark'
-  )
-  const toggleTheme = useCallback(() => {
-    setTheme((t) => {
-      const next = t === 'dark' ? 'light' : 'dark'
-      document.documentElement.classList.toggle('light', next === 'light')
-      localStorage.setItem('ui-theme', next)
-      return next
-    })
+  // 外观：主题（跟随系统/日间/夜间，默认跟随系统）+ 界面字号（小/中/大），本地持久化
+  const [themeMode, setThemeModeState] = useState<'system' | 'light' | 'dark'>(() => {
+    const v = localStorage.getItem('ui-theme-mode') ?? localStorage.getItem('ui-theme')
+    return v === 'light' ? 'light' : v === 'dark' ? 'dark' : 'system'
+  })
+  const [systemDark, setSystemDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches)
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    const fn = (e: MediaQueryListEvent): void => setSystemDark(e.matches)
+    mq.addEventListener('change', fn)
+    return () => mq.removeEventListener('change', fn)
   }, [])
+  const theme: 'dark' | 'light' = themeMode === 'system' ? (systemDark ? 'dark' : 'light') : themeMode
+  // 套用主题类：跟随系统时系统切换深浅即实时换肤
+  useEffect(() => {
+    document.documentElement.classList.toggle('light', theme === 'light')
+  }, [theme])
+  const setThemeMode = useCallback((m: 'system' | 'light' | 'dark') => {
+    setThemeModeState(m)
+    localStorage.setItem('ui-theme-mode', m)
+  }, [])
+  // 界面字号：整页缩放（webFrame zoomFactor，preload 首帧前先套用避免闪烁）
+  const [uiScale, setUiScale] = useState<'s' | 'm' | 'l'>(() => {
+    const v = localStorage.getItem('ui-scale')
+    return v === 'm' || v === 'l' ? v : 's'
+  })
+  useEffect(() => {
+    const factor = uiScale === 'm' ? 1.1 : uiScale === 'l' ? 1.2 : 1
+    void window.api.setZoomFactor(factor)
+    localStorage.setItem('ui-scale', uiScale)
+    localStorage.setItem('ui-zoom', String(factor))
+  }, [uiScale])
+  const [showAppearance, setShowAppearance] = useState(false)
   // 新手引导：首启自动弹出（localStorage 记忆），顶栏「帮助」可随时重看
   const tourHandlers = useMemo(
     () => ({ openSettings: () => setShowSettings(true), openIntegration: () => setShowIntegration(true) }),
@@ -803,9 +824,46 @@ export default function App(): JSX.Element {
         <span className="text-sm font-bold">立格编辑器</span>
         <span className="text-xs text-ink-dim">@LIG人生如戏的图文创作平台公测版</span>
         <div data-tour="topbar-actions" className="ml-auto flex items-center gap-2 text-xs text-ink-dim">
-          <button onClick={toggleTheme} title="切换深色 / 日间模式" className="rounded px-2 py-1 hover:bg-panel-3">
-            {theme === 'dark' ? '☀ 日间' : '☾ 深色'}
-          </button>
+          <div className="relative">
+            <button
+              onClick={() => setShowAppearance((v) => !v)}
+              title="外观：主题（跟随系统/日间/夜间）与界面字号"
+              className="rounded px-2 py-1 hover:bg-panel-3"
+            >
+              🎨 外观
+            </button>
+            {showAppearance && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setShowAppearance(false)} />
+                <div className="no-drag absolute right-0 top-full z-50 mt-1 w-48 rounded border border-panel-3 bg-panel-2 p-2 shadow-lg">
+                  <p className="mb-1 text-[10px] text-ink-dim">主题</p>
+                  <div className="mb-2 flex overflow-hidden rounded border border-panel-3 text-[11px]">
+                    {([['system', '跟随系统'], ['light', '☀ 日间'], ['dark', '☾ 夜间']] as const).map(([v, label]) => (
+                      <button
+                        key={v}
+                        onClick={() => setThemeMode(v)}
+                        className={`flex-1 whitespace-nowrap px-1 py-1 ${themeMode === v ? 'bg-accent text-white' : 'text-ink-dim hover:bg-panel-3'}`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="mb-1 text-[10px] text-ink-dim">界面字号</p>
+                  <div className="flex overflow-hidden rounded border border-panel-3 text-[11px]">
+                    {([['s', '小'], ['m', '中'], ['l', '大']] as const).map(([v, label]) => (
+                      <button
+                        key={v}
+                        onClick={() => setUiScale(v)}
+                        className={`flex-1 px-1 py-1 ${uiScale === v ? 'bg-accent text-white' : 'text-ink-dim hover:bg-panel-3'}`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
           <button onClick={() => setShowSettings(true)} className="rounded px-2 py-1 hover:bg-panel-3">
             模型接入
           </button>
