@@ -5,13 +5,9 @@ import { sanitizeProjectName } from '@shared/projectName'
 import { chatOnce, extractJsonArray } from '../copilot/llm'
 import { brainstormMessages, outlineMessages, fullArticleMessages, cardsMessages } from '../copilot/prompts'
 import { extractFileText } from '../copilot/material'
-
-interface Attachment {
-  name: string
-  text: string
-  /** 图片附件的 dataURL（走 vision 多模态）；文档附件此字段为空 */
-  dataUrl?: string
-}
+import BrainstormIdeas from './wizard/BrainstormIdeas'
+import OutlineStep from './wizard/OutlineStep'
+import type { Attachment } from './wizard/BrainstormIdeas'
 
 /** 从选题库/外部带入的种子：ts 变化即触发直接出大纲 */
 export interface BrainstormSeed {
@@ -44,6 +40,8 @@ type Phase = 'input' | 'brainstorming' | 'outlining' | 'outline' | 'writing' | '
 /**
  * 脑暴工作流面板（独立上下文，不与对话互相影响）
  * 流程：素材/要求 → 选题卡 → 大纲（可编辑）→ 立项/写入工程 → 全文流式落编辑器 → 审阅/标题入口
+ * 步 1/步 2 的 UI 已拆到 wizard/BrainstormIdeas、wizard/OutlineStep（受控展示组件），
+ * 会话状态与编排留在本壳层——阶段 3 由 CreationWizard 原样接管这个角色。
  */
 export default function BrainstormPanel({
   project,
@@ -74,7 +72,6 @@ export default function BrainstormPanel({
   const [webOn, setWebOn] = useState(true)
   const [searching, setSearching] = useState(false)
   const abortRef = useRef<(() => void) | null>(null)
-  const fileRef = useRef<HTMLInputElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const articleRef = useRef(article)
   articleRef.current = article
@@ -111,6 +108,10 @@ export default function BrainstormPanel({
     },
     [onToast]
   )
+
+  const removeAttachment = useCallback((index: number) => {
+    setAttachments((prev) => prev.filter((_, j) => j !== index))
+  }, [])
 
   // ---- 联网搜索（开关开启时先搜再喂，失败降级为不带结果） ----
 
@@ -344,111 +345,26 @@ export default function BrainstormPanel({
   return (
     <div className="flex min-h-0 flex-1 flex-col text-xs">
       <div ref={scrollRef} className="selectable min-h-0 flex-1 overflow-auto p-3">
-        {/* ---- 输入阶段：素材 + 要求 ---- */}
+        {/* ---- 输入阶段：素材 + 要求（wizard/BrainstormIdeas） ---- */}
         {(phase === 'input' || phase === 'brainstorming') && (
-          <>
-            <p className="mb-2 text-ink-dim">
-              投喂素材（图片/txt/md/pdf）和要求 → 脑暴选题卡 → 生成大纲 → 立项写正文。全程独立上下文，不影响对话。
-            </p>
-            <input
-              ref={fileRef}
-              type="file"
-              multiple
-              accept=".txt,.md,.pdf,image/png,image/jpeg,image/webp,image/gif"
-              className="hidden"
-              onChange={(e) => {
-                addFiles(e.target.files)
-                e.target.value = ''
-              }}
-            />
-            <div className="mb-2 flex flex-wrap gap-1">
-              <button
-                onClick={() => fileRef.current?.click()}
-                disabled={busy}
-                className="rounded border border-dashed border-panel-3 px-2 py-1 text-ink-dim hover:border-accent hover:text-accent disabled:opacity-40"
-              >
-                📎 投喂素材
-              </button>
-              <button
-                onClick={() => setWebOn((v) => !v)}
-                disabled={busy}
-                title="开启后先联网搜选题相关实时资讯，再喂给模型"
-                className={`rounded px-2 py-1 disabled:opacity-40 ${webOn ? 'bg-accent text-white' : 'border border-dashed border-panel-3 text-ink-dim hover:border-accent hover:text-accent'}`}
-              >
-                🌐 联网{webOn ? '已开' : ''}
-              </button>
-              {attachments.map((a, i) => (
-                <span key={i} className="flex items-center gap-1 rounded bg-panel-3 px-1.5 py-1 text-[10px] text-ink-dim">
-                  {a.dataUrl ? (
-                    <img src={a.dataUrl} alt={a.name} className="h-6 w-6 rounded object-cover" />
-                  ) : null}
-                  {a.dataUrl ? a.name : `${a.name}（${a.text.length}字）`}
-                  <button onClick={() => setAttachments((prev) => prev.filter((_, j) => j !== i))} className="hover:text-red-400">
-                    ✕
-                  </button>
-                </span>
-              ))}
-            </div>
-            <textarea
-              rows={3}
-              value={ask}
-              onChange={(e) => setAsk(e.target.value)}
-              placeholder="补充要求 / 选题方向（脑暴可空，直接出大纲必填）"
-              disabled={busy}
-              className="mb-2 w-full resize-none rounded bg-panel-3 p-2 text-ink outline-none placeholder:text-ink-dim disabled:opacity-50"
-            />
-            <div className="mb-3 flex gap-2">
-              {phase === 'brainstorming' ? (
-                <button onClick={abort} className="rounded bg-panel-3 px-3 py-1.5 text-red-400 hover:bg-panel">
-                  停止
-                </button>
-              ) : (
-                <>
-                  <button onClick={runBrainstorm} className="rounded bg-accent px-3 py-1.5 text-white hover:opacity-90">
-                    🧠 开始脑暴
-                  </button>
-                  <button
-                    onClick={() => ask.trim() && runOutline(ask.trim(), ask.trim())}
-                    disabled={!ask.trim()}
-                    className="rounded bg-panel-3 px-3 py-1.5 text-ink hover:bg-panel disabled:opacity-40"
-                    title="跳过脑暴，按要求直接出大纲"
-                  >
-                    直接出大纲
-                  </button>
-                </>
-              )}
-            </div>
-
-            {/* 选题卡 */}
-            {cards.map((c, i) => (
-              <div key={i} className="mb-1.5 rounded-lg border border-panel-3 bg-panel p-2.5">
-                <div className="flex items-start gap-2">
-                  <span className={`shrink-0 rounded px-1.5 py-0.5 font-bold ${c.score >= 8 ? 'bg-green-950 text-green-400' : 'bg-panel-3 text-ink-dim'}`}>
-                    {c.score}
-                  </span>
-                  <p className="min-w-0 flex-1 text-[13px] font-bold text-ink">{c.title}</p>
-                </div>
-                <p className="mt-1 text-ink-dim">角度：{c.angle}</p>
-                <p className="text-ink-dim">读者：{c.audience}</p>
-                <p className="text-ink-dim">{c.reason}</p>
-                <div className="mt-1.5 flex gap-2">
-                  <button
-                    onClick={async () => {
-                      await window.api.invoke('ideas:add', c)
-                      onIdeasChanged()
-                      onToast('已入选题库（左栏「选题库」可查看）')
-                    }}
-                    className="rounded bg-panel-3 px-2 py-0.5 text-ink hover:bg-panel-2"
-                  >
-                    入库
-                  </button>
-                  <button onClick={() => outlineFromCard(c)} className="rounded bg-accent px-2 py-0.5 text-white hover:opacity-90">
-                    生成大纲 →
-                  </button>
-                </div>
-              </div>
-            ))}
-          </>
+          <BrainstormIdeas
+            phase={phase === 'brainstorming' ? 'brainstorming' : 'input'}
+            busy={busy}
+            ask={ask}
+            setAsk={setAsk}
+            attachments={attachments}
+            removeAttachment={removeAttachment}
+            addFiles={addFiles}
+            webOn={webOn}
+            toggleWeb={() => setWebOn((v) => !v)}
+            cards={cards}
+            onIdeasChanged={onIdeasChanged}
+            onToast={onToast}
+            onRunBrainstorm={() => void runBrainstorm()}
+            onDirectOutline={() => void runOutline(ask.trim(), ask.trim())}
+            onOutlineFromCard={outlineFromCard}
+            onAbort={abort}
+          />
         )}
 
         {/* ---- 过程反馈：搜索 / 思考 / 流式预览 ---- */}
@@ -478,56 +394,21 @@ export default function BrainstormPanel({
           </div>
         )}
 
-        {/* ---- 大纲确认阶段 ---- */}
+        {/* ---- 大纲确认阶段（wizard/OutlineStep） ---- */}
         {(phase === 'outlining' || phase === 'outline') && (
-          <>
-            <div className="mb-2 flex items-center">
-              <span className="font-bold text-ink">{phase === 'outlining' ? '大纲生成中…' : '大纲（可直接编辑）'}</span>
-              {phase === 'outlining' ? (
-                <button onClick={abort} className="ml-auto rounded bg-panel-3 px-2 py-0.5 text-red-400 hover:bg-panel">
-                  停止
-                </button>
-              ) : (
-                <button onClick={reset} className="ml-auto rounded px-2 py-0.5 text-ink-dim hover:bg-panel-3">
-                  ← 返回
-                </button>
-              )}
-            </div>
-            {phase === 'outline' && (
-              <>
-                <textarea
-                  value={outline}
-                  onChange={(e) => setOutline(e.target.value)}
-                  rows={14}
-                  className="mb-2 w-full resize-y rounded bg-panel p-2 leading-5 text-ink outline-none"
-                />
-                <div className="mb-2 flex items-center gap-2">
-                  <span className="shrink-0 text-ink-dim">工程名</span>
-                  <input
-                    value={projName}
-                    onChange={(e) => setProjName(e.target.value)}
-                    className="min-w-0 flex-1 rounded bg-panel-3 px-2 py-1 text-ink outline-none"
-                  />
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <button onClick={createAndWrite} className="rounded bg-accent px-3 py-1.5 text-white hover:opacity-90" title="新建工程并生成公众号文章正文">
-                    📄 公众号文章
-                  </button>
-                  <button onClick={() => createCards('wechat')} className="rounded bg-accent px-3 py-1.5 text-white hover:opacity-90" title="新建工程并生成多张竖版公众号图片卡片">
-                    🖼 公众号贴图
-                  </button>
-                  <button onClick={() => createCards('xhs')} className="rounded bg-accent px-3 py-1.5 text-white hover:opacity-90" title="新建工程并生成小红书风图文卡片">
-                    📕 小红书贴图
-                  </button>
-                  {project && (
-                    <button onClick={writeToCurrent} className="rounded bg-panel-3 px-3 py-1.5 text-ink hover:bg-panel" title={`覆盖写入「${project}」的正文`}>
-                      写入当前工程
-                    </button>
-                  )}
-                </div>
-              </>
-            )}
-          </>
+          <OutlineStep
+            phase={phase === 'outlining' ? 'outlining' : 'outline'}
+            outline={outline}
+            setOutline={setOutline}
+            projName={projName}
+            setProjName={setProjName}
+            project={project}
+            onCreateArticle={() => void createAndWrite()}
+            onCreateCards={(format) => void createCards(format)}
+            onWriteToCurrent={() => void writeToCurrent()}
+            onAbort={abort}
+            onBack={reset}
+          />
         )}
 
         {/* ---- 正文/卡片生成中 ---- */}
