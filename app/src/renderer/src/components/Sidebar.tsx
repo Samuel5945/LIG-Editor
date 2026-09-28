@@ -627,17 +627,17 @@ export default function Sidebar(props: SidebarProps): ReactElement {
   }
 
   return (
-    <aside data-tour="left-pane" style={{ width }} className="flex shrink-0 flex-col border-r border-panel-3 bg-panel-2">
-      <nav className="flex items-center gap-1 border-b border-panel-3 p-2 text-xs">
+    <aside data-tour="left-pane" style={{ width }} className="flex shrink-0 flex-col overflow-hidden border-r border-panel-3 bg-panel-2">
+      <nav className="flex items-center gap-1 overflow-hidden border-b border-panel-3 p-2 text-xs">
         <button
           onClick={() => setLeftTab('tree')}
-          className={`rounded px-2.5 py-1 ${leftTab === 'tree' ? 'bg-panel-3 text-ink' : 'text-ink-dim hover:bg-panel-3'}`}
+          className={`whitespace-nowrap rounded px-2.5 py-1 ${leftTab === 'tree' ? 'bg-panel-3 text-ink' : 'text-ink-dim hover:bg-panel-3'}`}
         >
           工作树
         </button>
         <button
           onClick={() => setLeftTab('ideas')}
-          className={`rounded px-2.5 py-1 ${leftTab === 'ideas' ? 'bg-panel-3 text-ink' : 'text-ink-dim hover:bg-panel-3'}`}
+          className={`whitespace-nowrap rounded px-2.5 py-1 ${leftTab === 'ideas' ? 'bg-panel-3 text-ink' : 'text-ink-dim hover:bg-panel-3'}`}
         >
           选题库
         </button>
@@ -645,7 +645,7 @@ export default function Sidebar(props: SidebarProps): ReactElement {
           <button
             onClick={onOpenCatManage}
             title="分类管理：删除（隐藏）/ 恢复 / 重命名"
-            className="ml-auto rounded px-1.5 py-0.5 text-[10px] text-ink-dim hover:bg-panel-3"
+            className="ml-auto whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] text-ink-dim hover:bg-panel-3"
           >
             ⚙️ 管理
           </button>
