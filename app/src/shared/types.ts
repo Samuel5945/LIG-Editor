@@ -392,7 +392,7 @@ export interface WebSearchResult {
 // ---------- 多平台分发（M11，见 shared/platformHtml.ts 的平台画像） ----------
 
 /** 分发目标平台：各平台编辑器粘贴净化规则不同，导出/复制按平台画像输出对应形态 */
-export type PlatformId = 'wechat' | 'zhihu' | 'toutiao' | 'baijiahao'
+export type PlatformId = 'wechat' | 'toutiao' | 'zhihu' | 'baijiahao'
 
 /** 分类级账号预设：「账号 = 分类」，新建工程自动继承的账号级默认 */
 export interface CategoryPreset {

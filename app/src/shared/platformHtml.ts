@@ -35,10 +35,11 @@ import type { ArticleTheme, PlatformId } from './types'
 import { DEFAULT_THEME } from './categoryThemes'
 import { docToExportHtml, SEQ_PREFIX } from './exportHtml'
 
+/** 键序即分发平台在导出框/分类预设里的展示顺序（两处都靠 Object.keys 渲染） */
 export const PLATFORM_LABELS: Record<PlatformId, string> = {
   wechat: '公众号',
-  zhihu: '知乎',
   toutiao: '头条号',
+  zhihu: '知乎',
   baijiahao: '百家号'
 }
 

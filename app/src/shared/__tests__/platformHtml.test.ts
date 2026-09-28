@@ -190,6 +190,6 @@ describe('页壳与常量', () => {
   })
 
   it('PLATFORM_LABELS 四平台齐全', () => {
-    expect(Object.keys(PLATFORM_LABELS)).toEqual(['wechat', 'zhihu', 'toutiao', 'baijiahao'])
+    expect(Object.keys(PLATFORM_LABELS)).toEqual(['wechat', 'toutiao', 'zhihu', 'baijiahao'])
   })
 })
