@@ -67,10 +67,10 @@ export default function App(): JSX.Element {
     setThemeModeState(m)
     localStorage.setItem('ui-theme-mode', m)
   }, [])
-  // 界面字号：整页缩放（webFrame zoomFactor，preload 首帧前先套用避免闪烁）
+  // 界面字号：整页缩放（webFrame zoomFactor，preload 首帧前先套用避免闪烁）；出厂默认中号
   const [uiScale, setUiScale] = useState<'s' | 'm' | 'l'>(() => {
     const v = localStorage.getItem('ui-scale')
-    return v === 'm' || v === 'l' ? v : 's'
+    return v === 's' || v === 'l' ? v : 'm'
   })
   useEffect(() => {
     const factor = uiScale === 'm' ? 1.1 : uiScale === 'l' ? 1.2 : 1
