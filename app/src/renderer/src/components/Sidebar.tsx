@@ -730,6 +730,8 @@ export default function Sidebar(props: SidebarProps): ReactElement {
                 <button
                   onClick={(e) => {
                     e.stopPropagation()
+                    // 折叠分类上新建：先展开——行内新建输入框渲染在展开分支里，不展开就是「点了没反应」
+                    setOpenCats((prev) => (prev && !prev.includes(g.category) ? [...prev, g.category] : prev))
                     setCreatingFor(g.category)
                     setNewName('')
                   }}
