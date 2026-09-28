@@ -70,7 +70,7 @@
 - `BrainstormIdeas`（步 1）：原 BrainstormPanel 的输入/脑暴/选题卡部分，纯搬家。
 - `OutlineStep`（步 2）：原大纲编辑 + 工程名 + 立项出口，纯搬家；立项动作上报壳层（切步 3 + 流式）。
 - `FigureChecklist`（步 4）：行式批量清单。
-- `ExportPanel`（步 7）：ExportDialog 弹窗体抽出，弹窗与内联双用。
+- `ExportPanel`（步 7）：ExportDialog 弹窗体抽出。**实现期修正**：核实 ExportDialog 除两个被删页签按钮外无其他弹窗入口，弹窗壳一并删除，ExportPanel 为向导步 7 独用。
 
 **删除**：`BrainstormPanel.tsx`（拆分后删除文件）、右栏 create/review 页签按钮、中栏正文/标题封面页签按钮、脑暴 done 三步清单（`StepRow` 随文件删除）。
 
@@ -85,7 +85,7 @@
 | 1 选题 | 产出过大纲（会话内）或已立项 | 壳层阶段态 / current 存在 |
 | 2 大纲 | 已立项（工程存在即完成） | current 工程 |
 | 3 成文 | 正文非空；贴图工程=卡片已生成 | `article.md` / `cards.json` |
-| 4 配图 | 正文无 fig-suggest 残留（占位被替换**或删除**均算已处理；最终插几张图由用户决定） | 编辑器文档现算 |
+| 4 配图 | 正文非空 且 无 fig-suggest 残留（占位被替换**或删除**均算已处理；最终插几张图由用户决定。正文都还没有时谈不上配图完成，故加非空前提——实现期修正） | 编辑器文档现算 |
 | 5 标题封面 | `meta.cover.main` 存在 | meta |
 | 6 审阅 | `review.md` 存在且非空（贴图=`cards-review.md`） | 工程文件 |
 | 7 导出 | `meta.lastExportAt` 存在 | meta（**新增字段**） |
