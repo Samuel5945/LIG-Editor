@@ -71,6 +71,11 @@ function createWindow(): BrowserWindow {
   })
 
   win.on('ready-to-show', () => win.show())
+  // 兜底：ready-to-show 偶发不触发（隐藏页面上改缩放因子等场景会卡住首次绘制信号），
+  // 3 秒后仍未可见就强制显示，保证窗口永远出得来
+  setTimeout(() => {
+    if (!win.isDestroyed() && !win.isVisible()) win.show()
+  }, 3000)
   // 菜单栏不可见但保留挂载（复制/粘贴/撤销等编辑快捷键依赖菜单角色）
   win.setMenuBarVisibility(false)
 

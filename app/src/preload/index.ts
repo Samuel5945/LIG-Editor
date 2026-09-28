@@ -3,12 +3,8 @@ import type { IpcApi, IpcEvents, IpcEventChannel } from '../shared/types'
 // 公众号通道（wechat:*）经模块增强并入 IpcApi，类型引入不影响运行时
 import type {} from '../shared/wechatIpc'
 
-// 首帧前套用持久化的界面缩放（外观选项的字号档位：小 1.0 / 中 1.1 / 大 1.2，未设置 = 默认中号），避免启动闪变
-{
-  const scale = localStorage.getItem('ui-scale')
-  const zoom = scale === 's' ? 1 : scale === 'l' ? 1.2 : 1.1
-  webFrame.setZoomFactor(zoom)
-}
+// 注意：preload 里不要在页面加载前调 webFrame.setZoomFactor——
+// 隐藏窗口上改缩放因子会卡住 ready-to-show，窗口永远不显示（字号缩放由渲染层挂载后延迟套用）
 
 /** 渲染进程侧的类型安全调用面 */
 const api = {

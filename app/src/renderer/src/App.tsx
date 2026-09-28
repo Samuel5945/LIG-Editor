@@ -74,9 +74,11 @@ export default function App(): JSX.Element {
   })
   useEffect(() => {
     const factor = uiScale === 'm' ? 1.1 : uiScale === 'l' ? 1.2 : 1
-    void window.api.setZoomFactor(factor)
     localStorage.setItem('ui-scale', uiScale)
     localStorage.setItem('ui-zoom', String(factor))
+    // 延迟到窗口显示后再套缩放：隐藏页面上提前改缩放因子会卡住 ready-to-show，窗口出不来
+    const t = setTimeout(() => window.api.setZoomFactor(factor), 300)
+    return () => clearTimeout(t)
   }, [uiScale])
   const [showAppearance, setShowAppearance] = useState(false)
   // 新手引导：首启自动弹出（localStorage 记忆），顶栏「帮助」可随时重看
