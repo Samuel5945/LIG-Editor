@@ -26,3 +26,6 @@ app/theme-preview.html
 # runtime idea inbox (dev-mode root) & agent session data
 /idea-inbox.md
 /.zcode/
+
+# brainstorming visual companion (local mockups)
+/.superpowers/
