@@ -12,6 +12,14 @@ const STATUS_LABEL: Record<string, string> = {
   ready: '可发布'
 }
 
+/** 状态圆点配色（树上不再放状态文字药丸——省宽度给工程名，悬停 tooltip 看全称） */
+const STATUS_COLOR: Record<string, string> = {
+  ideating: 'bg-sky-400',
+  drafting: 'bg-amber-400',
+  reviewing: 'bg-violet-400',
+  ready: 'bg-green-500'
+}
+
 interface SidebarProps {
   paths: AppPaths | null
   projects: ProjectSummary[]
@@ -358,7 +366,7 @@ export default function Sidebar(props: SidebarProps): ReactElement {
               e.preventDefault()
               setMenu({ x: e.clientX, y: e.clientY, name: p.name })
             }}
-            className={`${rowBase} pl-5 ${isCurrent ? 'bg-panel-3 text-ink' : 'text-ink-dim hover:bg-panel-3'}`}
+            className={`${rowBase} relative pl-5 ${isCurrent ? 'bg-panel-3 text-ink' : 'text-ink-dim hover:bg-panel-3'}`}
           >
             <span
               onClick={(e) => {
@@ -374,15 +382,15 @@ export default function Sidebar(props: SidebarProps): ReactElement {
               <HoverScrollName name={p.name} />
             </span>
             {isPinned && <span className="shrink-0 text-[10px]" title="已置顶">📌</span>}
-            {/* 资产计数角标：明细收敛为正文/交付两行后，配图与图表源的变化仍在此可见 */}
-            {a && a.assets.length > 0 && (
-              <span className="shrink-0 rounded bg-panel px-1 py-0.5 text-[10px] text-ink-dim" title={`配图 ${a.assets.length} 张`}>
-                🖼{a.assets.length}
-              </span>
-            )}
-            {a && a.figures.length > 0 && (
-              <span className="shrink-0 rounded bg-panel px-1 py-0.5 text-[10px] text-ink-dim" title={`图表源 ${a.figures.length} 个（外部改动实时反映）`}>
-                📈{a.figures.length}
+            {/* 资产计数合并为一枚角标（明细收敛为正文/交付两行后，变化仍在此可见） */}
+            {a && (a.assets.length > 0 || a.figures.length > 0) && (
+              <span
+                className="shrink-0 rounded bg-panel px-1 py-0.5 text-[10px] text-ink-dim"
+                title={`配图 ${a.assets.length} 张 · 图表源 ${a.figures.length} 个（外部改动实时反映）`}
+              >
+                {a.assets.length > 0 && `🖼${a.assets.length}`}
+                {a.assets.length > 0 && a.figures.length > 0 && ' '}
+                {a.figures.length > 0 && `📈${a.figures.length}`}
               </span>
             )}
             {p.plannedAt && (
@@ -390,30 +398,38 @@ export default function Sidebar(props: SidebarProps): ReactElement {
                 📅{p.plannedAt.slice(5)}
               </span>
             )}
-            <span className="shrink-0 rounded bg-panel px-1.5 py-0.5 text-[10px] group-hover:hidden">
-              {STATUS_LABEL[p.status] ?? p.status}
+            <span
+              className={`h-2 w-2 shrink-0 rounded-full ${STATUS_COLOR[p.status] ?? 'bg-panel-3'}`}
+              title={STATUS_LABEL[p.status] ?? p.status}
+            />
+            {/* 悬停动作浮层：绝对定位不占布局宽度——名称永不被挤出，行尾也不再跳动 */}
+            <span
+              className={`absolute right-1 hidden items-center gap-0.5 rounded group-hover:flex ${
+                isCurrent ? 'bg-panel-3' : 'bg-panel-2'
+              }`}
+            >
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setRenamingFor(p.name)
+                  setRenameVal(p.name)
+                }}
+                title="重命名工程（本地文件夹同步改名）"
+                className="rounded px-1.5 py-0.5 text-ink hover:bg-panel hover:text-accent"
+              >
+                ✏️
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onDeleteProject(p.name)
+                }}
+                title="删除工程"
+                className="rounded px-1.5 py-0.5 text-ink hover:bg-panel hover:text-red-400"
+              >
+                🗑
+              </button>
             </span>
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                setRenamingFor(p.name)
-                setRenameVal(p.name)
-              }}
-              title="重命名工程（本地文件夹同步改名）"
-              className="hidden shrink-0 rounded px-1.5 py-0.5 text-ink hover:bg-panel-2 hover:text-accent group-hover:block"
-            >
-              ✏️
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                onDeleteProject(p.name)
-              }}
-              title="删除工程"
-              className="hidden shrink-0 rounded px-1.5 py-0.5 text-ink hover:bg-panel-2 hover:text-red-400 group-hover:block"
-            >
-              🗑
-            </button>
           </div>
         )}
         {isCurrent && !renamingFor && (
