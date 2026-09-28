@@ -143,7 +143,8 @@ export default function CreationWizard({
     hasProject: !!project,
     isCards,
     outlineProduced: outline.trim().length > 0,
-    articleNonEmpty: article.trim().length > 0,
+    // 默认骨架（一行 # 标题）不算内容：手动新建的空工程要从选题步开始
+    articleHasBody: article.split(/\r?\n/).filter((l) => l.trim()).length > 1,
     cardsCount: hasCards ? 1 : 0,
     figSuggestCount: figSuggestions.length,
     hasCover: !!meta?.cover?.main,
@@ -430,17 +431,18 @@ export default function CreationWizard({
   const busy = phase === 'brainstorming' || phase === 'outlining' || phase === 'writing'
   const writing = phase === 'writing'
 
-  const stepBtn = (active: boolean): string =>
-    `flex items-center gap-1 rounded px-2 py-0.5 ${active ? 'bg-panel-3 text-ink' : 'text-ink-dim hover:bg-panel-3'}`
-
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* 步进器（步骤即导航：点哪步去哪步，完成态由工程事实推导） */}
-      <div data-tour="wizard-stepper" className="flex h-10 shrink-0 items-center gap-0.5 border-b border-panel-3 px-3 text-xs">
+      {/* 步进器（步骤即导航：点哪步去哪步，完成态由工程事实推导）；窄栏/大字号下横向滚动不折行 */}
+      <div data-tour="wizard-stepper" className="flex h-10 shrink-0 items-center gap-0.5 overflow-x-auto border-b border-panel-3 px-3 text-xs">
         {steps.map((s, i) => (
           <Fragment key={s.id}>
-            {i > 0 && <span className="mx-0.5 h-px w-3 bg-panel-3" />}
-            <button onClick={() => setActiveId(s.id)} className={stepBtn(activeId === s.id)} title={s.done ? '已完成' : undefined}>
+            {i > 0 && <span className="mx-0.5 h-px w-3 shrink-0 bg-panel-3" />}
+            <button
+              onClick={() => setActiveId(s.id)}
+              className={`flex shrink-0 items-center gap-1 whitespace-nowrap rounded px-2 py-0.5 ${activeId === s.id ? 'bg-panel-3 text-ink' : 'text-ink-dim hover:bg-panel-3'}`}
+              title={s.done ? '已完成' : undefined}
+            >
               <span className={s.done ? 'text-green-500' : activeId === s.id ? 'text-accent' : 'text-ink-dim/70'}>
                 {s.done ? '✓' : activeId === s.id ? '●' : '○'}
               </span>
@@ -448,7 +450,7 @@ export default function CreationWizard({
             </button>
           </Fragment>
         ))}
-        <span className="ml-auto flex items-center gap-2">{headerRight}</span>
+        <span className="ml-auto flex shrink-0 items-center gap-2 whitespace-nowrap">{headerRight}</span>
       </div>
 
       {/* 流式横幅（writing 阶段全局可见，切步不断流） */}

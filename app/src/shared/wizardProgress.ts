@@ -21,8 +21,8 @@ export interface WizardFacts {
   isCards: boolean
   /** 本会话产出过大纲（脑暴出卡生成 / 直接出大纲 / 选题种子灌入） */
   outlineProduced: boolean
-  /** 正文非空（贴图工程忽略此值，改看 cardsCount） */
-  articleNonEmpty: boolean
+  /** 正文有实质内容（≥2 个非空行）：立项默认骨架只有一行标题，不算内容 */
+  articleHasBody: boolean
   /** 贴图工程：卡片张数（文章工程忽略） */
   cardsCount: number
   /** 正文里残留的 fig-suggest 占位数（占位被替换或删除都算已处理，清零即配图步完成） */
@@ -37,18 +37,18 @@ export interface WizardFacts {
  * 卡片自带图文无逐图占位，产物即逐张 PNG 无整文导出形态）。
  */
 export function deriveWizardSteps(facts: WizardFacts): WizardStep[] {
-  const hasContent = facts.articleNonEmpty || facts.cardsCount > 0
+  const hasContent = facts.articleHasBody || facts.cardsCount > 0
   const draftDone = hasContent
   const steps: WizardStep[] = [
-    // 选题/大纲只认「真内容」：手动新建的空工程不该被判为已过前两步，向导应从选题开始
+    // 选题/大纲只认「真内容」：手动新建的空工程（默认骨架不算内容）不被判为已过前两步，向导从选题开始
     { id: 'ideas', label: '选题', done: facts.outlineProduced || (facts.hasProject && hasContent) },
     { id: 'outline', label: '大纲', done: facts.hasProject && hasContent },
     { id: 'draft', label: facts.isCards ? '贴图' : '成文', done: draftDone }
   ]
   if (!facts.isCards) {
     steps.push(
-      // 正文尚未写出时谈不上「配图已处理完」，故加 articleNonEmpty 前置
-      { id: 'figures', label: '配图', done: facts.articleNonEmpty && facts.figSuggestCount === 0 },
+      // 正文没有实质内容时谈不上「配图已处理完」，故加 articleHasBody 前置
+      { id: 'figures', label: '配图', done: facts.articleHasBody && facts.figSuggestCount === 0 },
       { id: 'titlecover', label: '标题封面', done: facts.hasCover },
       { id: 'review', label: '审阅', done: facts.hasReview },
       { id: 'export', label: '导出', done: facts.hasExport }

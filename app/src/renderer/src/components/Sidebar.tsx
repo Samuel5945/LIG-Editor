@@ -225,11 +225,15 @@ export default function Sidebar(props: SidebarProps): ReactElement {
     setPinned((prev) => (prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]))
   }, [])
 
-  // 当前打开的工程自动展开资产节点
+  // 当前打开的工程自动展开资产节点与其分类（树上新建/向导立项/恢复归档落到折叠分类时立即可见）
   useEffect(() => {
     if (!current) return
     setExpanded((prev) => (prev.includes(current) ? prev : [...prev, current]))
-  }, [current])
+    const p = projects.find((x) => x.name === current)
+    if (!p) return // refreshProjects 未追上时等下一轮 projects 到达再展开分类
+    const cat = p.category ?? UNCATEGORIZED
+    setOpenCats((prev) => (prev && !prev.includes(cat) ? [...prev, cat] : prev))
+  }, [current, projects])
 
   // 工程被删除/改名后清掉失效的展开项
   useEffect(() => {

@@ -17,7 +17,7 @@ const facts = (over: Partial<WizardFacts> = {}): WizardFacts => ({
   hasProject: false,
   isCards: false,
   outlineProduced: false,
-  articleNonEmpty: false,
+  articleHasBody: false,
   cardsCount: 0,
   figSuggestCount: 0,
   hasCover: false,
@@ -55,24 +55,24 @@ describe('deriveWizardSteps · 文章工程七步', () => {
   })
 
   it('已有内容的工程：选题/大纲视为已完成；无占位时配图步也自动完成，落标题封面步', () => {
-    const steps = deriveWizardSteps(facts({ hasProject: true, articleNonEmpty: true }))
+    const steps = deriveWizardSteps(facts({ hasProject: true, articleHasBody: true }))
     expect(steps[0].done).toBe(true)
     expect(steps[1].done).toBe(true)
     expect(firstPendingStep(steps)).toBe(4)
   })
 
   it('正文非空但有残留占位：成文完成、配图未完成', () => {
-    const steps = deriveWizardSteps(facts({ hasProject: true, articleNonEmpty: true, figSuggestCount: 3 }))
+    const steps = deriveWizardSteps(facts({ hasProject: true, articleHasBody: true, figSuggestCount: 3 }))
     expect(firstPendingStep(steps)).toBe(3)
   })
 
   it('占位清零配图即完成——最终插几张图由用户决定，删除占位也算已处理', () => {
-    const steps = deriveWizardSteps(facts({ hasProject: true, articleNonEmpty: true, figSuggestCount: 0 }))
+    const steps = deriveWizardSteps(facts({ hasProject: true, articleHasBody: true, figSuggestCount: 0 }))
     expect(firstPendingStep(steps)).toBe(4)
   })
 
   it('封面/审阅/导出按各自事实推进（配图完成以正文存在为前提）', () => {
-    const base = { hasProject: true, articleNonEmpty: true }
+    const base = { hasProject: true, articleHasBody: true }
     expect(firstPendingStep(deriveWizardSteps(facts({ ...base, hasCover: true })))).toBe(5)
     expect(firstPendingStep(deriveWizardSteps(facts({ ...base, hasCover: true, hasReview: true })))).toBe(6)
   })
@@ -81,7 +81,7 @@ describe('deriveWizardSteps · 文章工程七步', () => {
     const steps = deriveWizardSteps(
       facts({
         hasProject: true,
-        articleNonEmpty: true,
+        articleHasBody: true,
         hasCover: true,
         hasReview: true,
         hasExport: true
