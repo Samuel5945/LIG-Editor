@@ -15,6 +15,8 @@ const STATUS_COLOR: Record<string, string> = {
 
 interface SidebarProps {
   paths: AppPaths | null
+  /** 栏宽（分栏拖拽调宽的落点，App 持有并记忆；缺省 240） */
+  width?: number
   projects: ProjectSummary[]
   categories: string[]
   skills: SkillInfo[]
@@ -66,6 +68,7 @@ const rowBase = 'group mb-0.5 flex cursor-pointer items-center gap-1 rounded px-
 export default function Sidebar(props: SidebarProps): ReactElement {
   const {
     paths,
+    width = 240,
     projects,
     categories,
     skills,
@@ -124,7 +127,39 @@ export default function Sidebar(props: SidebarProps): ReactElement {
   const expandedRef = useRef(expanded)
   expandedRef.current = expanded
 
-  const groups = groupProjectsByCategory(projects, categories, pinned)
+  // 归档工程（渲染层本地偏好）：完工工程收进树尾「已归档」折叠区，盘上文件不动
+  const [archived, setArchived] = useState<string[]>(() => {
+    try {
+      const v = JSON.parse(localStorage.getItem('lig-tree-archived') ?? '[]')
+      return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : []
+    } catch {
+      return []
+    }
+  })
+  const [archOpen, setArchOpen] = useState(false)
+  useEffect(() => {
+    localStorage.setItem('lig-tree-archived', JSON.stringify(archived))
+  }, [archived])
+  // 盘上已不存在的归档项顺手清掉
+  useEffect(() => {
+    setArchived((prev) => {
+      const next = prev.filter((n) => projects.some((p) => p.name === n))
+      return next.length === prev.length ? prev : next
+    })
+  }, [projects])
+  const toggleArchive = useCallback(
+    (name: string) => {
+      const going = !archived.includes(name)
+      setArchived((prev) => (going ? [...prev, name] : prev.filter((n) => n !== name)))
+      onToast(going ? '已归档——树尾「已归档」区可找回' : '已恢复到原分类')
+    },
+    [archived, onToast]
+  )
+
+  const activeProjects = useMemo(() => projects.filter((p) => !archived.includes(p.name)), [projects, archived])
+  const archivedProjects = useMemo(() => projects.filter((p) => archived.includes(p.name)), [projects, archived])
+
+  const groups = groupProjectsByCategory(activeProjects, categories, pinned)
 
   const toggleCat = useCallback(
     (cat: string) => {
@@ -311,6 +346,7 @@ export default function Sidebar(props: SidebarProps): ReactElement {
   const renderProjectRow = (p: ProjectSummary): ReactElement => {
     const isCurrent = p.name === current
     const isPinned = pinned.includes(p.name)
+    const isArchived = archived.includes(p.name)
     const a = assets[p.name]
     const cat = p.category ?? UNCATEGORIZED
     const isOpen = expanded.includes(p.name)
@@ -361,7 +397,9 @@ export default function Sidebar(props: SidebarProps): ReactElement {
               e.preventDefault()
               setMenu({ x: e.clientX, y: e.clientY, name: p.name })
             }}
-            className={`${rowBase} relative pl-5 ${isCurrent ? 'bg-panel-3 text-ink' : 'text-ink-dim hover:bg-panel-3'}`}
+            className={`${rowBase} relative pl-5 ${
+              isArchived ? 'text-ink-dim/50 hover:bg-panel-3' : isCurrent ? 'bg-panel-3 text-ink' : 'text-ink-dim hover:bg-panel-3'
+            }`}
           >
             <span
               onClick={(e) => {
@@ -405,27 +443,64 @@ export default function Sidebar(props: SidebarProps): ReactElement {
                 isCurrent ? 'bg-panel-3' : 'bg-panel-2'
               }`}
             >
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setRenamingFor(p.name)
-                  setRenameVal(p.name)
-                }}
-                title="重命名工程（本地文件夹同步改名）"
-                className="rounded px-1 py-0.5 text-[11px] text-ink hover:bg-panel hover:text-accent"
-              >
-                ✏️
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onDeleteProject(p.name)
-                }}
-                title="删除工程"
-                className="rounded px-1 py-0.5 text-[11px] text-ink hover:bg-panel hover:text-red-400"
-              >
-                🗑
-              </button>
+              {isArchived ? (
+                <>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      toggleArchive(p.name)
+                    }}
+                    title="恢复到原分类"
+                    className="rounded px-1 py-0.5 text-[11px] text-ink hover:bg-panel hover:text-accent"
+                  >
+                    📤
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onDeleteProject(p.name)
+                    }}
+                    title="删除工程"
+                    className="rounded px-1 py-0.5 text-[11px] text-ink hover:bg-panel hover:text-red-400"
+                  >
+                    🗑
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setRenamingFor(p.name)
+                      setRenameVal(p.name)
+                    }}
+                    title="重命名工程（本地文件夹同步改名）"
+                    className="rounded px-1 py-0.5 text-[11px] text-ink hover:bg-panel hover:text-accent"
+                  >
+                    ✏️
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      toggleArchive(p.name)
+                    }}
+                    title="归档工程（收进树尾「已归档」，盘上文件不动）"
+                    className="rounded px-1 py-0.5 text-[11px] text-ink hover:bg-panel hover:text-accent"
+                  >
+                    🗄
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onDeleteProject(p.name)
+                    }}
+                    title="删除工程"
+                    className="rounded px-1 py-0.5 text-[11px] text-ink hover:bg-panel hover:text-red-400"
+                  >
+                    🗑
+                  </button>
+                </>
+              )}
             </span>
           </div>
         )}
@@ -513,7 +588,7 @@ export default function Sidebar(props: SidebarProps): ReactElement {
   }
 
   return (
-    <aside data-tour="left-pane" className="flex w-60 shrink-0 flex-col border-r border-panel-3 bg-panel-2">
+    <aside data-tour="left-pane" style={{ width }} className="flex shrink-0 flex-col border-r border-panel-3 bg-panel-2">
       <nav className="flex items-center gap-1 border-b border-panel-3 p-2 text-xs">
         <button
           onClick={() => setLeftTab('tree')}
@@ -656,6 +731,17 @@ export default function Sidebar(props: SidebarProps): ReactElement {
             </div>
           )
         })}
+        {/* 已归档：完工工程收纳区（树尾折叠，盘上文件不动） */}
+        {archivedProjects.length > 0 && (
+          <div className="mt-1">
+            <div onClick={() => setArchOpen((v) => !v)} className={`${rowBase} text-ink-dim/70 hover:bg-panel-3`}>
+              <Chevron open={archOpen} />
+              <span>🗄</span>
+              <span className="min-w-0 flex-1 truncate">已归档 ({archivedProjects.length})</span>
+            </div>
+            {archOpen && archivedProjects.map(renderProjectRow)}
+          </div>
+        )}
         {/* 底部全局新建：落当前选中分类（与旧列表行为一致） */}
         {creatingFor === '' ? (
           <div className="mt-2 flex gap-1">
@@ -712,7 +798,7 @@ export default function Sidebar(props: SidebarProps): ReactElement {
           />
           <div
             className="fixed z-50 min-w-36 rounded border border-panel-3 bg-panel-2 py-1 text-xs shadow-lg"
-            style={{ left: menu.x, top: Math.min(menu.y, window.innerHeight - 90) }}
+            style={{ left: menu.x, top: Math.min(menu.y, window.innerHeight - 140) }}
           >
             <button
               onClick={() => {
@@ -732,6 +818,15 @@ export default function Sidebar(props: SidebarProps): ReactElement {
               className="block w-full px-3 py-1.5 text-left text-ink hover:bg-panel-3"
             >
               📌 {pinned.includes(menu.name) ? '取消置顶' : '置顶'}
+            </button>
+            <button
+              onClick={() => {
+                toggleArchive(menu.name)
+                setMenu(null)
+              }}
+              className="block w-full px-3 py-1.5 text-left text-ink hover:bg-panel-3"
+            >
+              🗄 {archived.includes(menu.name) ? '取消归档' : '归档'}
             </button>
           </div>
         </>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import type { AppPaths, ArticleTheme, H1Style, H2Style, H2Num, H3Mark, IdeaCard, ProjectData, ProjectMeta, ProjectSummary, SkillInfo, UpdateCheckResult } from '@shared/types'
 import { PROJECT_CATEGORIES, UNCATEGORIZED } from '@shared/categories'
 import { resolveArticleTheme } from '@shared/categoryThemes'
@@ -70,6 +70,17 @@ export default function App(): JSX.Element {
   const [centerTab, setCenterTab] = useState<'create' | 'calendar' | 'ideas'>('create')
   // 向导深链跳步（工作树/对话/审阅定位等）：ts 变化即生效（仿 reviewRequest 模式）
   const [stepRequest, setStepRequest] = useState<{ id: WizardStepId; ts: number } | null>(null)
+  // 分栏（ZCode 式）：拖拽调宽 + 可折叠，偏好本地记忆
+  const [leftW, setLeftW] = useState(() => {
+    const v = Number(localStorage.getItem('lig-pane-left-w'))
+    return Number.isFinite(v) && v > 0 ? Math.min(Math.max(v, 180), 420) : 240
+  })
+  const [rightW, setRightW] = useState(() => {
+    const v = Number(localStorage.getItem('lig-pane-right-w'))
+    return Number.isFinite(v) && v > 0 ? Math.min(Math.max(v, 260), 640) : 320
+  })
+  const [leftCollapsed, setLeftCollapsed] = useState(() => localStorage.getItem('lig-pane-left-collapsed') === '1')
+  const [rightCollapsed, setRightCollapsed] = useState(() => localStorage.getItem('lig-pane-right-collapsed') === '1')
   const [skills, setSkills] = useState<SkillInfo[]>([])
   const [skillName, setSkillName] = useState('')
   const [skillContent, setSkillContent] = useState<string | null>(null)
@@ -644,6 +655,46 @@ export default function App(): JSX.Element {
     setSaved(articleRef.current)
   }, [])
 
+  // ---- 分栏拖拽调宽 / 折叠 ----
+
+  const startPaneDrag = useCallback(
+    (which: 'left' | 'right') =>
+      (e: ReactPointerEvent) => {
+        e.preventDefault()
+        const startX = e.clientX
+        const startW = which === 'left' ? leftW : rightW
+        const min = which === 'left' ? 180 : 260
+        const max = which === 'left' ? 420 : 640
+        let cur = startW
+        const onMove = (ev: PointerEvent) => {
+          cur = Math.min(Math.max(startW + (which === 'left' ? ev.clientX - startX : startX - ev.clientX), min), max)
+          ;(which === 'left' ? setLeftW : setRightW)(cur)
+        }
+        const onUp = () => {
+          window.removeEventListener('pointermove', onMove)
+          window.removeEventListener('pointerup', onUp)
+          localStorage.setItem(which === 'left' ? 'lig-pane-left-w' : 'lig-pane-right-w', String(cur))
+        }
+        window.addEventListener('pointermove', onMove)
+        window.addEventListener('pointerup', onUp)
+      },
+    [leftW, rightW]
+  )
+
+  const toggleLeftCollapse = useCallback(() => {
+    setLeftCollapsed((v) => {
+      localStorage.setItem('lig-pane-left-collapsed', v ? '0' : '1')
+      return !v
+    })
+  }, [])
+
+  const toggleRightCollapse = useCallback(() => {
+    setRightCollapsed((v) => {
+      localStorage.setItem('lig-pane-right-collapsed', v ? '0' : '1')
+      return !v
+    })
+  }, [])
+
   // 形态切换/转换后刷新：有 cards.json 才露出「回到贴图」回退入口
   useEffect(() => {
     if (!current) {
@@ -781,8 +832,13 @@ export default function App(): JSX.Element {
       </header>
 
       <div className="flex min-h-0 flex-1">
-        {/* 左栏：工作树 / 选题库双页签（树：分类→工程→正文/交付；选题库沿用原版整栏列表） */}
+        {/* 左栏（分栏可折叠：宽度由 App 持有，收起时 w-0 隐藏不卸载，工作树状态不丢） */}
+        <div
+          className={`flex min-h-0 shrink-0 overflow-hidden ${leftCollapsed ? 'w-0' : ''}`}
+          style={leftCollapsed ? undefined : { width: leftW }}
+        >
         <Sidebar
+          width={leftW}
           paths={paths}
           projects={projects}
           categories={categories}
@@ -809,6 +865,26 @@ export default function App(): JSX.Element {
           onMakeOutline={handleMakeOutline}
           onToast={setToast}
         />
+        </div>
+
+        {/* 分栏拖拽条（左）：拖拽调宽 / 双击或按钮收起左栏 */}
+        <div
+          onPointerDown={startPaneDrag('left')}
+          onDoubleClick={toggleLeftCollapse}
+          title="拖拽调宽 · 双击收起左栏"
+          className="group/rs relative w-px shrink-0 cursor-col-resize bg-panel-3 transition-colors hover:bg-accent"
+        >
+          <span className="absolute inset-y-0 -left-1 -right-1" />
+          <button
+            onClick={toggleLeftCollapse}
+            title={leftCollapsed ? '展开左栏' : '收起左栏'}
+            className={`absolute left-1/2 top-8 -translate-x-1/2 rounded bg-panel-3 px-0.5 py-1 text-[9px] text-ink-dim hover:text-ink ${
+              leftCollapsed ? 'block' : 'hidden group-hover/rs:block'
+            }`}
+          >
+            {leftCollapsed ? '❯' : '❮'}
+          </button>
+        </div>
 
         {/* 中栏：创作向导（主工作面）/ 选题看板 / 日历 */}
         <main className="flex min-w-0 flex-1 flex-col bg-panel">
@@ -1088,8 +1164,32 @@ export default function App(): JSX.Element {
           </div>
         </main>
 
+        {/* 分栏拖拽条（右）：拖拽调宽 / 双击或按钮收起右栏 */}
+        <div
+          onPointerDown={startPaneDrag('right')}
+          onDoubleClick={toggleRightCollapse}
+          title="拖拽调宽 · 双击收起右栏"
+          className="group/rs relative w-px shrink-0 cursor-col-resize bg-panel-3 transition-colors hover:bg-accent"
+        >
+          <span className="absolute inset-y-0 -left-1 -right-1" />
+          <button
+            onClick={toggleRightCollapse}
+            title={rightCollapsed ? '展开右栏' : '收起右栏'}
+            className={`absolute left-1/2 top-8 -translate-x-1/2 rounded bg-panel-3 px-0.5 py-1 text-[9px] text-ink-dim hover:text-ink ${
+              rightCollapsed ? 'block' : 'hidden group-hover/rs:block'
+            }`}
+          >
+            {rightCollapsed ? '❮' : '❯'}
+          </button>
+        </div>
+
+        {/* 右栏（分栏可折叠：收起时 w-0 隐藏不卸载，对话流式状态不丢） */}
+        <div
+          className={`flex min-h-0 shrink-0 overflow-hidden ${rightCollapsed ? 'w-0' : ''}`}
+          style={rightCollapsed ? undefined : { width: rightW }}
+        >
         {/* 右栏：AI 对话副驾驶（脑暴/审阅已并入中栏创作向导） */}
-        <aside className="flex w-80 shrink-0 flex-col border-l border-panel-3 bg-panel-2">
+        <aside className="flex w-full min-w-0 flex-col border-l border-panel-3 bg-panel-2">
           <div data-tour="right-tabs" className="flex h-9 shrink-0 items-center gap-1 border-b border-panel-3 px-3 text-xs">
             <span className="text-ink">对话</span>
             {/* Skill 挂载：注入系统提示（作用范围=对话；向导各步按任务类型自动推荐挂载） */}
@@ -1145,6 +1245,7 @@ export default function App(): JSX.Element {
             />
           </div>
         </aside>
+        </div>
       </div>
 
       {/* 外部修改冲突弹窗 */}
