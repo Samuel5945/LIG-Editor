@@ -268,6 +268,7 @@ export function readMeta(name: string): ProjectMeta {
     h3Mark: raw.h3Mark,
     bodyBg: raw.bodyBg,
     plannedAt: raw.plannedAt,
+    lastExportAt: raw.lastExportAt,
     style_skill: raw.style_skill,
     created_at: raw.created_at ?? new Date().toISOString(),
     updated_at: raw.updated_at ?? new Date().toISOString()
@@ -277,6 +278,18 @@ export function readMeta(name: string): ProjectMeta {
 export function writeMeta(name: string, meta: ProjectMeta): void {
   const next: ProjectMeta = { ...meta, name, updated_at: new Date().toISOString() }
   writeTracked(metaPath(name), JSON.stringify(next, null, 2) + '\n')
+}
+
+/** 记录导出/复制/推送成功时刻（创作向导「导出」步的完成事实源）。
+ *  刻意不走 writeMeta：纯盖章不是内容编辑，不该盖 updated_at 扰动工作树「最近编辑」排序。
+ *  失败静默——工程目录消失等边缘情况下，盖章不应让已成功的导出报错 */
+export function stampExported(name: string): void {
+  try {
+    const meta = readMeta(name)
+    writeTracked(metaPath(name), JSON.stringify({ ...meta, lastExportAt: new Date().toISOString() }, null, 2) + '\n')
+  } catch {
+    // 忽略：无法盖章时不阻塞导出
+  }
 }
 
 // ---------- 工程 CRUD ----------

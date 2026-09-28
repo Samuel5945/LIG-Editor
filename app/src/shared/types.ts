@@ -140,6 +140,8 @@ export interface ProjectMeta {
   bodyBg?: string
   /** 发布排期（本地日期 YYYY-MM-DD）：内容日历看板按此聚合；缺省 = 未排期 */
   plannedAt?: string
+  /** 最近一次导出/复制/推送成功时刻（ISO）：创作向导「导出」步的完成事实源；缺省 = 从未导出 */
+  lastExportAt?: string
   style_skill?: string
   created_at: string
   updated_at: string

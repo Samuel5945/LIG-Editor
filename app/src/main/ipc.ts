@@ -217,13 +217,24 @@ export function registerIpc(): void {
   // ---- 导出（M7）：variant auto=读者端自动昼夜 / day / night（复制与推送只用 day/night）----
   // platform（M11 多平台分发）：缺省 wechat；知乎/头条/百家走 exportPlatformHtml 落 article-<platform>.html
   handle('export:html', ({ project, variant, platform }: { project: string; variant?: string; platform?: string }) => {
-    if (platform && platform !== 'wechat') return exportPlatformHtml(project, platform as 'zhihu' | 'toutiao' | 'baijiahao')
-    return exportArticleHtml(project, (variant as 'auto' | 'day' | 'night') ?? 'auto')
+    const r =
+      platform && platform !== 'wechat'
+        ? exportPlatformHtml(project, platform as 'zhihu' | 'toutiao' | 'baijiahao')
+        : exportArticleHtml(project, (variant as 'auto' | 'day' | 'night') ?? 'auto')
+    store.stampExported(project)
+    return r
   })
   handle(
     'export:copyRich',
-    ({ project, variant, platform }: { project: string; variant?: string; platform?: string }) =>
-      copyArticleRich(project, variant === 'night' ? 'night' : 'day', (platform as PlatformId | undefined) ?? 'wechat')
+    ({ project, variant, platform }: { project: string; variant?: string; platform?: string }) => {
+      const r = copyArticleRich(
+        project,
+        variant === 'night' ? 'night' : 'day',
+        (platform as PlatformId | undefined) ?? 'wechat'
+      )
+      store.stampExported(project)
+      return r
+    }
   )
   handle('export:openFile', async (absPath) => {
     // 先校验存在：ShellExecute 对不存在的路径会弹 Windows 原生错误框，改走应用内提示
@@ -232,8 +243,16 @@ export function registerIpc(): void {
     if (err) throw new Error(err)
   })
   // ---- 交稿导出（M10）：可编辑 Word + 打印用 PDF，落到工程 <工程>/交付/ ----
-  handle('export:docx', (project) => exportDocx(project))
-  handle('export:pdf', (project) => exportPdf(project))
+  handle('export:docx', (project) => {
+    const r = exportDocx(project)
+    store.stampExported(project)
+    return r
+  })
+  handle('export:pdf', (project) => {
+    const r = exportPdf(project)
+    store.stampExported(project)
+    return r
+  })
 
   // ---- 贴图卡片 ----
   handle('cards:read', (project) => readCards(project))
@@ -250,10 +269,16 @@ export function registerIpc(): void {
     invalidateToken()
   })
   handle('wechat:set-binding', (category, accountId) => setWechatBinding(category, accountId))
-  handle('wechat:push-draft', ({ project, variant }: { project: string; variant?: string }) =>
-    pushDraft(project, variant === 'night' ? 'night' : 'day')
-  )
-  handle('wechat:push-cards', ({ project }) => pushCards(project))
+  handle('wechat:push-draft', async ({ project, variant }: { project: string; variant?: string }) => {
+    const r = await pushDraft(project, variant === 'night' ? 'night' : 'day')
+    if (r.ok) store.stampExported(project)
+    return r
+  })
+  handle('wechat:push-cards', async ({ project }) => {
+    const r = await pushCards(project)
+    if (r.ok) store.stampExported(project)
+    return r
+  })
   handle('wechat:public-ip', () => getPublicIp())
 
   // ---- 自定义排版主题库（导入 HTML/公众号链接复用排版）----

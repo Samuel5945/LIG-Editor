@@ -300,7 +300,7 @@ export function inlineToMd(content: InlineNode[] | undefined): string {
 const IMG_RE = /^!\[([^\]]*)\]\(([^)]+)\)\s*$/
 const CAPTION_RE = /^<!--\s*caption:\s*(.*?)\s*-->\s*$/
 const FIG_SOURCE_RE = /^<!--\s*figure-source:\s*(.*?)\s*-->\s*$/
-const FIG_SUGGEST_RE = /^<!--\s*fig-suggest:\s*(.*?)\s*-->\s*$/
+export const FIG_SUGGEST_RE = /^<!--\s*fig-suggest:\s*(.*?)\s*-->\s*$/
 const GALLERY_START_RE = /^<!--\s*gallery:\s*([\w-]+)(?:\s+(\d+:\d+))?\s*-->\s*$/
 const GALLERY_END_RE = /^<!--\s*\/gallery\s*-->\s*$/
 const HEADING_RE = /^(#{1,6})\s+(.*)$/
