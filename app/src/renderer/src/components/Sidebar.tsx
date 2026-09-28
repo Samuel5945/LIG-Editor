@@ -5,14 +5,7 @@ import { groupProjectsByCategory } from '@shared/workTree'
 import HoverScrollName from './HoverScrollName'
 import IdeaLibrary from './IdeaLibrary'
 
-const STATUS_LABEL: Record<string, string> = {
-  ideating: '脑暴中',
-  drafting: '撰写中',
-  reviewing: '审阅中',
-  ready: '可发布'
-}
-
-/** 状态圆点配色（树上不再放状态文字药丸——省宽度给工程名，悬停 tooltip 看全称） */
+/** 状态圆点配色（树上不放状态文字/提示——省宽度给工程名，颜色即语义） */
 const STATUS_COLOR: Record<string, string> = {
   ideating: 'bg-sky-400',
   drafting: 'bg-amber-400',
@@ -405,13 +398,10 @@ export default function Sidebar(props: SidebarProps): ReactElement {
                 📅{p.plannedAt.slice(5)}
               </span>
             )}
-            <span
-              className={`h-2 w-2 shrink-0 rounded-full ${STATUS_COLOR[p.status] ?? 'bg-panel-3'}`}
-              title={STATUS_LABEL[p.status] ?? p.status}
-            />
+            <span className={`h-2 w-2 shrink-0 rounded-full ${STATUS_COLOR[p.status] ?? 'bg-panel-3'}`} />
             {/* 悬停动作浮层：绝对定位不占布局宽度——名称永不被挤出，行尾也不再跳动 */}
             <span
-              className={`absolute right-1 hidden items-center gap-0.5 rounded group-hover:flex ${
+              className={`absolute right-1 hidden items-center gap-0.5 rounded px-0.5 group-hover:flex ${
                 isCurrent ? 'bg-panel-3' : 'bg-panel-2'
               }`}
             >
@@ -422,7 +412,7 @@ export default function Sidebar(props: SidebarProps): ReactElement {
                   setRenameVal(p.name)
                 }}
                 title="重命名工程（本地文件夹同步改名）"
-                className="rounded px-1.5 py-0.5 text-ink hover:bg-panel hover:text-accent"
+                className="rounded px-1 py-0.5 text-[11px] text-ink hover:bg-panel hover:text-accent"
               >
                 ✏️
               </button>
@@ -432,7 +422,7 @@ export default function Sidebar(props: SidebarProps): ReactElement {
                   onDeleteProject(p.name)
                 }}
                 title="删除工程"
-                className="rounded px-1.5 py-0.5 text-ink hover:bg-panel hover:text-red-400"
+                className="rounded px-1 py-0.5 text-[11px] text-ink hover:bg-panel hover:text-red-400"
               >
                 🗑
               </button>
