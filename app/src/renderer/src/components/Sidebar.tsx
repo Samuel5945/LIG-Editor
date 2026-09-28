@@ -154,9 +154,14 @@ export default function Sidebar(props: SidebarProps): ReactElement {
     (name: string) => {
       const going = !archived.includes(name)
       setArchived((prev) => (going ? [...prev, name] : prev.filter((n) => n !== name)))
+      // 恢复归档：确保其分类是展开态，工程行立即可见
+      if (!going) {
+        const cat = projects.find((p) => p.name === name)?.category ?? UNCATEGORIZED
+        setOpenCats((prev) => (prev && !prev.includes(cat) ? [...prev, cat] : prev))
+      }
       onToast(going ? '已归档——树尾「已归档」区可找回' : '已恢复到原分类')
     },
-    [archived, onToast]
+    [archived, projects, onToast]
   )
 
   // 批量管理（分类内）：☑ 进入选选模式，行点击=勾选；批量归档/删除
@@ -290,7 +295,9 @@ export default function Sidebar(props: SidebarProps): ReactElement {
     (category?: string) => {
       const name = newName.trim()
       if (!name) return
-      if (category) setOpenCats((prev) => (prev && !prev.includes(category) ? [...prev, category] : prev))
+      // 目标分类（含底部全局新建落「未分类」）若是折叠态，建完自动展开，新工程行立即可见
+      const target = category ?? UNCATEGORIZED
+      setOpenCats((prev) => (prev && !prev.includes(target) ? [...prev, target] : prev))
       setCreatingFor(null)
       setNewName('')
       void onCreateProject(name, category)

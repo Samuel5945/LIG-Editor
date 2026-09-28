@@ -47,9 +47,18 @@ describe('deriveWizardSteps · 文章工程七步', () => {
     expect(firstPendingStep(steps)).toBe(1)
   })
 
-  it('已立项空正文：选题/大纲完成，落成文步', () => {
+  it('手动新建的空工程：选题/大纲未完成，从选题步开始（立项≠已过前两步，要有真内容）', () => {
     const steps = deriveWizardSteps(facts({ hasProject: true }))
-    expect(firstPendingStep(steps)).toBe(2)
+    expect(steps[0].done).toBe(false)
+    expect(steps[1].done).toBe(false)
+    expect(firstPendingStep(steps)).toBe(0)
+  })
+
+  it('已有内容的工程：选题/大纲视为已完成；无占位时配图步也自动完成，落标题封面步', () => {
+    const steps = deriveWizardSteps(facts({ hasProject: true, articleNonEmpty: true }))
+    expect(steps[0].done).toBe(true)
+    expect(steps[1].done).toBe(true)
+    expect(firstPendingStep(steps)).toBe(4)
   })
 
   it('正文非空但有残留占位：成文完成、配图未完成', () => {
@@ -87,11 +96,13 @@ describe('deriveWizardSteps · 贴图工程五步', () => {
     const steps = deriveWizardSteps(facts({ hasProject: true, isCards: true }))
     expect(steps.map((s) => s.id)).toEqual(['ideas', 'outline', 'draft', 'titlecover', 'review'])
     expect(steps[2]).toEqual({ id: 'draft', label: '贴图', done: false })
-    expect(firstPendingStep(steps)).toBe(2)
+    expect(firstPendingStep(steps)).toBe(0)
   })
 
-  it('卡片已生成即贴图步完成', () => {
+  it('卡片已生成即有内容：选题/大纲/贴图完成', () => {
     const steps = deriveWizardSteps(facts({ hasProject: true, isCards: true, cardsCount: 6 }))
+    expect(steps[0].done).toBe(true)
+    expect(steps[1].done).toBe(true)
     expect(steps[2].done).toBe(true)
   })
 })

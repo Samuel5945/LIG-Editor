@@ -37,10 +37,12 @@ export interface WizardFacts {
  * 卡片自带图文无逐图占位，产物即逐张 PNG 无整文导出形态）。
  */
 export function deriveWizardSteps(facts: WizardFacts): WizardStep[] {
-  const draftDone = facts.isCards ? facts.cardsCount > 0 : facts.articleNonEmpty
+  const hasContent = facts.articleNonEmpty || facts.cardsCount > 0
+  const draftDone = hasContent
   const steps: WizardStep[] = [
-    { id: 'ideas', label: '选题', done: facts.outlineProduced || facts.hasProject },
-    { id: 'outline', label: '大纲', done: facts.hasProject },
+    // 选题/大纲只认「真内容」：手动新建的空工程不该被判为已过前两步，向导应从选题开始
+    { id: 'ideas', label: '选题', done: facts.outlineProduced || (facts.hasProject && hasContent) },
+    { id: 'outline', label: '大纲', done: facts.hasProject && hasContent },
     { id: 'draft', label: facts.isCards ? '贴图' : '成文', done: draftDone }
   ]
   if (!facts.isCards) {
