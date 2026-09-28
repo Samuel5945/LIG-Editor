@@ -455,7 +455,16 @@ export default function Sidebar(props: SidebarProps): ReactElement {
                 {checked ? '☑' : '☐'}
               </span>
             )}
-            <span className="min-w-0 flex-1">
+            <span
+              className="min-w-0 flex-1"
+              title={isOpen && !inBatch ? '点击收起' : undefined}
+              onClick={(e) => {
+                // 展开态点标题 = 收起；收起态/批量模式放行给行（打开工程 / 勾选）
+                if (inBatch || !isOpen) return
+                e.stopPropagation()
+                toggleProject(p.name)
+              }}
+            >
               <HoverScrollName name={p.name} />
             </span>
             {isPinned && <span className="shrink-0 text-[10px]" title="已置顶">📌</span>}
