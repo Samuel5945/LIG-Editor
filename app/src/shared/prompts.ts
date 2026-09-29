@@ -29,8 +29,13 @@ export function systemPrompt(skillContent: string | null): string {
 /**
  * 自由对话专用系统提示：在通用提示基础上追加「对话安装 Skill」指令协议（M9 反馈迭代）
  * 模型识别到安装意图时输出 skill-install 指令块，渲染层解析后弹确认卡片落地执行
+ * @param opts.toolsAvailable 本轮有可执行工具时，局部改正文走 patch_article，
+ *        article-update 全文围栏只留给整篇重写——否则两条规则打架，模型每次都重贴全文
  */
-export function freeChatSystemPrompt(skillContent: string | null): string {
+export function freeChatSystemPrompt(
+  skillContent: string | null,
+  opts?: { toolsAvailable?: boolean }
+): string {
   return `${systemPrompt(skillContent)}
 
 每轮用户消息前可能自动附带 <工程上下文>（作者当前打开工程的正文或贴图卡片文案，系统自动附上，不是作者粘贴的）。回答与内容相关的问题时直接参考它，不要说「没看到内容」或让作者再发一遍。
@@ -51,12 +56,12 @@ export function freeChatSystemPrompt(skillContent: string | null): string {
 \`\`\`
 规则：accent 只能是十六进制色值（#rrggbb）或字符串 default（恢复默认色）；贴图工程会重渲染整组贴图，文章工程会给正文排版换色（标题装饰线/引用边线/加粗词颜色，导出与推送同步跟色）；只在用户明确要求换色时输出；一次只输出一个；输出后不要再跟文字，系统会展示确认卡片由用户点击应用。
 
-当作者的工程是文章形态（工程上下文是正文 article.md）且明确要求修改正文（如「给小标题加序号」「把第二段改短」「润色一下」）时，先用一两句话说明改了什么，然后在回复最末尾单独输出指令块，里面是修改后的完整正文：
+当作者的工程是文章形态（工程上下文是正文 article.md）且明确要求修改正文（如「给小标题加序号」「把第二段改短」「润色一下」）时，${opts?.toolsAvailable ? '局部改动（改一句、某段压短、加序号、润色某节）一律改用 patch_article 精准替换（old 取原文里唯一的那一段），不要把全文贴回对话；只有整篇重写或大幅结构调整才用下面的全文指令块' : '先用一两句话说明改了什么，然后在回复最末尾单独输出指令块，里面是修改后的完整正文'}：
 \`\`\`article-update
 # 修改后的完整正文 markdown
 \`\`\`
 规则：
-- 必须基于工程上下文里的正文输出修改后的全文，未改动的段落原样保留，不要只输出改动部分
+- ${opts?.toolsAvailable ? '用全文指令块时必须基于工程上下文输出修改后的整篇正文，未改动的段落原样保留' : '必须基于工程上下文里的正文输出修改后的全文，未改动的段落原样保留，不要只输出改动部分'}
 - 只允许 markdown 子集：# ## ### 标题、段落与 **加粗**、> 引用、--- 分隔线；禁止列表/代码块/斜体/表格/链接
 - 图片行（![…](…)）和注释行（<!-- caption/figure-source/gallery/fig-suggest … -->）逐字保留在原位置，不得增删改
 - 只在用户明确要求修改正文时输出；讨论、提建议、问意见都不算；一次只输出一个指令块

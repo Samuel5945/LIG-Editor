@@ -9,7 +9,7 @@ import type {
   ToolCallInfo,
   WebSearchResult
 } from '@shared/types'
-import { buildToolSchemas, parseTextToolCalls } from '@shared/llmText'
+import { buildToolSchemas, parseTextToolCalls, toolsInventory } from '@shared/llmText'
 import { extractInlineContent, parseSkillDirective } from '@shared/skillInstall'
 import { cardsPlainText, parseAccentDirective } from '@shared/cards'
 import { parseArticleUpdate } from '@shared/articleUpdate'
@@ -59,19 +59,48 @@ const TOOL_LABELS: Record<string, string> = {
   push_cards: '推送贴图草稿'
 }
 
-/** 工具清单模块级缓存（静态）与不支持 tools 参数的供应商记忆（会话内降级） */
+/** 工具注册表缓存（静态，与供应商无关）+ 按「baseUrl|模型」记忆原生 tools 参数不被接受。
+ *  两件事必须分开：模型不接受原生 tools ≠ 没有工具——文本协议（围栏/XML 标签）照样由本渲染层执行，
+ *  所以清单仍要写进系统提示。早先是一个全局布尔，任何报错就把工具整体关掉且界面毫无提示
+ *  （「导出 word」模型看不见 export_docx、于是把全文贴回对话，就是这么来的） */
 let cachedChatTools: ChatToolSchema[] | null = null
-let chatToolsUnsupported = false
+let nativeToolsRejected = ''
 
-async function getChatTools(): Promise<ChatToolSchema[]> {
-  if (chatToolsUnsupported) return []
+/** 当前文本模型标识：原生工具支持按它记忆，换供应商/换模型自动重新试探 */
+async function currentModelKey(): Promise<string> {
+  try {
+    const s = await window.api.invoke('settings:getLlm')
+    const p = s.providers.find((x: { id: string }) => x.id === s.textProviderId)
+    return p ? `${p.baseUrl}|${p.textModel}` : 'unknown'
+  } catch {
+    return 'unknown'
+  }
+}
+
+/** 工具清单（发给 API 的原生 tools 参数用；文本协议模式下同样靠它生成提示里的名单） */
+async function getToolRegistry(): Promise<ChatToolSchema[]> {
   if (cachedChatTools) return cachedChatTools
   try {
     cachedChatTools = buildToolSchemas(await window.api.invoke('agent:listTools'))
   } catch {
-    chatToolsUnsupported = true
+    // 取不到清单（主进程异常等）就当没有工具，本轮纯文本
   }
   return cachedChatTools ?? []
+}
+
+/** 该模型是否还能发原生 tools */
+function nativeToolsFor(all: ChatToolSchema[], modelKey: string): ChatToolSchema[] {
+  return nativeToolsRejected && nativeToolsRejected === modelKey ? [] : all
+}
+
+/** 供应商拒绝 tools 参数（报错带 tool 字样）：只记当前这个模型 */
+function markNativeToolsRejected(modelKey: string): void {
+  nativeToolsRejected = modelKey
+}
+
+/** 清掉降级记忆重新试探（界面标记点击用） */
+function resetNativeTools(): void {
+  nativeToolsRejected = ''
 }
 
 function safeParseArgs(argsJson: string): Record<string, unknown> {
@@ -101,8 +130,8 @@ function summarizeToolResult(r: { ok: boolean; result?: unknown; error?: string 
 }
 
 /** 工具守则：注入系统提示（当前工程 + 补丁优先 + 一次一个工具 + 围栏降级协议） */
-function toolsGuardrail(project: string | null): string {
-  return `\n\n<工具守则>\n${project ? `当前工程：「${project}」，涉及它的操作默认对它执行，但每个调用仍要显式带上 project=「${project}」。` : '当前未打开工程：需要工程参数时先 list_projects 查询，或先 create_project 立项再用它返回的工程名；写入类工具（write_article / patch_article / set_titles 等）一律要显式带 project，省略即失败。'}\n改正文优先用 patch_article（patches 传数组：[{"old":"原文唯一片段","new":"替换后文本"}]，old 须与正文逐字一致且全文唯一）；仅在整体重写时用 write_article（必须同时带 project 与 content），且写前先读原文。\n一次只调用一个工具，等结果返回再决定下一步；结论要基于工具结果而非猜测。\n用户想把你脑暴/撰写的内容落成工程：create_project（起简洁工程名）→ write_article 写入全文，完成后明确告知用户已落到哪个工程；只想存选题灵感时用 save_ideas。\n工具结果未确认成功前，不得声称已完成写入；工具失败时按返回的原因改正参数再试一次，仍失败就如实说明哪一步没做成、需要用户补什么，不得说「已完成」。\n若无法原生调用工具，改用文本协议发起（每次一个）：\n\`\`\`tool-call\n{"name": "工具名", "arguments": { 参数 }}\n\`\`\`\n或 <tool_call><function=工具名><parameter=参数名>值（可多行）</parameter></function></tool_call>。\n</工具守则>`
+function toolsGuardrail(project: string | null, tools: ChatToolSchema[]): string {
+  return `\n\n<工具守则>\n${project ? `当前工程：「${project}」，涉及它的操作默认对它执行，但每个调用仍要显式带上 project=「${project}」。` : '当前未打开工程：需要工程参数时先 list_projects 查询，或先 create_project 立项再用它返回的工程名；写入类工具（write_article / patch_article / set_titles 等）一律要显式带 project，省略即失败。'}\n改正文优先用 patch_article（patches 传数组：[{"old":"原文唯一片段","new":"替换后文本"}]，old 须与正文逐字一致且全文唯一）；新写的整篇文章落成正文用 write_article（必须同时带 project 与 content），写前先读原文；已有正文的局部改动只用 patch_article，整篇重写或大幅调整走 article-update 围栏由作者在确认卡片里应用。\n一次只调用一个工具，等结果返回再决定下一步；结论要基于工具结果而非猜测。${toolsInventory(tools)}\n用户想把你脑暴/撰写的内容落成工程：create_project（起简洁工程名）→ write_article 写入全文，完成后明确告知用户已落到哪个工程；只想存选题灵感时用 save_ideas。\n工具结果未确认成功前，不得声称已完成写入；工具失败时按返回的原因改正参数再试一次，仍失败就如实说明哪一步没做成、需要用户补什么，不得说「已完成」。\n若无法原生调用工具，改用文本协议发起（每次一个）：\n\`\`\`tool-call\n{"name": "工具名", "arguments": { 参数 }}\n\`\`\`\n或 <tool_call><function=工具名><parameter=参数名>值（可多行）</parameter></function></tool_call>。\n</工具守则>`
 }
 
 /** 经主进程执行单个工具，返回给模型的文本结果（成功给内容/失败给原因） */
@@ -191,6 +220,9 @@ export default function ChatPanel({
   const [webOn, setWebOn] = useState(false)
   const [ctxOn, setCtxOn] = useState(true)
   const [searching, setSearching] = useState(false)
+  // 工具通路：native=原生 tools / text=模型拒收原生参数，改走文本协议（工具照样能执行）
+  // / none=拿不到工具清单。降级必须看得见，否则会表现为「模型有工具却没用」
+  const [toolMode, setToolMode] = useState<'native' | 'text' | 'none'>('native')
   const [cards, setCards] = useState<Record<number, InstallCard>>({})
   // 换强调色确认卡状态（按 assistant 消息索引挂卡）
   const [accentCards, setAccentCards] = useState<Record<number, 'applying' | 'done' | 'error'>>({})
@@ -500,8 +532,18 @@ export default function ChatPanel({
       // 发完清附件
       setAttachImages([])
       setAttachDocs([])
+      // 工具通路先确定：清单永远写进系统提示（走文本协议的模型看不见原生 tools，只靠提示知道有哪些工具），
+      // 原生 tools 参数则按模型支持情况裁剪
+      const modelKey = await currentModelKey()
+      const registry = await getToolRegistry()
+      const native = nativeToolsFor(registry, modelKey)
+      setToolMode(registry.length === 0 ? 'none' : native.length === 0 ? 'text' : 'native')
       const api: ChatMessage[] = [
-        { role: 'system', content: freeChatSystemPrompt(skill) + toolsGuardrail(project) },
+        {
+          role: 'system',
+          content:
+            freeChatSystemPrompt(skill, { toolsAvailable: registry.length > 0 }) + toolsGuardrail(project, registry)
+        },
         ...messages,
         apiUser
       ]
@@ -538,7 +580,6 @@ export default function ChatPanel({
       // 最后一轮的文本提升到 try 外：失败落盘（保留现场）时 catch 里也能拿到
       let lastText = ''
       try {
-        const tools = await getChatTools()
         let forceTextOnly = false
         let toolFails = 0
         // 本轮各工具的最后一次结果（同名工具以最后一次为准，改对了就不算失败）：
@@ -546,8 +587,8 @@ export default function ChatPanel({
         const outcomes = new Map<string, boolean>()
         for (let round = 0; round < TOOL_ROUNDS_MAX; round++) {
           // 最后一轮不给工具：到达上限时模型只能文字总结；连续失败后也强制文字收尾
-          const useTools = tools.length > 0 && !forceTextOnly && round < TOOL_ROUNDS_MAX - 1
-          const { promise, abort } = chatOnceWithTools(history, { tools: useTools ? tools : undefined, onDelta })
+          const useTools = native.length > 0 && !forceTextOnly && round < TOOL_ROUNDS_MAX - 1
+          const { promise, abort } = chatOnceWithTools(history, { tools: useTools ? native : undefined, onDelta })
           abortRef.current = abort
           const res = await promise
           // 非原生路径：部分供应商不支持 tools 参数，模型以文本协议（XML 标签 / ```tool-call 围栏）发起调用——收编执行
@@ -618,8 +659,11 @@ export default function ChatPanel({
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
         setError(msg)
-        // 供应商不支持 tools 参数（报错带 tool 字样）：记住降级，后续回纯文本/围栏模式
-        if (/tool/i.test(msg)) chatToolsUnsupported = true
+        // 供应商拒收 tools 参数（报错带 tool 字样）：只记当前这个模型，工具转文本协议
+        if (/tool/i.test(msg)) {
+          markNativeToolsRejected(modelKey)
+          setToolMode(registry.length ? 'text' : 'none')
+        }
         // 失败也落盘：保留现场供取证 + 已生成的部分文本
         if (lastText) {
           try {
@@ -638,6 +682,14 @@ export default function ChatPanel({
 
   const abort = useCallback(() => abortRef.current?.(), [])
 
+  /** 降级标记的重新试探：供应商支持是逐模型的，别把一次失败变成长期失能 */
+  const reprobeTools = useCallback(async () => {
+    resetNativeTools()
+    const registry = await getToolRegistry()
+    setToolMode(registry.length ? 'native' : 'none')
+    onToast(registry.length ? `下一轮重新试探原生 tools（${registry.length} 个工具）` : '取不到工具清单，对话仍是纯文本')
+  }, [onToast])
+
   // ---- 渲染 ----
 
   return (
@@ -653,6 +705,23 @@ export default function ChatPanel({
         >
           ⧉ 临时
         </button>
+        {toolMode !== 'native' && (
+          <button
+            onClick={() => void reprobeTools()}
+            title={
+              toolMode === 'text'
+                ? '当前模型不收原生 tools 参数：工具改由文本协议发起，功能不受影响。点这里重新试探原生调用'
+                : '没取到工具清单（主进程异常？）：本轮只能纯文本。点这里重试'
+            }
+            className={`shrink-0 whitespace-nowrap rounded px-1.5 py-1 ${
+              toolMode === 'text'
+                ? 'bg-amber-500/15 text-amber-400 hover:bg-amber-500/25'
+                : 'bg-red-500/15 text-red-400 hover:bg-red-500/25'
+            }`}
+          >
+            {toolMode === 'text' ? '⚙ 文本协议' : '⚠ 工具不可用'}
+          </button>
+        )}
         <select
           value={sessionId ?? ''}
           onChange={(e) => (e.target.value ? loadSession(e.target.value) : newSession())}

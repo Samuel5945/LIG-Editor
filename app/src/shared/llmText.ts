@@ -125,6 +125,18 @@ export function parseTextToolCalls(text: string): { calls: { name: string; argum
   return { calls: [...xml.calls, ...fence.calls], cleaned: fence.cleaned }
 }
 
+/** 工具名单写进系统提示：走文本协议的模型收不到原生 tools schema，这是它获知「有哪些工具」的唯一途径。
+ *  曾因此出过一次事故：模型看不见 export_docx，用户说「导出 word」它就把全文贴回对话 */
+export function toolsInventory(tools: ChatToolSchema[]): string {
+  if (!tools.length) return ''
+  const brief = tools.map((t) => {
+    const d = t.function.description.split(/[：:（(。；;]/)[0].trim()
+    return `${t.function.name} ${d.slice(0, 24)}`
+  })
+  return `可用工具（名字 → 用途）：${brief.join(' / ')}。
+凡是这些工具能做的事（改正文、写正文、排版、配图生图、设封面、导出、推送）都必须发起工具调用来完成，不能凭上下文里的正文自己复述——用户要 Word/HTML 时调 export_docx/export_html 并把返回的文件路径原样告知，绝不要把正文贴回对话代替文件。`
+}
+
 /** 数组型入参归一（工具侧用）：模型经常把数组写成 JSON 字符串（文本协议必然如此，原生调用也常见），
  *  或只给一个对象当单项。能救的一律救成数组；救不动时把期望形状写进报错，让模型一次改对而不是反复瞎试 */
 export function coerceArrayArg(value: unknown, key: string, example: string): unknown[] {
