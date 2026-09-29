@@ -366,6 +366,9 @@ export default function TitleCoverPanel({
         </div>
       )}
 
+      {/* 贴图工程只要标题不要封面：封面区（模板直出/AI 生图/导入裁剪）整块隐藏 */}
+      {meta.format !== 'cards' && (
+      <>
       {/* ---- 封面：两条产出路径，出口相同（assets/cover-235.png 与 cover-11.png） ---- */}
       <h3 className="mb-2 text-sm font-bold text-ink">封面图</h3>
       {meta.cover && (
@@ -544,6 +547,8 @@ export default function TitleCoverPanel({
             {saving ? '保存中…' : '保存两种封面'}
           </button>
         </div>
+      )}
+      </>
       )}
     </div>
   )

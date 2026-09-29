@@ -147,7 +147,8 @@ export default function CreationWizard({
     articleHasBody: article.split(/\r?\n/).filter((l) => l.trim()).length > 1,
     cardsCount: hasCards ? 1 : 0,
     figSuggestCount: figSuggestions.length,
-    hasCover: !!meta?.cover?.main,
+    // 贴图工程只要标题不要封面：该步完成判定改为「已有标题候选」
+    hasCover: isCards ? (meta?.titles?.length ?? 0) > 0 : !!meta?.cover?.main,
     hasReview: reviewExists,
     hasExport: !!meta?.lastExportAt
   }

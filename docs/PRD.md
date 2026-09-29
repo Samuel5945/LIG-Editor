@@ -393,7 +393,8 @@ Agent 文件通道由此从暗箱变明箱：外部改了 `figures/*.html`，树
   沿用原右栏三面板模式，向导卸载兜底 abort）
 - **完成状态全部事实推导**（`shared/wizardProgress.ts` 纯函数，渲染现算、零持久化向导状态）：
   成文=正文非空 / 配图=fig-suggest 占位清零（替换或删除都算已处理，正文存在为前提）/
-  封面=`meta.cover.main` 存在 / 审阅=`review.md`（贴图 `cards-review.md`）存在 /
+  封面=`meta.cover.main` 存在（贴图工程只要标题不要封面，改判「已有标题候选」且封面区隐藏）/
+  审阅=`review.md`（贴图 `cards-review.md`）存在 /
   导出=`meta.lastExportAt` 存在（新增字段，**readMeta 白名单同步透传**；主进程在
   `export:html/copyRich/docx/pdf`、`wechat:push-draft/push-cards` 六个成功点盖章，
   走 `writeTracked` 不盖 `updated_at`，避免扰动工作树「最近编辑」排序）。
