@@ -592,3 +592,13 @@ export async function callTool(name: string, args: Record<string, unknown>): Pro
   if (!tool) throw new Error(`未知工具：${name}`)
   return tool.handler(args ?? {})
 }
+
+/** 对话副驾驶可执行工具清单（chat-tools v1）：排除提示词返回类——
+ *  那批工具专为无头外部 Agent 设计（返回提示词、调用方自带模型），内部对话有自己的界面流 */
+export function listExecTools(): { name: string; description: string; parameters: unknown }[] {
+  return TOOLS.filter((t) => !t.name.endsWith('_prompt')).map((t) => ({
+    name: t.name,
+    description: t.description,
+    parameters: t.inputSchema
+  }))
+}

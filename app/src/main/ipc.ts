@@ -23,6 +23,7 @@ import { listCustomThemes, saveCustomTheme, deleteCustomTheme, fetchUrlHtml } fr
 import { listCategoryPresets, saveCategoryPreset } from './categoryPresetStore'
 import { openMdFile } from './projectStore'
 import { checkForUpdate, dismissVersion } from './updateChecker'
+import { callTool, listExecTools } from './capabilityCore'
 
 /** 类型安全的 handle 注册：通道名与出入参由 IpcApi 单一来源约束 */
 function handle<C extends keyof IpcApi>(
@@ -192,6 +193,16 @@ export function registerIpc(): void {
   handle('skill:resolve', (directive) => resolveSkillInstall(directive))
   handle('skill:installResolved', (name, content) => saveSkill(name, content))
   handle('mcp:accessCard', () => buildAccessCard())
+  // ---- 对话副驾驶工具调用（chat-tools v1）：能力核工具暴露给内部对话 ----
+  handle('agent:listTools', () => listExecTools())
+  handle('agent:callTool', async (name: string, args: Record<string, unknown>) => {
+    try {
+      return { ok: true, result: await callTool(name, args) }
+    } catch (err) {
+      // 错误不抛：作为 tool 结果回传给模型，由它自行解释或换路
+      return { ok: false, error: err instanceof Error ? err.message : String(err) }
+    }
+  })
 
   handle('project:saveAsset', (project, relPath, base64) => store.saveAsset(project, relPath, base64))
   handle('cover:renderTemplate', (args) => renderCoverTemplate(args.project, args))

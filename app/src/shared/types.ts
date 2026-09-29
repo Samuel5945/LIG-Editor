@@ -254,10 +254,28 @@ export type ContentPart =
   | { type: 'text'; text: string }
   | { type: 'image_url'; image_url: { url: string } }
 
+/** 模型发起的工具调用（流式碎片累积后的完整形状，function calling） */
+export interface ToolCallInfo {
+  id: string
+  name: string
+  /** JSON 字符串形式的调用参数 */
+  arguments: string
+}
+
+/** 对话工具的 OpenAI function 格式 schema（capabilityCore 的 inputSchema 映射而来） */
+export interface ChatToolSchema {
+  type: 'function'
+  function: { name: string; description: string; parameters: unknown }
+}
+
 export interface ChatMessage {
-  role: 'system' | 'user' | 'assistant'
+  role: 'system' | 'user' | 'assistant' | 'tool'
   /** 纯文本 或 多模态片段数组（含图片时走 OpenAI vision 格式） */
   content: string | ContentPart[]
+  /** assistant 消息携带的工具调用；对应结果以 role:'tool' 消息回填（chat-tools v1） */
+  tool_calls?: { id: string; type: 'function'; function: { name: string; arguments: string } }[]
+  /** role='tool' 消息对应的 tool_calls 项 id */
+  tool_call_id?: string
 }
 
 export interface LlmTestResult {
@@ -490,8 +508,8 @@ export interface IpcApi {
   'settings:setLlm': (settings: LlmSettings) => void
   /** 用给定配置试连（不要求先保存） */
   'llm:test': (provider: ProviderConfig) => LlmTestResult
-  /** 发起流式对话；增量通过 llm:stream 事件推送 */
-  'llm:chatStart': (requestId: string, messages: ChatMessage[]) => void
+  /** 发起流式对话；增量通过 llm:stream 事件推送。options.tools 非空时走 function calling */
+  'llm:chatStart': (requestId: string, messages: ChatMessage[], options?: { tools?: ChatToolSchema[] }) => void
   'llm:abort': (requestId: string) => void
   /** 拉取供应商可用模型列表（GET /v1/models） */
   'llm:fetchModels': (provider: ProviderConfig) => FetchModelsResult
@@ -515,6 +533,11 @@ export interface IpcApi {
   'skill:installResolved': (name: string, content: string) => string
   /** 生成外部 Agent 一键接入配置（Codex/Qoder 片段） */
   'mcp:accessCard': () => McpAccessCard
+  // ---- 对话副驾驶工具调用（chat-tools v1）----
+  /** 可执行工具清单（排除提示词返回类），OpenAI function 格式参数由渲染层映射 */
+  'agent:listTools': () => { name: string; description: string; parameters: unknown }[]
+  /** 执行对话工具：错误不抛，转 { ok:false, error } 由渲染层作为 tool 结果回传给模型 */
+  'agent:callTool': (name: string, args: Record<string, unknown>) => { ok: boolean; result?: unknown; error?: string }
   /** 保存二进制资产（base64）到工程相对路径，返回相对路径 */
   'project:saveAsset': (project: string, relPath: string, base64: string) => string
   /**
@@ -608,8 +631,8 @@ export interface IpcEvents {
   'md:open-request': { absPath: string }
   /** 流式对话增量片段 */
   'llm:stream': { requestId: string; delta: string }
-  /** 流式对话结束；error 非空表示异常终止 */
-  'llm:done': { requestId: string; error?: string }
+  /** 流式对话结束；error 非空表示异常终止。toolCalls 非空 = 模型发起了工具调用，等待渲染层执行后回填下一轮 */
+  'llm:done': { requestId: string; error?: string; toolCalls?: ToolCallInfo[] }
   /** figures/*.html 被外部修改后自动重渲染完成；png 为新图相对路径 */
   'figure:rendered': { project: string; html: string; png: string }
   /** 左栏工作树监听的工程内资产有增删改（Agent 直改/导入等）；渲染层刷新该工程资产节点 */

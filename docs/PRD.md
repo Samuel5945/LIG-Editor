@@ -462,6 +462,8 @@ Word（`docx`）与 PDF（`printToPDF`）落工程内 `交付/`，用于对外�
 
 ### 10.2 MCP 工具面（当前 25 个）
 
+> **chat-tools v1（2026-09-29，滚动补记）**：内部对话副驾驶已接入工具调用——排除 5 个 `*_prompt` 后的 **20 个工具**以 function calling 暴露给对话模型（`agent:listTools` / `agent:callTool`），三层确认（读类静默 / 写类结果卡 / 推送确认卡），供应商不支持 tools 参数时自动降级回围栏协议。规格见 `docs/superpowers/specs/2026-09-29-chat-tools-design.md`。
+
 **关键设计变更**：v1.0 设想的 `brainstorm_topics / generate_article / review_article / generate_titles` 由应用代跑 LLM，实际改为 **`*_prompt` 返回提示词消息组、本应用不代跑 LLM**——外部 Agent 用它自己的模型跑，再调落盘工具写入。理由：Agent 侧模型更强且已有配额，避免把 API Key 与计费绑到编辑器上；同时提示词里已注入当前正文与风格 Skill，Agent 无需自行拼装上下文。
 
 ```

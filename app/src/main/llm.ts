@@ -1,5 +1,6 @@
 import { net } from 'electron'
 import type { ChatMessage, FetchModelsResult, LlmTestResult, ModelInfo, ProviderConfig } from '@shared/types'
+import { accumulateToolCalls } from '@shared/llmText'
 import { knownImageModels } from '@shared/providerSites'
 import { broadcast } from './ipc'
 import { getTextProvider } from './settingsStore'
@@ -135,8 +136,12 @@ export async function chatComplete(messages: ChatMessage[], timeoutMs = 300_000)
   return reply
 }
 
-/** 发起流式对话：增量经 llm:stream 广播，结束发 llm:done */
-export async function chatStart(requestId: string, messages: ChatMessage[]): Promise<void> {
+/** 发起流式对话：增量经 llm:stream 广播，结束发 llm:done。options.tools 非空时走 function calling */
+export async function chatStart(
+  requestId: string,
+  messages: ChatMessage[],
+  options?: { tools?: { type: 'function'; function: { name: string; description: string; parameters: unknown } }[] }
+): Promise<void> {
   const provider = getTextProvider()
   if (!provider) {
     broadcast('llm:done', { requestId, error: '未配置模型供应商，请先在「模型接入」中设置' })
@@ -145,11 +150,17 @@ export async function chatStart(requestId: string, messages: ChatMessage[]): Pro
 
   const ctrl = new AbortController()
   activeRequests.set(requestId, ctrl)
+  const toolAcc: { id: string; name: string; arguments: string }[] = []
   try {
     const res = await net.fetch(chatUrl(provider.baseUrl), {
       method: 'POST',
       headers: authHeaders(provider.apiKey),
-      body: JSON.stringify({ model: provider.textModel, messages, stream: true }),
+      body: JSON.stringify({
+        model: provider.textModel,
+        messages,
+        stream: true,
+        ...(options?.tools?.length ? { tools: options.tools, tool_choice: 'auto' } : {})
+      }),
       signal: ctrl.signal
     })
     if (!res.ok || !res.body) {
@@ -171,15 +182,24 @@ export async function chatStart(requestId: string, messages: ChatMessage[]): Pro
         if (line.startsWith('data:')) line = line.slice(5).trim()
         if (!line || line === '[DONE]') continue
         try {
-          const json = JSON.parse(line) as { choices?: { delta?: { content?: string } }[] }
+          const json = JSON.parse(line) as {
+            choices?: { delta?: { content?: string; tool_calls?: { index?: number; id?: string; function?: { name?: string; arguments?: string } }[] } }[]
+          }
           const delta = json.choices?.[0]?.delta?.content
           if (delta) broadcast('llm:stream', { requestId, delta })
+          const tcs = json.choices?.[0]?.delta?.tool_calls
+          if (tcs?.length) accumulateToolCalls(toolAcc, tcs)
         } catch {
           // 非 JSON 心跳行，忽略
         }
       }
     }
-    broadcast('llm:done', { requestId })
+    broadcast('llm:done', {
+      requestId,
+      toolCalls: toolAcc.length
+        ? toolAcc.map((t, i) => ({ id: t.id || `call_${i}`, name: t.name, arguments: t.arguments || '{}' }))
+        : undefined
+    })
   } catch (err) {
     if (ctrl.signal.aborted) {
       broadcast('llm:done', { requestId, error: '已中止' })

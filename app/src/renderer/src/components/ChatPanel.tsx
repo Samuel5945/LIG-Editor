@@ -2,15 +2,18 @@ import { useCallback, useEffect, useRef, useState, type ReactElement } from 'rea
 import type {
   ChatMessage,
   ChatSessionMeta,
+  ChatToolSchema,
   ContentPart,
   SkillInstallDirective,
   SkillResolveResult,
+  ToolCallInfo,
   WebSearchResult
 } from '@shared/types'
+import { buildToolSchemas } from '@shared/llmText'
 import { extractInlineContent, parseSkillDirective } from '@shared/skillInstall'
 import { cardsPlainText, parseAccentDirective } from '@shared/cards'
 import { parseArticleUpdate } from '@shared/articleUpdate'
-import { chatOnce } from '../copilot/llm'
+import { chatOnceWithTools } from '../copilot/llm'
 import { chatContext, freeChatSystemPrompt, webContext } from '../copilot/prompts'
 import { extractFileText } from '../copilot/material'
 import { parseAccentIntent } from '@shared/accentIntent'
@@ -19,6 +22,111 @@ import { parseAccentIntent } from '@shared/accentIntent'
 function contentText(content: string | ContentPart[]): string {
   if (typeof content === 'string') return content
   return content.filter((p) => p.type === 'text').map((p) => (p as { type: 'text'; text: string }).text).join('')
+}
+
+// ---- chat-tools v1：对话副驾驶工具调用 ----
+
+const PUSH_TOOLS = ['push_draft', 'push_cards']
+const TOOL_ROUNDS_MAX = 6
+
+interface ToolCardState {
+  name: string
+  argsSummary: string
+  status: 'running' | 'done' | 'error'
+  result?: string
+}
+
+const TOOL_LABELS: Record<string, string> = {
+  list_projects: '查询工程列表',
+  create_project: '新建工程',
+  set_project_category: '迁移工程分类',
+  get_project: '读取工程',
+  read_article: '读取正文',
+  write_article: '覆写正文',
+  patch_article: '修改正文',
+  save_ideas: '保存选题',
+  save_review: '写入审阅报告',
+  set_titles: '写入标题候选',
+  set_theme: '调整排版参数',
+  render_figure: '渲染图表',
+  generate_image: 'AI 生图',
+  import_image: '导入图片',
+  set_cover: '设置封面',
+  schedule_set: '设置排期',
+  export_html: '导出 HTML',
+  export_docx: '导出 Word',
+  push_draft: '推送公众号草稿',
+  push_cards: '推送贴图草稿'
+}
+
+/** 工具清单模块级缓存（静态）与不支持 tools 参数的供应商记忆（会话内降级） */
+let cachedChatTools: ChatToolSchema[] | null = null
+let chatToolsUnsupported = false
+
+async function getChatTools(): Promise<ChatToolSchema[]> {
+  if (chatToolsUnsupported) return []
+  if (cachedChatTools) return cachedChatTools
+  try {
+    cachedChatTools = buildToolSchemas(await window.api.invoke('agent:listTools'))
+  } catch {
+    chatToolsUnsupported = true
+  }
+  return cachedChatTools ?? []
+}
+
+function safeParseArgs(argsJson: string): Record<string, unknown> {
+  try {
+    return JSON.parse(argsJson || '{}') as Record<string, unknown>
+  } catch {
+    return {}
+  }
+}
+
+/** 参数摘要：一行键值串塞进工具卡 */
+function argsSummary(argsJson: string): string {
+  const args = safeParseArgs(argsJson)
+  const keys = Object.keys(args)
+  if (!keys.length) return ''
+  return keys
+    .map((k) => `${k}: ${String(args[k]).slice(0, 40)}`)
+    .join(' · ')
+    .slice(0, 120)
+}
+
+/** 工具结果摘要：成功给内容片段，失败给原因（超长截断，完整结果可展开） */
+function summarizeToolResult(r: { ok: boolean; result?: unknown; error?: string }): string {
+  if (!r.ok) return `失败：${r.error ?? '未知错误'}`
+  const s = typeof r.result === 'string' ? r.result : JSON.stringify(r.result)
+  return s || '（无返回内容）'
+}
+
+/** 工具守则：注入系统提示（当前工程 + 补丁优先 + 一次一个工具） */
+function toolsGuardrail(project: string | null): string {
+  return `\n\n<工具守则>\n${project ? `当前工程：「${project}」，涉及它的操作默认对它执行。` : '当前未打开工程；需要工程参数时先 list_projects 查询。'}\n改正文优先用 patch_article（old/new 精准替换）；仅在整体重写时用 write_article，且写前先读原文。\n一次只调用一个工具，等结果返回再决定下一步；结论要基于工具结果而非猜测。\n</工具守则>`
+}
+
+/** 经主进程执行单个工具，返回给模型的文本结果（成功给内容/失败给原因） */
+async function runToolCall(tc: ToolCallInfo): Promise<string> {
+  const r = await window.api.invoke('agent:callTool', tc.name, safeParseArgs(tc.arguments))
+  return summarizeToolResult(r)
+}
+
+/** 工具调用卡：进行中转圈 / 完成 ✓ / 失败 ✗，可展开看完整结果 */
+function ToolCardView({ card }: { card: ToolCardState }): ReactElement {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="max-w-[90%] rounded border border-panel-3 bg-panel-2 px-2 py-1 text-[11px]">
+      <button onClick={() => setOpen((v) => !v)} className="flex w-full items-center gap-1.5 text-left">
+        <span>{card.status === 'running' ? '⏳' : card.status === 'done' ? '✅' : '✗'}</span>
+        <span className="shrink-0 text-ink">{TOOL_LABELS[card.name] ?? card.name}</span>
+        {card.argsSummary && <span className="min-w-0 flex-1 truncate text-ink-dim">{card.argsSummary}</span>}
+        <span className={`shrink-0 text-ink-dim transition-transform ${open ? 'rotate-90' : ''}`}>▸</span>
+      </button>
+      {open && card.result && (
+        <p className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-all text-ink-dim">{card.result}</p>
+      )}
+    </div>
+  )
 }
 
 interface ChatPanelProps {
@@ -88,6 +196,10 @@ export default function ChatPanel({
   const [accentCards, setAccentCards] = useState<Record<number, 'applying' | 'done' | 'error'>>({})
   // 修改正文确认卡状态（按 assistant 消息索引挂卡）
   const [articleCards, setArticleCards] = useState<Record<number, 'done'>>({})
+  // 工具调用卡（chat-tools v1，按 assistant 气泡索引挂卡）+ 推送确认卡
+  const [toolCards, setToolCards] = useState<Record<number, ToolCardState[]>>({})
+  const toolCardsRef = useRef<Record<number, ToolCardState[]>>({})
+  const [pushConfirm, setPushConfirm] = useState<{ tool: string; summary: string; resolve: (ok: boolean) => void } | null>(null)
   // 附件：图片（dataURL 走 vision）+ 文档（提取文本拼入消息）
   const [attachImages, setAttachImages] = useState<{ name: string; dataUrl: string }[]>([])
   const [attachDocs, setAttachDocs] = useState<{ name: string; text: string }[]>([])
@@ -113,6 +225,9 @@ export default function ChatPanel({
     setCards({})
     setAccentCards({})
     setArticleCards({})
+    setToolCards({})
+    toolCardsRef.current = {}
+    setPushConfirm(null)
     sessionCreatedRef.current = null
     refreshSessions()
   }, [project, refreshSessions])
@@ -123,6 +238,9 @@ export default function ChatPanel({
     setCards({})
     setAccentCards({})
     setArticleCards({})
+    setToolCards({})
+    toolCardsRef.current = {}
+    setPushConfirm(null)
     sessionCreatedRef.current = null
   }, [])
 
@@ -150,6 +268,9 @@ export default function ChatPanel({
       setCards({})
       setAccentCards({})
       setArticleCards({})
+      setToolCards({})
+      toolCardsRef.current = {}
+      setPushConfirm(null)
       sessionCreatedRef.current = s.created_at
     },
     [project]
@@ -367,24 +488,92 @@ export default function ChatPanel({
       setAttachImages([])
       setAttachDocs([])
       const api: ChatMessage[] = [
-        { role: 'system', content: freeChatSystemPrompt(skill) },
+        { role: 'system', content: freeChatSystemPrompt(skill) + toolsGuardrail(project) },
         ...messages,
         apiUser
       ]
-      const { promise, abort } = chatOnce(api, (full) => {
-        setMessages([...display, { role: 'assistant', content: full }])
-      })
-      abortRef.current = abort
+      // 工具循环（chat-tools v1）：读类静默 / 写类结果卡 / 推送确认卡；最多 TOOL_ROUNDS_MAX 轮
+      const bubbleIdx = display.length
+      const history = [...api]
+      const onDelta = (full: string): void => {
+        setMessages([...display, { role: 'assistant', content: full } as ChatMessage])
+      }
+      const addToolCard = (tc: ToolCallInfo): number => {
+        const list = toolCardsRef.current[bubbleIdx] ?? []
+        const idx = list.length
+        const next = {
+          ...toolCardsRef.current,
+          [bubbleIdx]: [...list, { name: tc.name, argsSummary: argsSummary(tc.arguments), status: 'running' as const }]
+        }
+        toolCardsRef.current = next
+        setToolCards(next)
+        return idx
+      }
+      const finishToolCard = (idx: number, ok: boolean, summary: string): void => {
+        const list = [...(toolCardsRef.current[bubbleIdx] ?? [])]
+        list[idx] = { ...list[idx], status: ok ? 'done' : 'error', result: summary.slice(0, 800) }
+        const next = { ...toolCardsRef.current, [bubbleIdx]: list }
+        toolCardsRef.current = next
+        setToolCards(next)
+      }
+      const requestPushConfirm = (tc: ToolCallInfo): Promise<boolean> =>
+        new Promise<boolean>((resolve) => {
+          setPushConfirm({ tool: tc.name, summary: argsSummary(tc.arguments), resolve })
+        })
+
+      abortRef.current = null
       try {
-        const full = await promise
-        const all = [...display, { role: 'assistant', content: full } as ChatMessage]
+        const tools = await getChatTools()
+        let finalText = ''
+        for (let round = 0; round < TOOL_ROUNDS_MAX; round++) {
+          // 最后一轮不给工具：到达上限时模型只能文字总结
+          const useTools = tools.length > 0 && round < TOOL_ROUNDS_MAX - 1
+          const { promise, abort } = chatOnceWithTools(history, { tools: useTools ? tools : undefined, onDelta })
+          abortRef.current = abort
+          const res = await promise
+          finalText = res.text
+          if (!res.toolCalls?.length) break
+          // 模型要调工具：assistant(tool_calls) 入 API 历史，逐个按确认分层执行
+          history.push({
+            role: 'assistant',
+            content: res.text || '',
+            tool_calls: res.toolCalls.map((t) => ({
+              id: t.id,
+              type: 'function' as const,
+              function: { name: t.name, arguments: t.arguments }
+            }))
+          })
+          for (const tc of res.toolCalls) {
+            const cardIdx = addToolCard(tc)
+            if (PUSH_TOOLS.includes(tc.name)) {
+              // 外发动作：确认卡，用户点了才真正推送
+              const ok = await requestPushConfirm(tc)
+              if (!ok) {
+                finishToolCard(cardIdx, false, '用户取消了推送')
+                history.push({ role: 'tool', tool_call_id: tc.id, content: '用户取消了推送。' })
+                continue
+              }
+            }
+            const summary = await runToolCall(tc)
+            finishToolCard(cardIdx, !summary.startsWith('失败：'), summary)
+            history.push({ role: 'tool', tool_call_id: tc.id, content: summary })
+          }
+          if (round === TOOL_ROUNDS_MAX - 2) {
+            // 下一轮到上限：要求模型文本总结，不再给工具
+            history.push({ role: 'user', content: '请直接用文字总结以上操作的结果与结论，不要再调用工具。' })
+          }
+        }
+        const all = [...display, { role: 'assistant', content: finalText } as ChatMessage]
         setMessages(all)
         await persist(all)
-        // 回复尾部带 skill-install 指令：自动发起预览，弹确认卡片
-        const { directive } = parseSkillDirective(full)
+        // 回复尾部带 skill-install 指令：自动发起预览，弹确认卡片（降级路径的围栏协议照常生效）
+        const { directive } = parseSkillDirective(finalText)
         if (directive) resolveCard(all.length - 1, directive, text)
       } catch (err) {
-        setError(err instanceof Error ? err.message : String(err))
+        const msg = err instanceof Error ? err.message : String(err)
+        setError(msg)
+        // 供应商不支持 tools 参数（报错带 tool 字样）：记住降级，后续回纯文本/围栏模式
+        if (/tool/i.test(msg)) chatToolsUnsupported = true
       } finally {
         setStreaming(false)
         abortRef.current = null
@@ -492,6 +681,13 @@ export default function ChatPanel({
                   <span className="block text-ink-dim">✍ 正在生成修改稿…</span>
                 )}
               </div>
+              {toolCards[i]?.length ? (
+                <div className="mt-1 flex w-full max-w-[90%] flex-col gap-1">
+                  {toolCards[i].map((c, k) => (
+                    <ToolCardView key={k} card={c} />
+                  ))}
+                </div>
+              ) : null}
               {articleParsed?.update !== undefined && (
                 <div className="mt-1 max-w-[90%] rounded-lg border border-panel-3 bg-panel-2 px-2.5 py-2">
                   <p className="font-medium text-ink">📝 修改正文（{articleParsed.update.length} 字）</p>
@@ -638,6 +834,34 @@ export default function ChatPanel({
         {error && <p className="mt-1 break-all text-red-400">✗ {error}</p>}
         {searching && <p className="mt-1 text-ink-dim">🌐 联网搜索中…</p>}
       </div>
+
+      {/* 推送确认卡（chat-tools v1 外发动作）：用户点了才真正执行 */}
+      {pushConfirm && (
+        <div className="mx-2 mb-1 rounded border border-accent/60 bg-panel-2 p-2 text-xs">
+          <p className="font-medium text-ink">🚀 确认推送：{TOOL_LABELS[pushConfirm.tool] ?? pushConfirm.tool}</p>
+          <p className="mt-0.5 break-all text-ink-dim">{pushConfirm.summary || '（无参数摘要）'}</p>
+          <div className="mt-1.5 flex gap-2">
+            <button
+              onClick={() => {
+                pushConfirm.resolve(true)
+                setPushConfirm(null)
+              }}
+              className="rounded bg-accent px-3 py-1 text-white hover:opacity-90"
+            >
+              ✓ 确认推送
+            </button>
+            <button
+              onClick={() => {
+                pushConfirm.resolve(false)
+                setPushConfirm(null)
+              }}
+              className="rounded bg-panel-3 px-3 py-1 text-ink hover:bg-panel"
+            >
+              取消
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 输入区 */}
       <div className="border-t border-panel-3 p-2">
