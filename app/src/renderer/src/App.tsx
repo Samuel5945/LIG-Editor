@@ -1162,6 +1162,7 @@ export default function App(): JSX.Element {
               titlecoverBody={
                 current && meta ? (
                   <TitleCoverPanel
+                    key={current}
                     project={current}
                     meta={meta}
                     article={article}
