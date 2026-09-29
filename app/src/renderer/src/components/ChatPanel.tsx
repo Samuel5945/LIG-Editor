@@ -13,7 +13,7 @@ import { buildToolSchemas, inventoryFor, parseTextToolCalls } from '@shared/llmT
 import { extractInlineContent, parseSkillDirective } from '@shared/skillInstall'
 import { cardsPlainText, parseAccentDirective } from '@shared/cards'
 import { parseArticleUpdate } from '@shared/articleUpdate'
-import { chatOnceWithTools } from '../copilot/llm'
+import { chatOnceWithTools, type ChatRoundResult } from '../copilot/llm'
 import { chatContext, freeChatSystemPrompt, webContext } from '../copilot/prompts'
 import { extractFileText } from '../copilot/material'
 import { parseAccentIntent } from '@shared/accentIntent'
@@ -69,6 +69,8 @@ let nativeToolsRejected = ''
 // 聚合供应商常收下 tools 参数却从不返回调用，只看有没有报错会把「未证实」当成「可用」，
 // 于是不注入清单——模型就对工具一无所知（实测回答「立格编辑器不支持导出 Word」）
 let nativeProvenKey = ''
+// 上一次带原生 tools 试探的时刻：拒收后每隔一段时间自动再试一次（供应商可能后续支持）
+let nativeProbeAt = 0
 
 /** 当前文本模型标识：原生工具支持按它记忆，换供应商/换模型自动重新试探 */
 async function currentModelKey(): Promise<string> {
@@ -235,9 +237,6 @@ export default function ChatPanel({
   const [webOn, setWebOn] = useState(false)
   const [ctxOn, setCtxOn] = useState(true)
   const [searching, setSearching] = useState(false)
-  // 工具通路：native=原生 tools / text=模型拒收原生参数，改走文本协议（工具照样能执行）
-  // / none=拿不到工具清单。降级必须看得见，否则会表现为「模型有工具却没用」
-  const [toolMode, setToolMode] = useState<'native' | 'text' | 'none'>('native')
   const [cards, setCards] = useState<Record<number, InstallCard>>({})
   // 换强调色确认卡状态（按 assistant 消息索引挂卡）
   const [accentCards, setAccentCards] = useState<Record<number, 'applying' | 'done' | 'error'>>({})
@@ -547,13 +546,15 @@ export default function ChatPanel({
       // 发完清附件
       setAttachImages([])
       setAttachDocs([])
-      // 工具通路：清单注入的判据是「这个模型真的返回过原生 tool_calls」，不是「请求没报错」——
-      // 未证实（含拒收 tools 的模型）一律注入清单，原生 tools 参数照常带着试探
+      // 工具通路全自动：清单注入的判据是「这个模型真的返回过原生 tool_calls」，不是「请求没报错」；
+      // 被记为拒收后每 10 分钟再自动试一次原生（供应商可能后续支持），
+      // 试错的那一次由循环里的静默重试兜住，用户不需要看到任何状态
       const modelKey = await currentModelKey()
       const registry = await getToolRegistry()
+      if (nativeToolsRejected === modelKey && Date.now() - nativeProbeAt > 600_000) resetNativeTools()
       const native = nativeToolsFor(registry, modelKey)
+      if (native.length) nativeProbeAt = Date.now()
       const proven = nativeProven(modelKey)
-      setToolMode(registry.length === 0 ? 'none' : native.length && proven ? 'native' : 'text')
       const api: ChatMessage[] = [
         {
           role: 'system',
@@ -605,17 +606,26 @@ export default function ChatPanel({
         for (let round = 0; round < TOOL_ROUNDS_MAX; round++) {
           // 最后一轮不给工具：到达上限时模型只能文字总结；连续失败后也强制文字收尾
           const useTools = native.length > 0 && !forceTextOnly && round < TOOL_ROUNDS_MAX - 1
-          const { promise, abort } = chatOnceWithTools(history, { tools: useTools ? native : undefined, onDelta })
-          abortRef.current = abort
-          const res = await promise
+          const ask = (withTools: boolean): Promise<ChatRoundResult> => {
+            const r = chatOnceWithTools(history, { tools: withTools ? native : undefined, onDelta })
+            abortRef.current = r.abort
+            return r.promise
+          }
+          let res: ChatRoundResult
+          try {
+            res = await ask(useTools)
+          } catch (err) {
+            const em = err instanceof Error ? err.message : String(err)
+            // 原生 tools 被这个供应商拒收：本轮静默改走文本协议重试——不打断用户，也不需要他看到状态
+            if (!useTools || !/tool/i.test(em)) throw err
+            markNativeToolsRejected(modelKey)
+            res = await ask(false)
+          }
           // 非原生路径：部分供应商不支持 tools 参数，模型以文本协议（XML 标签 / ```tool-call 围栏）发起调用——收编执行
           const textCalls = res.toolCalls?.length
             ? { calls: [] as ToolCallInfo[], cleaned: res.text }
             : parseTextToolCalls(res.text)
-          if (res.toolCalls?.length && !nativeProven(modelKey)) {
-            markNativeProven(modelKey)
-            setToolMode('native')
-          }
+          if (res.toolCalls?.length && !nativeProven(modelKey)) markNativeProven(modelKey)
           const roundCalls: ToolCallInfo[] = res.toolCalls?.length
             ? res.toolCalls
             : textCalls.calls.map((c, k) => ({ id: `text_${round}_${k}`, name: c.name, arguments: c.arguments }))
@@ -691,10 +701,7 @@ export default function ChatPanel({
         const msg = err instanceof Error ? err.message : String(err)
         setError(msg)
         // 供应商拒收 tools 参数（报错带 tool 字样）：只记当前这个模型，工具转文本协议
-        if (/tool/i.test(msg)) {
-          markNativeToolsRejected(modelKey)
-          setToolMode(registry.length ? 'text' : 'none')
-        }
+        if (/tool/i.test(msg)) markNativeToolsRejected(modelKey)
         // 失败也落盘：保留现场供取证 + 已生成的部分文本
         if (lastText) {
           try {
@@ -713,13 +720,6 @@ export default function ChatPanel({
 
   const abort = useCallback(() => abortRef.current?.(), [])
 
-  /** 降级标记的重新试探：供应商支持是逐模型的，别把一次失败变成长期失能 */
-  const reprobeTools = useCallback(async () => {
-    resetNativeTools()
-    const registry = await getToolRegistry()
-    setToolMode(registry.length ? 'native' : 'none')
-    onToast(registry.length ? `下一轮重新试探原生 tools（${registry.length} 个工具）` : '取不到工具清单，对话仍是纯文本')
-  }, [onToast])
 
   // ---- 渲染 ----
 
@@ -736,21 +736,6 @@ export default function ChatPanel({
         >
           ⧉ 临时
         </button>
-        {toolMode !== 'native' && (
-          <button
-            onClick={() => void reprobeTools()}
-            title={
-              toolMode === 'text'
-                ? '工具走文本协议发起（这个模型不收原生 tools 参数），读写导出等能力完全一样。点这里重新试探原生调用'
-                : '没取到工具清单（主进程异常？）：本轮只能纯文本。点这里重试'
-            }
-            className={`shrink-0 whitespace-nowrap rounded px-1.5 py-1 ${
-              toolMode === 'text' ? 'text-ink-dim hover:bg-panel-3' : 'bg-red-500/15 text-red-400 hover:bg-red-500/25'
-            }`}
-          >
-            {toolMode === 'text' ? '文本协议' : '⚠ 工具不可用'}
-          </button>
-        )}
         <select
           value={sessionId ?? ''}
           onChange={(e) => (e.target.value ? loadSession(e.target.value) : newSession())}
