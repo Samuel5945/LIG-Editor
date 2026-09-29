@@ -472,8 +472,8 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
 
   return (
     <div className="flex h-full flex-col">
-      {/* 编辑工具条：撤销/重做可见入口 + 快捷键提示 */}
-      <div className="flex shrink-0 items-center gap-1 border-b border-slate-800 px-3 py-1 text-xs">
+      {/* 编辑工具条：撤销/重做可见入口 + 快捷键提示；窄栏下整行横滚，按钮不内折（.editor-toolbar） */}
+      <div className="editor-toolbar flex shrink-0 items-center gap-1 border-b border-slate-800 px-3 py-1 text-xs">
         <button
           type="button"
           onClick={() => editor.chain().focus().undo().run()}

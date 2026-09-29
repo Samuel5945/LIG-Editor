@@ -337,6 +337,15 @@ body {
   }
 }
 
+/* 编辑器工具条：窄中栏/大字号下按钮不被压窄内折成多行，放不下整行横向滚动 */
+.editor-toolbar {
+  overflow-x: auto;
+}
+.editor-toolbar > * {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
 /* ---------- 新手引导弹层（driver.js popoverClass=lig-tour-popover）----------
    直接消费主题 CSS 变量，深色 / 日间自动跟随，无需两套覆盖 */
 .driver-popover.lig-tour-popover {
