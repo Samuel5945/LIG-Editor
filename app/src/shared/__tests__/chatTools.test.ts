@@ -248,24 +248,43 @@ describe('freeChatSystemPrompt · 工具在场时改正文走补丁', () => {
   })
 })
 
-describe('inventoryFor · 清单只在文本协议通路注入', () => {
-  const mk = (name: string): ChatToolSchema => ({
-    type: 'function',
-    function: { name, description: '导出 Word 交稿稿', parameters: { type: 'object', properties: {} } }
-  })
-  const registry = [mk('export_docx'), mk('write_article')]
-
-  it('模型能收原生 tools：schema 已下发，提示里不再重复列清单', () => {
-    expect(inventoryFor(registry, registry)).toBe('')
+describe('parseXmlToolCalls · 模型自发格式收编', () => {
+  it('标签名即工具名 + mcp__server__ 前缀归一：零参数工具也算一次调用', () => {
+    const r = parseTextToolCalls("<tool_call>\n<mcp__workspace__list_projects></mcp__workspace__list_projects>\n</tool_call>")
+    expect(r.calls).toEqual([{ name: 'list_projects', arguments: '{}' }])
+    expect(r.cleaned).toBe('')
   })
 
-  it('走文本协议（原生清单为空）：必须列出工具名，否则模型不知道自己有什么工具', () => {
-    const s = inventoryFor([], registry)
+  it('同种写法带参数照常解析', () => {
+    const args = JSON.parse(parseTextToolCalls("<tool_call>\n<mcp__lig__read_article><parameter=project>自媒体推广实操清单</parameter></mcp__lig__read_article>\n</tool_call>").calls[0].arguments)
+    expect(args).toEqual({ project: '自媒体推广实操清单' })
+  })
+
+  it('属性写法与整段 JSON 写法都能当参数', () => {
+    expect(JSON.parse(parseTextToolCalls("<tool_call>\n<get_project project=\"test\" />\n</tool_call>").calls[0].arguments)).toEqual({ project: 'test' })
+    const j = JSON.parse(parseTextToolCalls("<tool_call>\n<function=set_titles>\n{\"project\":\"test\",\"titles\":[{\"text\":\"A\",\"score\":9,\"reason\":\"r\"}]}\n</function>\n</tool_call>").calls[0].arguments) as { titles: unknown[] }
+    expect(j.titles).toEqual([{ text: 'A', score: 9, reason: 'r' }])
+  })
+})
+
+describe('inventoryFor · 注入判据是「真的收到过原生 tool_calls」', () => {
+  const reg = [
+    { type: 'function', function: { name: 'export_docx', description: '导出 Word 交稿稿', parameters: {} } },
+    { type: 'function', function: { name: 'write_article', description: '覆写正文', parameters: {} } }
+  ] as never[]
+
+  it('已证实原生通路可用：清单不重复下发', () => {
+    expect(inventoryFor(reg, reg, true)).toBe('')
+  })
+
+  it('供应商收下 tools 却从不返回调用：未证实就必须列工具名', () => {
+    const s = inventoryFor(reg, reg, false)
     expect(s).toContain('export_docx 导出 Word 交稿稿')
-    expect(s).toContain('write_article 导出 Word 交稿稿')
+    expect(s).toContain('write_article 覆写正文')
   })
 
-  it('注册表本身为空时不注入（纯文本对话不该出现工具名单）', () => {
-    expect(inventoryFor([], [])).toBe('')
+  it('文本协议通路（原生清单为空）同样注入；空注册表不注入', () => {
+    expect(inventoryFor(reg, [], false)).toContain('export_docx')
+    expect(inventoryFor([], [], false)).toBe('')
   })
 })

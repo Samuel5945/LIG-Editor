@@ -65,6 +65,10 @@ const TOOL_LABELS: Record<string, string> = {
  *  （「导出 word」模型看不见 export_docx、于是把全文贴回对话，就是这么来的） */
 let cachedChatTools: ChatToolSchema[] | null = null
 let nativeToolsRejected = ''
+// 原生通路「被证实」的模型：真的收到过 tool_calls 才算。
+// 聚合供应商常收下 tools 参数却从不返回调用，只看有没有报错会把「未证实」当成「可用」，
+// 于是不注入清单——模型就对工具一无所知（实测回答「立格编辑器不支持导出 Word」）
+let nativeProvenKey = ''
 
 /** 当前文本模型标识：原生工具支持按它记忆，换供应商/换模型自动重新试探 */
 async function currentModelKey(): Promise<string> {
@@ -98,9 +102,19 @@ function markNativeToolsRejected(modelKey: string): void {
   nativeToolsRejected = modelKey
 }
 
+/** 收到过原生 tool_calls = 这个模型的原生通路确实通 */
+function markNativeProven(modelKey: string): void {
+  nativeProvenKey = modelKey
+}
+
+function nativeProven(modelKey: string): boolean {
+  return nativeProvenKey === modelKey
+}
+
 /** 清掉降级记忆重新试探（界面标记点击用） */
 function resetNativeTools(): void {
   nativeToolsRejected = ''
+  nativeProvenKey = ''
 }
 
 function safeParseArgs(argsJson: string): Record<string, unknown> {
@@ -533,18 +547,19 @@ export default function ChatPanel({
       // 发完清附件
       setAttachImages([])
       setAttachDocs([])
-      // 工具通路先确定：清单永远写进系统提示（走文本协议的模型看不见原生 tools，只靠提示知道有哪些工具），
-      // 原生 tools 参数则按模型支持情况裁剪
+      // 工具通路：清单注入的判据是「这个模型真的返回过原生 tool_calls」，不是「请求没报错」——
+      // 未证实（含拒收 tools 的模型）一律注入清单，原生 tools 参数照常带着试探
       const modelKey = await currentModelKey()
       const registry = await getToolRegistry()
       const native = nativeToolsFor(registry, modelKey)
-      setToolMode(registry.length === 0 ? 'none' : native.length === 0 ? 'text' : 'native')
+      const proven = nativeProven(modelKey)
+      setToolMode(registry.length === 0 ? 'none' : native.length && proven ? 'native' : 'text')
       const api: ChatMessage[] = [
         {
           role: 'system',
           content:
             freeChatSystemPrompt(skill, { toolsAvailable: registry.length > 0 }) +
-            toolsGuardrail(project, inventoryFor(native, registry))
+            toolsGuardrail(project, inventoryFor(registry, native, proven))
         },
         ...messages,
         apiUser
@@ -597,6 +612,10 @@ export default function ChatPanel({
           const textCalls = res.toolCalls?.length
             ? { calls: [] as ToolCallInfo[], cleaned: res.text }
             : parseTextToolCalls(res.text)
+          if (res.toolCalls?.length && !nativeProven(modelKey)) {
+            markNativeProven(modelKey)
+            setToolMode('native')
+          }
           const roundCalls: ToolCallInfo[] = res.toolCalls?.length
             ? res.toolCalls
             : textCalls.calls.map((c, k) => ({ id: `text_${round}_${k}`, name: c.name, arguments: c.arguments }))
@@ -649,9 +668,19 @@ export default function ChatPanel({
         const stillFailing = [...outcomes]
           .filter(([, ok]) => !ok)
           .map(([name]) => TOOL_LABELS[name] ?? name)
-        const note = stillFailing.length
-          ? `${lastText.trim() ? '\n\n' : ''}⚠️ 本轮仍有工具失败（${stillFailing.join('、')}），相关内容未确认写入工程。`
-          : ''
+        // 更荒唐的一类：一个工具都没跑却声称做完了（实测回答「小结已扩充」而正文一字未变）。
+        // 判据只能靠措辞 + 本轮零工具调用，宁可多标一句也别让假完成蒙过去
+        const claimsWrite =
+          /(正文|小结|标题|文章|工程|贴图|卡片|文件)/.test(lastText) &&
+          /((已|已经)[^。\n]{0,8}(扩充|修改|改好|改完|润色|调整|更新|改写|重写|写入|落盘|落入|落到|存进|保存|加上|加好))|(写入成功|导出成功|已落入|已保存到)/.test(
+            lastText
+          )
+        const emittedBlock = /```(article-update|tool-call|skill-install|cards-accent)/.test(lastText)
+        const notes: string[] = []
+        if (stillFailing.length) notes.push(`⚠️ 本轮仍有工具失败（${stillFailing.join('、')}），相关内容未确认写入工程。`)
+        else if (claimsWrite && outcomes.size === 0 && !emittedBlock)
+          notes.push('⚠️ 本轮没有执行任何工具，也没有产出修改稿卡片——上述「已完成」不可信，内容并未落到工程。')
+        const note = notes.length ? `${lastText.trim() ? '\n\n' : ''}${notes.join('\n')}` : ''
         const all = [...display, { role: 'assistant', content: lastText + note } as ChatMessage]
         setMessages(all)
         await persist(all)
@@ -712,7 +741,7 @@ export default function ChatPanel({
             onClick={() => void reprobeTools()}
             title={
               toolMode === 'text'
-                ? '当前模型不收原生 tools 参数：工具改由文本协议发起，功能不受影响。点这里重新试探原生调用'
+                ? '这个模型还没证实能用原生工具调用（可能拒收 tools 参数，也可能收了却从不返回）：已把工具清单写进提示词，调用走文本协议。点这里重新试探'
                 : '没取到工具清单（主进程异常？）：本轮只能纯文本。点这里重试'
             }
             className={`shrink-0 whitespace-nowrap rounded px-1.5 py-1 ${
