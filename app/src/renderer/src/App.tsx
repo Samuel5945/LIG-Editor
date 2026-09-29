@@ -135,6 +135,8 @@ export default function App(): JSX.Element {
   const [showThemeImport, setShowThemeImport] = useState(false)
   // 分类管理弹窗 + 已删除（隐藏）分类列表
   const [showCatManage, setShowCatManage] = useState(false)
+  /** 分类管理弹窗变更后要在左栏树展开的分类（at 作触发键，同名连续操作也能再触发一次） */
+  const [revealCat, setRevealCat] = useState<{ name: string; at: number } | null>(null)
   const [hiddenCats, setHiddenCats] = useState<string[]>([])
   // 设置弹窗初始页签（左栏 Skill 库「导入」直达 skill 页）
   const [integrationTab, setIntegrationTab] = useState<'mcp' | 'skill' | 'push'>('mcp')
@@ -188,7 +190,9 @@ export default function App(): JSX.Element {
   }, [])
 
   /** 分类管理变更后的统一刷新：分类/隐藏列表/工程/主题全量重拉，失效的筛选回落「全部」；绑定徽标同步重拉 */
-  const refreshAfterCategoryChange = useCallback(() => {
+  const refreshAfterCategoryChange = useCallback((reveal?: string) => {
+    // 重命名/恢复分类后让左栏树展开该分类（折叠态下用户会以为工程消失了）
+    if (reveal) setRevealCat({ name: reveal, at: Date.now() })
     setBindingsVersion((v) => v + 1)
     void window.api.invoke('project:listCategories').then((cats) => {
       setCategories(cats)
@@ -946,6 +950,7 @@ export default function App(): JSX.Element {
           onApplyCategory={(name, category) => void applyCategory(name, category)}
           onAiCategorize={() => void aiCategorize()}
           onSkillsChanged={refreshSkills}
+          revealCategory={revealCat}
           onOpenCatManage={() => setShowCatManage(true)}
           onOpenIntegration={(tab) => {
             setIntegrationTab(tab)

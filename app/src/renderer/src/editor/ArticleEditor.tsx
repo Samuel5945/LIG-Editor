@@ -50,7 +50,15 @@ const BG_PRESETS: { color: string; name: string }[] = [
   { color: '#fdf6e3', name: '米黄' },
   { color: '#e6f7f4', name: '浅青' },
   { color: '#fff7e6', name: '杏色' },
-  { color: '#eefaf1', name: '薄荷' }
+  { color: '#eefaf1', name: '薄荷' },
+  { color: '#1f2937', name: '墨灰' },
+  { color: '#111827', name: '深夜蓝' },
+  { color: '#1e293b', name: '石板蓝' },
+  { color: '#14532d', name: '深林绿' },
+  { color: '#3b1d2b', name: '深酒红' },
+  { color: '#241a3a', name: '深紫' },
+  { color: '#0f3a3d', name: '深青' },
+  { color: '#2b2118', name: '深棕' }
 ]
 
 /** 选区字色预设（正文/强调通用；白色常用于深底卡片上提亮文字） */
@@ -300,7 +308,14 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
   ref
 ): ReactElement {
   const lastEmitted = useRef(markdown)
-  const [accentOpen, setAccentOpen] = useState(false)
+  /** 工具栏面板挂点：fixed 贴触发器下沿（面板自身渲染后回调定位，避免闪跳） */
+  const fixPanel = (width: number) => (el: HTMLDivElement | null): void => {
+    if (!el) return
+    const r = el.parentElement?.getBoundingClientRect()
+    if (!r) return
+    el.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - width - 8))}px`
+    el.style.top = `${r.bottom + 4}px`
+  }
   // 工具条窄栏自适应：宽度不足时撤销/重做只留图标（ResizeObserver 现场测量）
   const toolbarRef = useRef<HTMLDivElement>(null)
   const [toolbarNarrow, setToolbarNarrow] = useState(false)
@@ -311,12 +326,12 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
     ro.observe(el)
     return () => ro.disconnect()
   }, [])
-  /** 工具栏背景卡弹层：预设浅色 / 自定义 / 无卡片 / 跟随主题 */
-  const [bgOpen, setBgOpen] = useState(false)
   /** 选区样式弹层：color 字色 / bg 背景高亮 / size 字号 */
   const [stylePop, setStylePop] = useState<'color' | 'bg' | 'size' | null>(null)
   /** 工具栏排版弹层：body 正文（字号/排列）/ heading 标题（字号/排列/装饰版式/序号/前缀） */
-  const [typePop, setTypePop] = useState<'body' | 'heading' | null>(null)
+  /** 工具栏弹层互斥：同一时刻只开一个（accent/bg/body/heading） */
+  const [toolPop, setToolPop] = useState<'accent' | 'bg' | 'body' | 'heading' | null>(null)
+  const togglePop = (k: 'accent' | 'bg' | 'body' | 'heading'): void => setToolPop((prev) => (prev === k ? null : k))
 
   const editor = useEditor({
     extensions: [
@@ -526,7 +541,7 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
         <div className="relative">
           <button
             type="button"
-            onClick={() => setAccentOpen((v) => !v)}
+            onClick={() => togglePop('accent')}
             title="快速修改文章强调色"
             className="flex items-center gap-1 rounded px-2 py-0.5 text-slate-300 hover:bg-slate-700"
           >
@@ -536,8 +551,8 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
             />
             强调色
           </button>
-          {accentOpen && (
-            <div className="absolute left-0 top-full z-50 mt-1 w-56 rounded-lg border border-slate-700 bg-slate-900 p-2 shadow-xl">
+          {toolPop === 'accent' && (
+            <div ref={fixPanel(224)} className="fixed z-50 w-56 rounded-lg border border-slate-700 bg-slate-900 p-2 shadow-xl">
               <div className="grid grid-cols-8 gap-1">
                 {ACCENT_PRESETS.map((p) => (
                   <button
@@ -546,7 +561,7 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
                     title={p.name}
                     onClick={() => {
                       onAccentChange?.(p.color)
-                      setAccentOpen(false)
+                      setToolPop(null)
                     }}
                     className={`h-5 w-5 rounded-full border border-slate-600 ${
                       (accent ?? '#0d9488').toLowerCase() === p.color ? 'ring-2 ring-white' : ''
@@ -569,7 +584,7 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
                   type="button"
                   onClick={() => {
                     onAccentChange?.(null)
-                    setAccentOpen(false)
+                    setToolPop(null)
                   }}
                   className="rounded border border-slate-600 px-2 py-1 text-[10px] text-slate-300 hover:bg-slate-700"
                 >
@@ -588,7 +603,7 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
             <div className="relative">
               <button
                 type="button"
-                onClick={() => setBgOpen((v) => !v)}
+                onClick={() => togglePop('bg')}
                 title="文章背景卡片颜色（公众号夜间自动变深）"
                 className="flex items-center gap-1 rounded px-2 py-0.5 text-slate-300 hover:bg-slate-700"
               >
@@ -598,9 +613,9 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
                 />
                 背景
               </button>
-              {bgOpen && (
-                <div className="absolute left-0 top-full z-50 mt-1 w-56 rounded-lg border border-slate-700 bg-slate-900 p-2 shadow-xl">
-                  <div className="grid grid-cols-5 gap-1">
+              {toolPop === 'bg' && (
+                <div ref={fixPanel(288)} className="fixed z-50 w-72 rounded-lg border border-slate-700 bg-slate-900 p-2 shadow-xl">
+                  <div className="grid grid-cols-6 gap-1">
                     {BG_PRESETS.map((p) => (
                       <button
                         key={p.color}
@@ -608,7 +623,7 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
                         title={p.name}
                         onClick={() => {
                           onTypographyChange?.({ bodyBg: p.color })
-                          setBgOpen(false)
+                          setToolPop(null)
                         }}
                         className={`h-5 w-5 rounded-full border border-slate-600 ${
                           effBg?.toLowerCase() === p.color ? 'ring-2 ring-white' : ''
@@ -617,8 +632,8 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
                       />
                     ))}
                   </div>
-                  <div className="mt-2 flex items-center gap-2">
-                    <label className="flex flex-1 items-center gap-1 text-[10px] text-slate-400">
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    <label className="mr-auto flex items-center gap-1 text-[10px] text-slate-400">
                       自定义
                       <input
                         type="color"
@@ -629,21 +644,22 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
                     </label>
                     <button
                       type="button"
+                      title="去掉背景卡片（白底透出）"
                       onClick={() => {
                         onTypographyChange?.({ bodyBg: 'none' })
-                        setBgOpen(false)
+                        setToolPop(null)
                       }}
                       className={`rounded border px-2 py-1 text-[10px] hover:bg-slate-700 ${
                         bgNone ? 'border-sky-500 text-sky-300' : 'border-slate-600 text-slate-300'
                       }`}
                     >
-                      无卡片（白底）
+                      无卡片
                     </button>
                     <button
                       type="button"
                       onClick={() => {
                         onTypographyChange?.({ bodyBg: null })
-                        setBgOpen(false)
+                        setToolPop(null)
                       }}
                       className="rounded border border-slate-600 px-2 py-1 text-[10px] text-slate-400 hover:bg-slate-700"
                     >
@@ -670,23 +686,23 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
           const h3Cur = typography?.h3Mark ?? t.h3Mark
           const typeBtn = 'flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[11px] text-slate-300 hover:bg-slate-700'
           const typePanel =
-            'absolute left-0 top-full z-50 mt-1 w-64 rounded-lg border border-slate-700 bg-slate-900 p-2 shadow-xl'
+            'fixed z-50 w-64 rounded-lg border border-slate-700 bg-slate-900 p-2 shadow-xl'
           const typeReset =
             'mt-0.5 block w-full rounded border border-slate-600 px-2 py-1 text-left text-[10px] text-slate-400 hover:bg-slate-700'
           return (
             <>
               <div className="relative">
-                <button type="button" title="正文排版：字号 / 排列（覆盖主题，导出同步）" onClick={() => setTypePop(typePop === 'body' ? null : 'body')} className={typeBtn}>
+                <button type="button" title="正文排版：字号 / 排列（覆盖主题，导出同步）" onClick={() => togglePop('body')} className={typeBtn}>
                   正文 {bodySize} <span className="text-[8px] text-slate-500">▾</span>
                 </button>
-                {typePop === 'body' && (
-                  <div className={typePanel}>
+                {toolPop === 'body' && (
+                  <div ref={fixPanel(256)} className={typePanel}>
                     <TypeSection label="字号">
                       <TypeOptions
                         options={BODY_FONT_SIZES.map((n) => ({ value: n, label: `${n}px` }))}
                         value={bodySize}
                         cols={5}
-                        onPick={(n) => { onTypographyChange?.({ bodyFontSize: n }); setTypePop(null) }}
+                        onPick={(n) => { onTypographyChange?.({ bodyFontSize: n }); setToolPop(null) }}
                       />
                     </TypeSection>
                     <TypeSection label="排列">
@@ -694,27 +710,27 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
                         options={BODY_ALIGNS}
                         value={bodyAlign}
                         cols={3}
-                        onPick={(v) => { onTypographyChange?.({ bodyAlign: v }); setTypePop(null) }}
+                        onPick={(v) => { onTypographyChange?.({ bodyAlign: v }); setToolPop(null) }}
                       />
                     </TypeSection>
-                    <button type="button" onClick={() => { onTypographyChange?.({ bodyFontSize: null, bodyAlign: null }); setTypePop(null) }} className={typeReset}>
+                    <button type="button" onClick={() => { onTypographyChange?.({ bodyFontSize: null, bodyAlign: null }); setToolPop(null) }} className={typeReset}>
                       恢复默认（跟随主题）
                     </button>
                   </div>
                 )}
               </div>
               <div className="relative">
-                <button type="button" title="标题排版：字号 / 排列 / 装饰版式 / 序号 / 前缀（覆盖主题，导出同步）" onClick={() => setTypePop(typePop === 'heading' ? null : 'heading')} className={typeBtn}>
+                <button type="button" title="标题排版：字号 / 排列 / 装饰版式 / 序号 / 前缀（覆盖主题，导出同步）" onClick={() => togglePop('heading')} className={typeBtn}>
                   标题 {headingSize} <span className="text-[8px] text-slate-500">▾</span>
                 </button>
-                {typePop === 'heading' && (
-                  <div className={typePanel}>
+                {toolPop === 'heading' && (
+                  <div ref={fixPanel(256)} className={typePanel}>
                     <TypeSection label="字号">
                       <TypeOptions
                         options={HEADING_FONT_SIZES.map((n) => ({ value: n, label: `${n}px` }))}
                         value={headingSize}
                         cols={5}
-                        onPick={(n) => { onTypographyChange?.({ headingFontSize: n }); setTypePop(null) }}
+                        onPick={(n) => { onTypographyChange?.({ headingFontSize: n }); setToolPop(null) }}
                       />
                     </TypeSection>
                     <TypeSection label="排列">
@@ -722,7 +738,7 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
                         options={HEADING_ALIGNS}
                         value={headingAlign}
                         cols={2}
-                        onPick={(v) => { onTypographyChange?.({ headingAlign: v }); setTypePop(null) }}
+                        onPick={(v) => { onTypographyChange?.({ headingAlign: v }); setToolPop(null) }}
                       />
                     </TypeSection>
                     <TypeSection label="H1 装饰">
@@ -730,7 +746,7 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
                         options={H1_STYLES}
                         value={h1Cur}
                         cols={3}
-                        onPick={(v) => { onTypographyChange?.({ h1Style: v }); setTypePop(null) }}
+                        onPick={(v) => { onTypographyChange?.({ h1Style: v }); setToolPop(null) }}
                       />
                     </TypeSection>
                     <TypeSection label="H2 装饰">
@@ -738,7 +754,7 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
                         options={H2_STYLES}
                         value={h2Cur}
                         cols={4}
-                        onPick={(v) => { onTypographyChange?.({ h2Style: v }); setTypePop(null) }}
+                        onPick={(v) => { onTypographyChange?.({ h2Style: v }); setToolPop(null) }}
                       />
                     </TypeSection>
                     <TypeSection label="H2 序号">
@@ -746,7 +762,7 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
                         options={H2_NUMS}
                         value={h2NumCur}
                         cols={4}
-                        onPick={(v) => { onTypographyChange?.({ h2Num: v }); setTypePop(null) }}
+                        onPick={(v) => { onTypographyChange?.({ h2Num: v }); setToolPop(null) }}
                       />
                     </TypeSection>
                     <TypeSection label="H3 前缀">
@@ -754,10 +770,10 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
                         options={H3_MARKS}
                         value={h3Cur}
                         cols={3}
-                        onPick={(v) => { onTypographyChange?.({ h3Mark: v }); setTypePop(null) }}
+                        onPick={(v) => { onTypographyChange?.({ h3Mark: v }); setToolPop(null) }}
                       />
                     </TypeSection>
-                    <button type="button" onClick={() => { onTypographyChange?.({ headingFontSize: null, headingAlign: null, h1Style: null, h2Style: null, h2Num: null, h3Mark: null }); setTypePop(null) }} className={typeReset}>
+                    <button type="button" onClick={() => { onTypographyChange?.({ headingFontSize: null, headingAlign: null, h1Style: null, h2Style: null, h2Num: null, h3Mark: null }); setToolPop(null) }} className={typeReset}>
                       恢复默认（跟随主题）
                     </button>
                   </div>

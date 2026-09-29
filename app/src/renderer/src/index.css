@@ -337,9 +337,13 @@ body {
   }
 }
 
-/* 编辑器工具条：窄中栏/大字号下按钮不被压窄内折成多行，放不下整行横向滚动 */
+/* 编辑器工具条：按钮不内折竖排（nowrap + 不收缩），放不下就整组换行。
+   别改回 overflow-x: auto——那会让工具条成为滚动容器，overflow-y 连带变成 auto，
+   把条内向下展开的面板（强调色 / 背景卡 / 正文排版 / 标题排版）裁成 28px 高，
+   点开像没反应（c3b4006 引入的回归） */
 .editor-toolbar {
-  overflow-x: auto;
+  flex-wrap: wrap;
+  row-gap: 2px;
 }
 .editor-toolbar > * {
   flex-shrink: 0;

@@ -28,6 +28,8 @@ interface SidebarProps {
   categorizing: boolean
   /** 变化时重拉分类→公众号账号绑定（分类管理/推送设置变更后 bump） */
   bindingsVersion: number
+  /** 分类管理弹窗里重命名/恢复出来的分类：树里展开它，否则折叠态下用户以为工程没了 */
+  revealCategory?: { name: string; at: number } | null
   onOpenProject: (name: string) => void
   /** 打开工程并落到指定中栏页签（已是当前工程只切页签，不重载丢未保存稿） */
   onOpenProjectView: (name: string, tab: 'article' | 'titlecover') => void
@@ -60,6 +62,28 @@ function Chevron({ open }: { open: boolean }): ReactElement {
 
 const rowBase = 'group mb-0.5 flex cursor-pointer items-center gap-1 rounded px-2 py-1 text-left'
 
+/** 行内动作按钮统一规格。emoji 字形本身宽窄不一（同宽同高才看得出是一个家族），
+ *  所以不靠字形对齐而靠盒子：固定 18×16 居中方框，配色只分三档——
+ *  常态墨色、悬停上强调色、危险动作悬停变红；激活态（如已进入批量）用底色圈出——
+ *  彩色 emoji 不跟随文字色，激活只能靠盒子底色表达 */
+const rowBox = 'flex h-4 w-[18px] shrink-0 items-center justify-center rounded text-[11px] leading-none'
+const rowAction = (tone: 'idle' | 'danger' | 'on' = 'idle'): string =>
+  tone === 'danger'
+    ? `${rowBox} text-ink hover:bg-panel hover:text-red-400`
+    : tone === 'on'
+      ? `${rowBox} bg-accent/25 ring-1 ring-inset ring-accent/60 hover:bg-accent/30`
+      : `${rowBox} text-ink hover:bg-panel hover:text-accent`
+
+/** 行内文字按钮（重命名/新建分类的确认与取消）：同高同字号，确认实底、取消幽灵 */
+const rowConfirm =
+  'inline-flex h-[26px] shrink-0 items-center rounded bg-accent px-2 text-[11px] leading-none text-white hover:opacity-90 disabled:opacity-40'
+const rowGhost =
+  'inline-flex h-[26px] shrink-0 items-center rounded bg-panel px-2 text-[11px] leading-none text-ink-dim hover:bg-panel-3 hover:text-ink'
+
+/** 交付物按扩展名给可区分的小图标：同名 docx/pdf 在窄树里被截断后，只有图标和后缀分得清 */
+const DELIVERY_ICON: Record<string, string> = { docx: '📝', pdf: '📕', html: '🌐', md: '📝', zip: '🗜️', txt: '📃' }
+const deliveryIcon = (file: string): string => DELIVERY_ICON[file.split('.').pop()?.toLowerCase() ?? ''] ?? '📄'
+
 /**
  * 左栏：工作树 / 选题库 双页签。
  * 「工作树」镜像 workspace 目录（分类→工程→正文/交付）作导航骨架，钉住 Skill 库节点；
@@ -79,6 +103,7 @@ export default function Sidebar(props: SidebarProps): ReactElement {
     filterCat,
     categorizing,
     bindingsVersion,
+    revealCategory,
     onOpenProject,
     onOpenProjectView,
     onCreateProject,
@@ -210,6 +235,15 @@ export default function Sidebar(props: SidebarProps): ReactElement {
   useEffect(() => {
     if (openCats) localStorage.setItem('lig-tree-open-cats', JSON.stringify(openCats))
   }, [openCats])
+
+  // 分类管理弹窗里重命名/恢复出来的分类：与行内新建分类一样自动展开，
+  // 否则用户只看到分类从「已删除」里消失或改了名，工程像是被吞掉了
+  const revealKey = revealCategory?.at ?? 0
+  useEffect(() => {
+    const name = revealCategory?.name
+    if (!name) return
+    setOpenCats((prev) => (prev === null || prev.includes(name) ? prev : [...prev, name]))
+  }, [revealKey])
 
   // 置顶记忆 + 盘上已不存在的置顶项顺手清掉
   useEffect(() => {
@@ -361,16 +395,25 @@ export default function Sidebar(props: SidebarProps): ReactElement {
           (a.deliveries.length === 0 ? (
             <p className="py-0.5 pl-11 text-[11px] text-ink-dim">（暂无，导出 Word/PDF 后落在这里）</p>
           ) : (
-            a.deliveries.map((rel) => (
-              <div
-                key={rel}
-                onClick={() => openPath(p.dir, rel, onToast)}
-                className={`${rowBase} pl-11 text-ink-dim hover:bg-panel-3 hover:text-ink`}
-                title="用系统默认应用打开"
-              >
-                <span className="min-w-0 flex-1 truncate">{rel}</span>
-              </div>
-            ))
+            a.deliveries.map((rel) => {
+              const file = rel.split('/').pop() ?? rel
+              const dot = file.lastIndexOf('.')
+              const base = dot > 0 ? file.slice(0, dot) : file
+              const ext = dot > 0 ? file.slice(dot) : ''
+              return (
+                <div
+                  key={rel}
+                  onClick={() => openPath(p.dir, rel, onToast)}
+                  className={`${rowBase} pl-11 text-ink-dim hover:bg-panel-3 hover:text-ink`}
+                  title={`${rel} · 用系统默认应用打开`}
+                >
+                  {/* 图标 + 不截断的扩展名后缀：交付物同名，只有这两处能分清 Word 和 PDF */}
+                  <span className="w-3.5 shrink-0 text-center">{deliveryIcon(file)}</span>
+                  <span className="min-w-0 flex-1 truncate">{base}</span>
+                  {ext && <span className="shrink-0 opacity-70">{ext}</span>}
+                </div>
+              )
+            })
           ))}
       </>
     )
@@ -408,7 +451,7 @@ export default function Sidebar(props: SidebarProps): ReactElement {
                 onClick={() => void submitRename(p.name)}
                 disabled={!renameVal.trim()}
                 title="确认重命名"
-                className="shrink-0 rounded bg-accent px-1.5 py-1 text-[11px] text-white disabled:opacity-40"
+                className={rowConfirm}
               >
                 改
               </button>
@@ -417,7 +460,7 @@ export default function Sidebar(props: SidebarProps): ReactElement {
                   setRenamingFor(null)
                   setRenameVal('')
                 }}
-                className="shrink-0 rounded bg-panel px-1.5 py-1 text-[11px] text-ink-dim hover:text-ink"
+                className={rowGhost}
               >
                 取消
               </button>
@@ -469,7 +512,7 @@ export default function Sidebar(props: SidebarProps): ReactElement {
             >
               <HoverScrollName name={p.name} />
             </span>
-            {isPinned && <span className="shrink-0 text-[10px]" title="已置顶">📌</span>}
+            {isPinned && <span className={`${rowBox} opacity-60`} title="已置顶">📌</span>}
             {p.plannedAt && (
               <span className="shrink-0 rounded bg-panel px-1 py-0.5 text-[10px] text-accent" title={`排期：${p.plannedAt}`}>
                 📅{p.plannedAt.slice(5)}
@@ -490,9 +533,9 @@ export default function Sidebar(props: SidebarProps): ReactElement {
                       toggleArchive(p.name)
                     }}
                     title="恢复到原分类"
-                    className="rounded px-1 py-0.5 text-[11px] text-ink hover:bg-panel hover:text-accent"
+                    className={rowAction()}
                   >
-                    📤
+                    ↩️
                   </button>
                   <button
                     onClick={(e) => {
@@ -500,9 +543,9 @@ export default function Sidebar(props: SidebarProps): ReactElement {
                       onDeleteProject(p.name)
                     }}
                     title="删除工程"
-                    className="rounded px-1 py-0.5 text-[11px] text-ink hover:bg-panel hover:text-red-400"
+                    className={rowAction('danger')}
                   >
-                    🗑
+                    🗑️
                   </button>
                 </>
               ) : (
@@ -514,7 +557,7 @@ export default function Sidebar(props: SidebarProps): ReactElement {
                       setRenameVal(p.name)
                     }}
                     title="重命名工程（本地文件夹同步改名）"
-                    className="rounded px-1 py-0.5 text-[11px] text-ink hover:bg-panel hover:text-accent"
+                    className={rowAction()}
                   >
                     ✏️
                   </button>
@@ -524,9 +567,9 @@ export default function Sidebar(props: SidebarProps): ReactElement {
                       toggleArchive(p.name)
                     }}
                     title="归档工程（收进树尾「已归档」，盘上文件不动）"
-                    className="rounded px-1 py-0.5 text-[11px] text-ink hover:bg-panel hover:text-accent"
+                    className={rowAction()}
                   >
-                    🗄
+                    🗃️
                   </button>
                   <button
                     onClick={(e) => {
@@ -534,9 +577,9 @@ export default function Sidebar(props: SidebarProps): ReactElement {
                       onDeleteProject(p.name)
                     }}
                     title="删除工程"
-                    className="rounded px-1 py-0.5 text-[11px] text-ink hover:bg-panel hover:text-red-400"
+                    className={rowAction('danger')}
                   >
-                    🗑
+                    🗑️
                   </button>
                 </>
               )}
@@ -608,7 +651,7 @@ export default function Sidebar(props: SidebarProps): ReactElement {
                     setNewCatName('')
                   }}
                   disabled={!newCatName.trim()}
-                  className="shrink-0 rounded bg-accent px-1.5 py-1 text-[11px] text-white disabled:opacity-40"
+                  className={rowConfirm}
                 >
                   建
                 </button>
@@ -617,7 +660,7 @@ export default function Sidebar(props: SidebarProps): ReactElement {
                     setNewCatFor(null)
                     setNewCatName('')
                   }}
-                  className="shrink-0 rounded bg-panel px-1.5 py-1 text-[11px] text-ink-dim hover:text-ink"
+                  className={rowGhost}
                 >
                   取消
                 </button>
@@ -681,9 +724,9 @@ export default function Sidebar(props: SidebarProps): ReactElement {
                 </button>
                 <button
                   onClick={() => void removeSkill(s.name)}
-                  className="hidden shrink-0 rounded px-1 text-ink-dim hover:text-red-400 group-hover:block"
+                  className={`${rowAction('danger')} hidden group-hover:flex`}
                 >
-                  🗑
+                  🗑️
                 </button>
               </div>
             ))}
@@ -729,14 +772,15 @@ export default function Sidebar(props: SidebarProps): ReactElement {
                     else {
                       setBatchCat(g.category)
                       setBatchSel([])
+                      // 折叠态下点「管理」等于进了一个看不见的清单：与新建工程一样自动展开该分类
+                      // （openCats=null 本就是全展开，此时不能调 toggleCat——那会把这一类反向折叠）
+                      setOpenCats((prev) => (prev === null || prev.includes(g.category) ? prev : [...prev, g.category]))
                     }
                   }}
                   title="批量管理：勾选工程后批量归档/删除"
-                  className={`shrink-0 rounded px-1 text-[11px] ${
-                    batchCat === g.category ? 'text-accent' : 'hidden text-ink-dim hover:text-accent group-hover:block'
-                  }`}
+                  className={batchCat === g.category ? rowAction('on') : `${rowAction()} hidden group-hover:flex`}
                 >
-                  ☑
+                  ☑️
                 </button>
                 <button
                   onClick={(e) => {
@@ -747,9 +791,9 @@ export default function Sidebar(props: SidebarProps): ReactElement {
                     setNewName('')
                   }}
                   title={`在「${g.category}」下新建工程`}
-                  className="hidden shrink-0 rounded px-1 text-ink-dim hover:text-accent group-hover:block"
+                  className={`${rowAction()} hidden group-hover:flex`}
                 >
-                  ＋
+                  ➕
                 </button>
               </div>
               {isOpen && (
@@ -775,7 +819,7 @@ export default function Sidebar(props: SidebarProps): ReactElement {
                         disabled={!batchSel.length}
                         className="rounded bg-panel px-1.5 py-0.5 text-ink hover:bg-panel-3 disabled:opacity-40"
                       >
-                        🗄 归档
+                        🗃️ 归档
                       </button>
                       <button
                         onClick={() => {
@@ -786,7 +830,7 @@ export default function Sidebar(props: SidebarProps): ReactElement {
                         disabled={!batchSel.length}
                         className="rounded bg-panel px-1.5 py-0.5 text-red-400 hover:bg-panel-3 disabled:opacity-40"
                       >
-                        🗑 删除
+                        🗑️ 删除
                       </button>
                       <button onClick={exitBatch} title="退出批量管理" className="ml-auto text-ink-dim hover:text-ink">
                         ✕
@@ -833,7 +877,7 @@ export default function Sidebar(props: SidebarProps): ReactElement {
           <div className="mt-1">
             <div onClick={() => setArchOpen((v) => !v)} className={`${rowBase} text-ink-dim/70 hover:bg-panel-3`}>
               <Chevron open={archOpen} />
-              <span>🗄</span>
+              <span>🗃️</span>
               <span className="min-w-0 flex-1 truncate">已归档 ({archivedProjects.length})</span>
             </div>
             {archOpen && archivedProjects.map(renderProjectRow)}
@@ -923,7 +967,7 @@ export default function Sidebar(props: SidebarProps): ReactElement {
               }}
               className="block w-full px-3 py-1.5 text-left text-ink hover:bg-panel-3"
             >
-              🗄 {archived.includes(menu.name) ? '取消归档' : '归档'}
+              🗃️ {archived.includes(menu.name) ? '取消归档' : '归档'}
             </button>
           </div>
         </>
