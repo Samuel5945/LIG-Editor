@@ -4,7 +4,7 @@
  * buildToolSchemas 的提示词类过滤与 OpenAI function 映射决定暴露给对话模型的工具面。
  */
 import { describe, expect, it } from 'vitest'
-import { accumulateToolCalls, buildToolSchemas, parseToolCallFence } from '../llmText'
+import { accumulateToolCalls, buildToolSchemas, parseTextToolCalls, parseToolCallFence } from '../llmText'
 
 describe('accumulateToolCalls', () => {
   it('单个工具分段到达：arguments 字符串拼接、id/name 覆盖', () => {
@@ -87,5 +87,49 @@ describe('parseToolCallFence', () => {
     const r = parseToolCallFence(bad)
     expect(r.calls).toEqual([])
     expect(r.cleaned).toBe(bad)
+  })
+})
+
+describe('parseXmlToolCalls / parseTextToolCalls', () => {
+  it('解析 XML 标签协议（实测模型自发格式）：多行正文完整进入 arguments', () => {
+    const text = [
+      '工程已建好，接着写全文。',
+      '',
+      '<tool_call>',
+      '<function=write_article>',
+      '<parameter=content>',
+      '# 自媒体推广的5个实操动作',
+      '',
+      '## 一、先想清楚',
+      '',
+      '正文第一段。',
+      '</parameter>',
+      '</function>',
+      '</tool_call>'
+    ].join('\n')
+    const r = parseTextToolCalls(text)
+    expect(r.calls).toHaveLength(1)
+    expect(r.calls[0].name).toBe('write_article')
+    const args = JSON.parse(r.calls[0].arguments) as { content: string }
+    expect(args.content).toBe('# 自媒体推广的5个实操动作\n\n## 一、先想清楚\n\n正文第一段。')
+    expect(r.cleaned).toBe('工程已建好，接着写全文。')
+  })
+
+  it('多参数取值：数字/布尔转类型，长文本保留字符串', () => {
+    const text = [
+      '<tool_call>',
+      '<function=schedule_set>',
+      '<parameter=project>test</parameter>',
+      '<parameter=date>2026-10-01</parameter>',
+      '</function>',
+      '</tool_call>'
+    ].join('\n')
+    const r = parseTextToolCalls(text)
+    expect(JSON.parse(r.calls[0].arguments)).toEqual({ project: 'test', date: '2026-10-01' })
+  })
+
+  it('无标签文本原样返回', () => {
+    expect(parseTextToolCalls('普通回复').calls).toEqual([])
+    expect(parseTextToolCalls('普通回复').cleaned).toBe('普通回复')
   })
 })

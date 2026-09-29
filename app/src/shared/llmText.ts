@@ -77,3 +77,36 @@ export function parseToolCallFence(text: string): { calls: { name: string; argum
   }
   return { calls, cleaned: calls.length ? text.replace(re, '').trim() : text }
 }
+
+/** 解析 XML 标签风格工具调用（Qwen/GLM 系模型在无原生 tools 环境下的自发协议）：
+ *  <tool_call><function=名><parameter=键>值（可多行）</parameter>…</function></tool_call>
+ *  值尝试 JSON.parse（数字/布尔/对象），失败保留字符串；正文多行内容由字符串承载 */
+export function parseXmlToolCalls(text: string): { calls: { name: string; arguments: string }[]; cleaned: string } {
+  const calls: { name: string; arguments: string }[] = []
+  const re = /<tool_call>\s*<function=([^>\n]+)>([\s\S]*?)<\/function>\s*<\/tool_call>/g
+  let m: RegExpExecArray | null
+  while ((m = re.exec(text))) {
+    const name = m[1].trim()
+    const args: Record<string, unknown> = {}
+    const pre = /<parameter=([^>\n]+)>([\s\S]*?)<\/parameter>/g
+    let p: RegExpExecArray | null
+    while ((p = pre.exec(m[2]))) {
+      const key = p[1].trim()
+      const raw = p[2].trim()
+      try {
+        args[key] = JSON.parse(raw)
+      } catch {
+        args[key] = raw
+      }
+    }
+    if (name && Object.keys(args).length > 0) calls.push({ name, arguments: JSON.stringify(args) })
+  }
+  return { calls, cleaned: calls.length ? text.replace(re, '').trim() : text }
+}
+
+/** 文本协议统一入口：XML 标签 + ```tool-call 围栏两种降级格式一起解析，cleaned 已剥离全部调用块 */
+export function parseTextToolCalls(text: string): { calls: { name: string; arguments: string }[]; cleaned: string } {
+  const xml = parseXmlToolCalls(text)
+  const fence = parseToolCallFence(xml.cleaned)
+  return { calls: [...xml.calls, ...fence.calls], cleaned: fence.cleaned }
+}
