@@ -741,16 +741,14 @@ export default function ChatPanel({
             onClick={() => void reprobeTools()}
             title={
               toolMode === 'text'
-                ? '这个模型还没证实能用原生工具调用（可能拒收 tools 参数，也可能收了却从不返回）：已把工具清单写进提示词，调用走文本协议。点这里重新试探'
+                ? '工具走文本协议发起（这个模型不收原生 tools 参数），读写导出等能力完全一样。点这里重新试探原生调用'
                 : '没取到工具清单（主进程异常？）：本轮只能纯文本。点这里重试'
             }
             className={`shrink-0 whitespace-nowrap rounded px-1.5 py-1 ${
-              toolMode === 'text'
-                ? 'bg-amber-500/15 text-amber-400 hover:bg-amber-500/25'
-                : 'bg-red-500/15 text-red-400 hover:bg-red-500/25'
+              toolMode === 'text' ? 'text-ink-dim hover:bg-panel-3' : 'bg-red-500/15 text-red-400 hover:bg-red-500/25'
             }`}
           >
-            {toolMode === 'text' ? '⚙ 文本协议' : '⚠ 工具不可用'}
+            {toolMode === 'text' ? '文本协议' : '⚠ 工具不可用'}
           </button>
         )}
         <select
