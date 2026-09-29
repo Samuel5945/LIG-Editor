@@ -688,34 +688,34 @@ export default function ChatPanel({
           <button
             onClick={() => attachRef.current?.click()}
             title="附带图片（走 vision）或文档（提取文本）"
-            className="rounded px-2 py-1 text-xs text-ink-dim hover:bg-panel-3"
+            className="whitespace-nowrap rounded px-2 py-1 text-xs text-ink-dim hover:bg-panel-3"
           >
             📎 附件
           </button>
           <button
             onClick={() => setWebOn((v) => !v)}
-            title="联网搜索：开启后每轮先搜索再回答（时效性问题建议开）"
-            className={`rounded px-2 py-1 text-xs ${webOn ? 'bg-accent/20 text-accent' : 'text-ink-dim hover:bg-panel-3'}`}
+            title="联网搜索：开启后每轮先搜索再回答（时效性问题建议开）；高亮 = 已开启"
+            className={`whitespace-nowrap rounded px-2 py-1 text-xs ${webOn ? 'bg-accent/20 text-accent' : 'text-ink-dim hover:bg-panel-3'}`}
           >
-            🌐 联网{webOn ? '：开' : ''}
+            🌐 联网
           </button>
           <button
             onClick={() => setCtxOn((v) => !v)}
             disabled={!project}
-            title="工程上下文：开启后每轮自动附带当前正文/贴图文案，AI 能直接回答内容相关问题"
-            className={`mr-auto rounded px-2 py-1 text-xs disabled:opacity-40 ${ctxOn && project ? 'bg-accent/20 text-accent' : 'text-ink-dim hover:bg-panel-3'}`}
+            title="工程上下文：开启后每轮自动附带当前正文/贴图文案，AI 能直接回答内容相关问题；高亮 = 已开启"
+            className={`mr-auto whitespace-nowrap rounded px-2 py-1 text-xs disabled:opacity-40 ${ctxOn && project ? 'bg-accent/20 text-accent' : 'text-ink-dim hover:bg-panel-3'}`}
           >
-            📄 上下文{ctxOn && project ? '：开' : ''}
+            📄 上下文
           </button>
           {streaming ? (
-            <button onClick={abort} className="rounded bg-panel-3 px-3 py-1 text-xs text-red-400 hover:bg-panel">
+            <button onClick={abort} className="whitespace-nowrap rounded bg-panel-3 px-3 py-1 text-xs text-red-400 hover:bg-panel">
               停止
             </button>
           ) : (
             <button
               onClick={() => void send()}
               disabled={!input.trim() && attachImages.length === 0 && attachDocs.length === 0}
-              className="rounded bg-accent px-3 py-1 text-xs text-white hover:opacity-90 disabled:opacity-40"
+              className="whitespace-nowrap rounded bg-accent px-3 py-1 text-xs text-white hover:opacity-90 disabled:opacity-40"
             >
               发送
             </button>
