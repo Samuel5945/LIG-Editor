@@ -307,8 +307,19 @@ export interface ChatSessionMeta {
   updated_at: string
 }
 
+/** 工具调用留痕（chat-tools v1 反馈迭代）：随会话落盘，记录这一轮模型到底调了哪些工具、
+ *  参数摘要与成败结果——此前会话 json 只存可见文本，排查「没调工具」还是「调了失败」只能靠工程文件 mtime 反推 */
+export interface ToolTraceEntry {
+  name: string
+  argsSummary: string
+  status: 'done' | 'error'
+  result?: string
+}
+
 export interface ChatSession extends ChatSessionMeta {
   messages: ChatMessage[]
+  /** assistant 气泡在 messages 中的下标 → 该轮工具调用留痕 */
+  toolTrace?: Record<string, ToolTraceEntry[]>
 }
 
 /** skills/ 目录下可挂载的风格/能力 Skill（SKILL.md 为内容主体） */

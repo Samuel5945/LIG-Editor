@@ -7,6 +7,7 @@ import type {
   SkillInstallDirective,
   SkillResolveResult,
   ToolCallInfo,
+  ToolTraceEntry,
   WebSearchResult
 } from '@shared/types'
 import { buildToolSchemas, inventoryFor, parseTextToolCalls } from '@shared/llmText'
@@ -327,8 +328,20 @@ export default function ChatPanel({
       setCards({})
       setAccentCards({})
       setArticleCards({})
-      setToolCards({})
-      toolCardsRef.current = {}
+      // 历史工具卡一并复原（切走再切回来也能看到当时调了什么工具）
+      const restored: Record<number, ToolCardState[]> = {}
+      for (const [idx, list] of Object.entries(s.toolTrace ?? {})) {
+        const n = Number(idx)
+        if (!Number.isInteger(n)) continue
+        restored[n] = list.map((t) => ({
+          name: t.name,
+          argsSummary: t.argsSummary,
+          status: t.status,
+          result: t.result
+        }))
+      }
+      setToolCards(restored)
+      toolCardsRef.current = restored
       setPushConfirm(null)
       sessionCreatedRef.current = s.created_at
     },
@@ -347,12 +360,25 @@ export default function ChatPanel({
       }
       if (!sessionCreatedRef.current) sessionCreatedRef.current = now
       const firstUser = msgs.find((m) => m.role === 'user')
+      // 工具调用留痕随会话落盘（进行中的项不存）：事后能分清「没调工具」「调了失败」「调成功却撒谎」
+      const trace: Record<string, ToolTraceEntry[]> = {}
+      for (const [idx, list] of Object.entries(toolCardsRef.current)) {
+        const settled = list.filter((c) => c.status !== 'running')
+        if (settled.length)
+          trace[idx] = settled.map((c) => ({
+            name: c.name,
+            argsSummary: c.argsSummary,
+            status: c.status === 'error' ? ('error' as const) : ('done' as const),
+            result: c.result
+          }))
+      }
       await window.api.invoke('chat:write', chatBucket, {
         id,
         title: contentText(firstUser?.content ?? '新会话').slice(0, 24),
         created_at: sessionCreatedRef.current,
         updated_at: now,
-        messages: msgs
+        messages: msgs,
+        toolTrace: Object.keys(trace).length ? trace : undefined
       })
       refreshSessions()
     },
