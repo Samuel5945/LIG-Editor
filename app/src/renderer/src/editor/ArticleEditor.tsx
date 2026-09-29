@@ -478,7 +478,7 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
           type="button"
           onClick={() => editor.chain().focus().undo().run()}
           disabled={!editor.can().undo()}
-          title="撤销（Ctrl+Z）"
+          title="撤销"
           className="rounded px-2 py-0.5 text-slate-300 hover:bg-slate-700 disabled:opacity-30"
         >
           ↩ 撤销
@@ -487,7 +487,7 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
           type="button"
           onClick={() => editor.chain().focus().redo().run()}
           disabled={!editor.can().redo()}
-          title="重做（Ctrl+Y 或 Ctrl+Shift+Z）"
+          title="重做"
           className="rounded px-2 py-0.5 text-slate-300 hover:bg-slate-700 disabled:opacity-30"
         >
           ↪ 重做
@@ -756,7 +756,6 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
             </>
           )
         })()}
-        <span className="ml-auto text-[10px] text-slate-500">Ctrl+Z 撤销 · Ctrl+Y 重做 · Ctrl+B 加粗</span>
       </div>
       <div className="min-h-0 flex-1 overflow-auto">
         {/* 选区浮动指令条：加粗 + 手动样式（字色/背景高亮/字号）+ AI 指令 */}
