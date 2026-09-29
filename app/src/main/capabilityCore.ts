@@ -60,12 +60,20 @@ function str(args: Record<string, unknown>, key: string, required = true): strin
  *  匹配不到就报候选名——早先会掉进 projectDir 的兜底路径，报出 ENOENT workspace/<猜名>/project.json，
  *  模型只能继续瞎猜（2026-09-29 实测：它把原因解释成「工具把特殊字符转成了方括号」，还让用户改名） */
 function projectArg(a: Record<string, unknown>): string {
+  const dir = str(a, 'dir', false)
+  if (dir) {
+    const byDir = store.matchProjectByDir(dir)
+    if (byDir) return byDir
+    throw new Error(
+      `dir 没匹配到工程：${dir}。请原样传 list_projects / create_project 返回的 dir，或改传 project 工程名`
+    )
+  }
   const raw = str(a, 'project')
   const { hit, candidates } = store.matchProjectName(raw)
   if (hit) return hit
   const hint = candidates.length ? `最接近的工程：${candidates.join(' / ')}` : '先用 list_projects 查准确名字'
   throw new Error(
-    `工程不存在：${raw}。工程名必须原样使用 list_projects / create_project 返回的 name（全角标点不要换成半角或「」）。提示：${hint}`
+    `工程不存在：${raw}。标点变体已自动归一匹配过仍找不到——请改传 list_projects / create_project 返回的 dir（工程绝对路径）。提示：${hint}`
   )
 }
 
@@ -89,7 +97,7 @@ function ensureDrafting(project: string): void {
 }
 
 const P = {
-  project: { type: 'string', description: '工程名（workspace 下的目录名）' }
+  project: { type: 'string', description: '工程名（workspace 下的目录名）；工程名含引号冒号等标点时可改传 dir' }
 } as const
 
 export const TOOLS: ToolDef[] = [
@@ -642,6 +650,20 @@ export const TOOLS: ToolDef[] = [
     handler: (a) => pushCards(projectArg(a))
   }
 ]
+
+
+/** 凡带 project 入参的工具一律自动多收 dir（工程绝对路径）：
+ *  名字里的全角 “ ” ： 在不同模型手里会被写成半角或 「 」，而路径是稳定标识；
+ *  加在这里而不是逐个工具改 schema，新增带 project 的工具自动继承 */
+for (const t of TOOLS) {
+  const props = t.inputSchema.properties as Record<string, unknown>
+  if (props.project && !props.dir) {
+    props.dir = {
+      type: 'string',
+      description: '工程绝对路径（list_projects / create_project 返回的 dir）；与 project 二选一，工程名带标点时优先用它'
+    }
+  }
+}
 
 /** 按名执行工具（MCP tools/call 与 HTTP bridge 共用入口） */
 export async function callTool(name: string, args: Record<string, unknown>): Promise<unknown> {

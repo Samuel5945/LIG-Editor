@@ -1,4 +1,4 @@
-import { join, normalize, basename, extname } from 'path'
+import { join, normalize, resolve, basename, extname } from 'path'
 import {
   existsSync,
   mkdirSync,
@@ -135,6 +135,19 @@ export function matchProjectName(name: string): { hit: string | null; candidates
   // 归一也匹配不上时，给前缀相同的候选名，让调用方能提示「是不是要……」
   const near = all.filter((n) => nameKey(n).startsWith(key.slice(0, Math.min(8, key.length)))).slice(0, 5)
   return { hit: null, candidates: near }
+}
+
+/** 按绝对路径找工程名：工具入参允许直接给 dir，绕开工程名标点在各模型手里走形的问题 */
+export function matchProjectByDir(dir: string): string | null {
+  const cut = (s: string): string => s.replace(/[\\/]+$/, '').toLowerCase()
+  const want = cut(resolve(dir))
+  const all = [...refreshDirCache().entries()]
+  const exact = all.find(([, d]) => cut(d) === want)
+  if (exact) return exact[0]
+  // 允许只给尾段（<分类>/<工程>），唯一命中才算数
+  const tail = cut(dir)
+  const byTail = all.filter(([, d]) => cut(d).endsWith(tail))
+  return byTail.length === 1 ? byTail[0][0] : null
 }
 
 export function projectDir(name: string): string {
