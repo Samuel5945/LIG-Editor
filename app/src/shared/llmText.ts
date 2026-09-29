@@ -80,7 +80,7 @@ export function parseToolCallFence(text: string): { calls: { name: string; argum
 
 /** 解析 XML 标签风格工具调用（Qwen/GLM 系模型在无原生 tools 环境下的自发协议）：
  *  兼容 <function=名> / <function name="名"> / <function 名> 三种属性写法；
- *  值尝试 JSON.parse（数字/布尔/对象），长文本与多行值一律保留字符串（防正文被类型化破坏） */
+ *  值尝试 JSON.parse（数字/布尔/对象/数组形状一律转类型），其余长文本与多行值保留字符串（防正文被类型化破坏） */
 export function parseXmlToolCalls(text: string): { calls: { name: string; arguments: string }[]; cleaned: string } {
   const calls: { name: string; arguments: string }[] = []
   const re = /<tool_call>\s*<function[\s=]([^>]+)>([\s\S]*?)<\/function>\s*<\/tool_call>/g
@@ -98,7 +98,12 @@ export function parseXmlToolCalls(text: string): { calls: { name: string; argume
       const key = attr(p[1])
       const raw = p[2].trim()
       if (!key) continue
-      if (!raw.includes('\n') && raw.length <= 60) {
+      // 结构化值（对象/数组）无视长度与换行照常解析：patches/ideas/titles 都是数组，
+      // 按长文本处理会退化成字符串，工具侧 Array.isArray 判定直接失败；
+      // 其余长值仍保留字符串（防正文里的引号/换行被类型化破坏）
+      const shaped =
+        (raw.startsWith('{') && raw.endsWith('}')) || (raw.startsWith('[') && raw.endsWith(']'))
+      if (shaped || (!raw.includes('\n') && raw.length <= 60)) {
         try {
           args[key] = JSON.parse(raw)
         } catch {
@@ -118,4 +123,22 @@ export function parseTextToolCalls(text: string): { calls: { name: string; argum
   const xml = parseXmlToolCalls(text)
   const fence = parseToolCallFence(xml.cleaned)
   return { calls: [...xml.calls, ...fence.calls], cleaned: fence.cleaned }
+}
+
+/** 数组型入参归一（工具侧用）：模型经常把数组写成 JSON 字符串（文本协议必然如此，原生调用也常见），
+ *  或只给一个对象当单项。能救的一律救成数组；救不动时把期望形状写进报错，让模型一次改对而不是反复瞎试 */
+export function coerceArrayArg(value: unknown, key: string, example: string): unknown[] {
+  let v = value
+  if (typeof v === 'string') {
+    const s = v.trim()
+    if (!s) throw new Error(`${key} 不能为空，需传 JSON 数组：${example}`)
+    try {
+      v = JSON.parse(s)
+    } catch {
+      throw new Error(`${key} 不是合法 JSON 数组，请按 ${example} 重传`)
+    }
+  }
+  if (v && typeof v === 'object' && !Array.isArray(v)) v = [v]
+  if (!Array.isArray(v) || !v.length) throw new Error(`${key} 不能为空，需传 JSON 数组：${example}`)
+  return v as unknown[]
 }

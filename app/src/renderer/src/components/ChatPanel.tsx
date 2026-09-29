@@ -102,7 +102,7 @@ function summarizeToolResult(r: { ok: boolean; result?: unknown; error?: string 
 
 /** 工具守则：注入系统提示（当前工程 + 补丁优先 + 一次一个工具 + 围栏降级协议） */
 function toolsGuardrail(project: string | null): string {
-  return `\n\n<工具守则>\n${project ? `当前工程：「${project}」，涉及它的操作默认对它执行。` : '当前未打开工程；需要工程参数时先 list_projects 查询。'}\n改正文优先用 patch_article（old/new 精准替换）；仅在整体重写时用 write_article，且写前先读原文。\n一次只调用一个工具，等结果返回再决定下一步；结论要基于工具结果而非猜测。\n用户想把你脑暴/撰写的内容落成工程：create_project（起简洁工程名）→ write_article 写入全文，完成后明确告知用户已落到哪个工程；只想存选题灵感时用 save_ideas。\n工具结果未确认成功前，不得声称已完成写入。\n若无法原生调用工具，改用文本协议发起（每次一个）：\n\`\`\`tool-call\n{"name": "工具名", "arguments": { 参数 }}\n\`\`\`\n或 <tool_call><function=工具名><parameter=参数名>值（可多行）</parameter></function></tool_call>。\n</工具守则>`
+  return `\n\n<工具守则>\n${project ? `当前工程：「${project}」，涉及它的操作默认对它执行，但每个调用仍要显式带上 project=「${project}」。` : '当前未打开工程：需要工程参数时先 list_projects 查询，或先 create_project 立项再用它返回的工程名；写入类工具（write_article / patch_article / set_titles 等）一律要显式带 project，省略即失败。'}\n改正文优先用 patch_article（patches 传数组：[{"old":"原文唯一片段","new":"替换后文本"}]，old 须与正文逐字一致且全文唯一）；仅在整体重写时用 write_article（必须同时带 project 与 content），且写前先读原文。\n一次只调用一个工具，等结果返回再决定下一步；结论要基于工具结果而非猜测。\n用户想把你脑暴/撰写的内容落成工程：create_project（起简洁工程名）→ write_article 写入全文，完成后明确告知用户已落到哪个工程；只想存选题灵感时用 save_ideas。\n工具结果未确认成功前，不得声称已完成写入；工具失败时按返回的原因改正参数再试一次，仍失败就如实说明哪一步没做成、需要用户补什么，不得说「已完成」。\n若无法原生调用工具，改用文本协议发起（每次一个）：\n\`\`\`tool-call\n{"name": "工具名", "arguments": { 参数 }}\n\`\`\`\n或 <tool_call><function=工具名><parameter=参数名>值（可多行）</parameter></function></tool_call>。\n</工具守则>`
 }
 
 /** 经主进程执行单个工具，返回给模型的文本结果（成功给内容/失败给原因） */
@@ -541,6 +541,9 @@ export default function ChatPanel({
         const tools = await getChatTools()
         let forceTextOnly = false
         let toolFails = 0
+        // 本轮各工具的最后一次结果（同名工具以最后一次为准，改对了就不算失败）：
+        // 收尾时据此如实标注未落盘，防模型声称完成
+        const outcomes = new Map<string, boolean>()
         for (let round = 0; round < TOOL_ROUNDS_MAX; round++) {
           // 最后一轮不给工具：到达上限时模型只能文字总结；连续失败后也强制文字收尾
           const useTools = tools.length > 0 && !forceTextOnly && round < TOOL_ROUNDS_MAX - 1
@@ -581,6 +584,7 @@ export default function ChatPanel({
             const ok = !summary.startsWith('失败：')
             finishToolCard(cardIdx, ok, summary)
             history.push({ role: 'tool', tool_call_id: tc.id, content: summary })
+            if (!PUSH_TOOLS.includes(tc.name)) outcomes.set(tc.name, ok)
             // 连续两次工具失败：停止重试，让模型向用户询问缺失信息而不是死循环
             toolFails = ok ? 0 : toolFails + 1
             if (toolFails >= 2) {
@@ -598,7 +602,14 @@ export default function ChatPanel({
             forceTextOnly = true
           }
         }
-        const all = [...display, { role: 'assistant', content: lastText } as ChatMessage]
+        // 仍有工具以失败收尾：相关内容并未写入，明确标注（模型在这一环最容易声称「已完成」）
+        const stillFailing = [...outcomes]
+          .filter(([, ok]) => !ok)
+          .map(([name]) => TOOL_LABELS[name] ?? name)
+        const note = stillFailing.length
+          ? `${lastText.trim() ? '\n\n' : ''}⚠️ 本轮仍有工具失败（${stillFailing.join('、')}），相关内容未确认写入工程。`
+          : ''
+        const all = [...display, { role: 'assistant', content: lastText + note } as ChatMessage]
         setMessages(all)
         await persist(all)
         // 回复尾部带 skill-install 指令：自动发起预览，弹确认卡片（降级路径的围栏协议照常生效）

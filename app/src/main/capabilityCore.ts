@@ -9,6 +9,7 @@ import {
   reviewMessages,
   titleMessages
 } from '@shared/prompts'
+import { coerceArrayArg } from '@shared/llmText'
 import * as store from './projectStore'
 import { generateImage } from './imageGen'
 import { renderFigure, saveFigureHtml } from './figureRender'
@@ -43,7 +44,15 @@ function notifyChange(project: string, file: string): void {
 function str(args: Record<string, unknown>, key: string, required = true): string {
   const v = args[key]
   if (typeof v === 'string' && v.trim()) return v
-  if (required) throw new Error(`缺少参数 ${key}`)
+  // 工程名被写成数字等非对象值时先转文本，别因类型差异判成缺参
+  if (v !== null && v !== undefined && typeof v !== 'object' && String(v).trim()) return String(v).trim()
+  if (required) {
+    throw new Error(
+      key === 'project'
+        ? '缺少参数 project：需传工程名（workspace 下的目录名，落工程时用 create_project 返回的名字；可先 list_projects 查询）'
+        : `缺少参数 ${key}`
+    )
+  }
   return ''
 }
 
@@ -174,8 +183,18 @@ export const TOOLS: ToolDef[] = [
     },
     handler: (a) => {
       const project = str(a, 'project')
-      const patches = a.patches as { old: string; new: string }[]
-      if (!Array.isArray(patches) || !patches.length) throw new Error('patches 不能为空')
+      // 数组归一（patches 常被写成 JSON 字符串），并兼容只给顶层 old/new 的单次替换
+      const rawPatches =
+        a.patches === undefined && (a.old !== undefined || a.new !== undefined)
+          ? [{ old: a.old, new: a.new }]
+          : coerceArrayArg(a.patches, 'patches', '[{"old":"原文唯一片段","new":"替换后文本"}]')
+      const patches: { old: string; new: string }[] = []
+      for (const item of rawPatches) {
+        const p = item as { old?: unknown; new?: unknown }
+        if (!p || typeof p.old !== 'string' || !p.old) throw new Error('补丁项缺少 old：需为原文片段，且与正文逐字一致')
+        if (typeof p.new !== 'string') throw new Error('补丁项缺少 new：替换后的文本（删除该片段传空串）')
+        patches.push({ old: p.old, new: p.new })
+      }
       let article = store.readTextFile(project, 'article.md')
       const failed: { old: string; reason: string }[] = []
       let applied = 0
@@ -240,8 +259,7 @@ export const TOOLS: ToolDef[] = [
       required: ['ideas']
     },
     handler: (a) => {
-      const ideas = a.ideas as IdeaCard[]
-      if (!Array.isArray(ideas) || !ideas.length) throw new Error('ideas 不能为空')
+      const ideas = coerceArrayArg(a.ideas, 'ideas', '[{"title":"选题","angle":"切入角度","audience":"目标人群","score":8,"reason":"为什么现在写"}]') as IdeaCard[]
       for (const c of ideas) {
         if (!c || typeof c.title !== 'string' || !c.title.trim()) throw new Error('每张选题卡必须有 title')
         store.addIdea(c)
@@ -364,8 +382,7 @@ export const TOOLS: ToolDef[] = [
     },
     handler: (a) => {
       const project = str(a, 'project')
-      const titles = a.titles as TitleCandidate[]
-      if (!Array.isArray(titles) || !titles.length) throw new Error('titles 不能为空')
+      const titles = coerceArrayArg(a.titles, 'titles', '[{"text":"标题","score":8,"reason":"为什么合适"}]') as TitleCandidate[]
       for (const t of titles) {
         if (!t || typeof t.text !== 'string' || !t.text.trim()) throw new Error('每个候选必须有 text')
       }
