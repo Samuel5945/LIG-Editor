@@ -137,6 +137,12 @@ export function toolsInventory(tools: ChatToolSchema[]): string {
 凡是这些工具能做的事（改正文、写正文、排版、配图生图、设封面、导出、推送）都必须发起工具调用来完成，不能凭上下文里的正文自己复述——用户要 Word/HTML 时调 export_docx/export_html 并把返回的文件路径原样告知，绝不要把正文贴回对话代替文件。`
 }
 
+/** 清单注入决策：能收原生 tools 的模型已经被下发过同一份 schema，提示里再列一遍是白烧 token；
+ *  只有走文本协议的模型必须注入——那是它唯一知道「有哪些工具」的途径 */
+export function inventoryFor(nativeTools: ChatToolSchema[], registry: ChatToolSchema[]): string {
+  return nativeTools.length ? '' : toolsInventory(registry)
+}
+
 /** 数组型入参归一（工具侧用）：模型经常把数组写成 JSON 字符串（文本协议必然如此，原生调用也常见），
  *  或只给一个对象当单项。能救的一律救成数组；救不动时把期望形状写进报错，让模型一次改对而不是反复瞎试 */
 export function coerceArrayArg(value: unknown, key: string, example: string): unknown[] {

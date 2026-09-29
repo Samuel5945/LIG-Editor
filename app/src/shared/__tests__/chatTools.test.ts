@@ -11,6 +11,7 @@ import {
   coerceArrayArg,
   parseTextToolCalls,
   parseToolCallFence,
+  inventoryFor,
   toolsInventory
 } from '../llmText'
 import { freeChatSystemPrompt } from '../prompts'
@@ -244,5 +245,27 @@ describe('freeChatSystemPrompt · 工具在场时改正文走补丁', () => {
     const s = freeChatSystemPrompt(null)
     expect(s).toMatch(/必须基于工程上下文里的正文输出修改后的全文，未改动的段落原样保留，不要只输出改动部分/)
     expect(s).not.toMatch(/一律改用 patch_article/)
+  })
+})
+
+describe('inventoryFor · 清单只在文本协议通路注入', () => {
+  const mk = (name: string): ChatToolSchema => ({
+    type: 'function',
+    function: { name, description: '导出 Word 交稿稿', parameters: { type: 'object', properties: {} } }
+  })
+  const registry = [mk('export_docx'), mk('write_article')]
+
+  it('模型能收原生 tools：schema 已下发，提示里不再重复列清单', () => {
+    expect(inventoryFor(registry, registry)).toBe('')
+  })
+
+  it('走文本协议（原生清单为空）：必须列出工具名，否则模型不知道自己有什么工具', () => {
+    const s = inventoryFor([], registry)
+    expect(s).toContain('export_docx 导出 Word 交稿稿')
+    expect(s).toContain('write_article 导出 Word 交稿稿')
+  })
+
+  it('注册表本身为空时不注入（纯文本对话不该出现工具名单）', () => {
+    expect(inventoryFor([], [])).toBe('')
   })
 })
