@@ -14,7 +14,7 @@ import * as store from './projectStore'
 import { generateImage } from './imageGen'
 import { renderFigure, saveFigureHtml } from './figureRender'
 import { exportArticleHtml, exportPlatformHtml } from './exporter'
-import { exportDocx } from './docExport'
+import { exportDocx, exportPdf } from './docExport'
 import { pushCards, pushDraft } from './wechatPublish'
 import { readSkill } from './skillStore'
 import { broadcast } from './ipc'
@@ -565,13 +565,14 @@ export const TOOLS: ToolDef[] = [
       required: ['project']
     },
     handler: (a) => {
+      const project = str(a, 'project')
       const platform = str(a, 'platform', false)
-      if (platform && platform !== 'wechat') {
-        return { path: exportPlatformHtml(str(a, 'project'), platform as 'zhihu' | 'toutiao' | 'baijiahao') }
-      }
-      return {
-        path: exportArticleHtml(str(a, 'project'), (str(a, 'variant', false) || 'auto') as 'auto' | 'day' | 'night')
-      }
+      const path =
+        platform && platform !== 'wechat'
+          ? exportPlatformHtml(project, platform as 'zhihu' | 'toutiao' | 'baijiahao')
+          : exportArticleHtml(project, (str(a, 'variant', false) || 'auto') as 'auto' | 'day' | 'night')
+      store.stampExported(project)
+      return { path }
     }
   },
   {
@@ -583,7 +584,28 @@ export const TOOLS: ToolDef[] = [
       properties: { project: P.project },
       required: ['project']
     },
-    handler: async (a) => ({ path: await exportDocx(str(a, 'project')) })
+    handler: async (a) => {
+      const project = str(a, 'project')
+      const path = await exportDocx(project)
+      store.stampExported(project)
+      return { path }
+    }
+  },
+  {
+    name: 'export_pdf',
+    description:
+      '把工程导出为 PDF 交稿稿（与编辑器预览/推送同源的日间排版，经隐藏窗口 printToPDF 生成，A4 含背景色与图片），落到工程「交付/」目录，返回绝对路径。适合打印、投屏审稿、不可编辑的存档交付；要对方继续改就用 export_docx，要贴网页就用 export_html',
+    inputSchema: {
+      type: 'object',
+      properties: { project: P.project },
+      required: ['project']
+    },
+    handler: async (a) => {
+      const project = str(a, 'project')
+      const path = await exportPdf(project)
+      store.stampExported(project)
+      return { path }
+    }
   },
   {
     name: 'push_draft',

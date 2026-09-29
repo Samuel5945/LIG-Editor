@@ -114,3 +114,17 @@ describe('set_titles / save_ideas 入参容错', () => {
     expect(() => call('save_ideas', { ideas: '[]' })).toThrow(/ideas 不能为空/)
   })
 })
+
+describe('导出类工具注册表', () => {
+  it('export_pdf 必须是个工具——菜单有 export:pdf，但注册表缺它时对话只会退化成导 HTML 让用户自己打印', () => {
+    const pdf = TOOLS.find((t) => t.name === 'export_pdf')
+    expect(pdf?.inputSchema.required).toEqual(['project'])
+    expect(pdf?.description).toContain('PDF')
+  })
+
+  it('三种交付出口都在：html / docx / pdf（清单注入时它们的第一句用途就是模型的决策依据）', () => {
+    const names = TOOLS.filter((t) => t.name.startsWith('export_')).map((t) => t.name)
+    expect(names).toEqual(['export_html', 'export_docx', 'export_pdf'])
+    for (const n of names) expect(TOOLS.find((t) => t.name === n)?.inputSchema.required).toContain('project')
+  })
+})
