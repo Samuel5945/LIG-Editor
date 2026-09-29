@@ -301,6 +301,16 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
 ): ReactElement {
   const lastEmitted = useRef(markdown)
   const [accentOpen, setAccentOpen] = useState(false)
+  // 工具条窄栏自适应：宽度不足时撤销/重做只留图标（ResizeObserver 现场测量）
+  const toolbarRef = useRef<HTMLDivElement>(null)
+  const [toolbarNarrow, setToolbarNarrow] = useState(false)
+  useEffect(() => {
+    const el = toolbarRef.current
+    if (!el) return
+    const ro = new ResizeObserver(() => setToolbarNarrow(el.clientWidth < 420))
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
   /** 工具栏背景卡弹层：预设浅色 / 自定义 / 无卡片 / 跟随主题 */
   const [bgOpen, setBgOpen] = useState(false)
   /** 选区样式弹层：color 字色 / bg 背景高亮 / size 字号 */
@@ -472,8 +482,8 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
 
   return (
     <div className="flex h-full flex-col">
-      {/* 编辑工具条：撤销/重做可见入口 + 快捷键提示；窄栏下整行横滚，按钮不内折（.editor-toolbar） */}
-      <div className="editor-toolbar flex shrink-0 items-center gap-1 border-b border-slate-800 px-3 py-1 text-xs">
+      {/* 编辑工具条：撤销/重做窄栏只留图标；整行横滚，按钮不内折（.editor-toolbar） */}
+      <div ref={toolbarRef} className="editor-toolbar flex shrink-0 items-center gap-1 border-b border-slate-800 px-3 py-1 text-xs">
         <button
           type="button"
           onClick={() => editor.chain().focus().undo().run()}
@@ -481,7 +491,7 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
           title="撤销"
           className="rounded px-2 py-0.5 text-slate-300 hover:bg-slate-700 disabled:opacity-30"
         >
-          ↩ 撤销
+          ↩{toolbarNarrow ? '' : ' 撤销'}
         </button>
         <button
           type="button"
@@ -490,7 +500,7 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
           title="重做"
           className="rounded px-2 py-0.5 text-slate-300 hover:bg-slate-700 disabled:opacity-30"
         >
-          ↪ 重做
+          ↪{toolbarNarrow ? '' : ' 重做'}
         </button>
         <div className="mx-1 h-4 w-px bg-slate-700" />
         <button

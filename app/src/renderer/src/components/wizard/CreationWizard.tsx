@@ -433,14 +433,14 @@ export default function CreationWizard({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* 步进器（步骤即导航：点哪步去哪步，完成态由工程事实推导）；窄栏/大字号下横向滚动不折行 */}
+      {/* 步进器（步骤即导航：点哪步去哪步，完成态由工程事实推导）；间距收紧，窄栏/大字号横向滚动不折行 */}
       <div data-tour="wizard-stepper" className="flex h-10 shrink-0 items-center gap-0.5 overflow-x-auto border-b border-panel-3 px-3 text-xs">
         {steps.map((s, i) => (
           <Fragment key={s.id}>
-            {i > 0 && <span className="mx-0.5 h-px w-3 shrink-0 bg-panel-3" />}
+            {i > 0 && <span className="h-px w-2 shrink-0 bg-panel-3" />}
             <button
               onClick={() => setActiveId(s.id)}
-              className={`flex shrink-0 items-center gap-1 whitespace-nowrap rounded px-2 py-0.5 ${activeId === s.id ? 'bg-panel-3 text-ink' : 'text-ink-dim hover:bg-panel-3'}`}
+              className={`flex shrink-0 items-center gap-1 whitespace-nowrap rounded px-1.5 py-0.5 ${activeId === s.id ? 'bg-panel-3 text-ink' : 'text-ink-dim hover:bg-panel-3'}`}
               title={s.done ? '已完成' : undefined}
             >
               <span className={s.done ? 'text-green-500' : activeId === s.id ? 'text-accent' : 'text-ink-dim/70'}>
