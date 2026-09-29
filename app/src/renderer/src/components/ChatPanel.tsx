@@ -200,8 +200,9 @@ export default function ChatPanel({
   const [toolCards, setToolCards] = useState<Record<number, ToolCardState[]>>({})
   const toolCardsRef = useRef<Record<number, ToolCardState[]>>({})
   const [pushConfirm, setPushConfirm] = useState<{ tool: string; summary: string; resolve: (ok: boolean) => void } | null>(null)
-  // 会话桶：有工程 = 工程 chat/ 目录；无工程 = 临时对话桶（settings/chat-temp/，与主进程 TEMP_CHAT_KEY 对应）
-  const chatBucket = project ?? '__temp__'
+  // 会话桶：默认跟当前工程走；「临时」切换后看向临时对话桶（settings/chat-temp/，与主进程 TEMP_CHAT_KEY 对应）
+  const [tempMode, setTempMode] = useState(false)
+  const chatBucket = !project || tempMode ? '__temp__' : project
   // 附件：图片（dataURL 走 vision）+ 文档（提取文本拼入消息）
   const [attachImages, setAttachImages] = useState<{ name: string; dataUrl: string }[]>([])
   const [attachDocs, setAttachDocs] = useState<{ name: string; text: string }[]>([])
@@ -217,7 +218,21 @@ export default function ChatPanel({
   }, [chatBucket])
 
   useEffect(() => {
-    // 切工程：重置会话上下文
+    // 切工程：退出临时桶视角并重置会话上下文
+    setTempMode(false)
+    setSessionId(null)
+    setMessages([])
+    setCards({})
+    setAccentCards({})
+    setArticleCards({})
+    setToolCards({})
+    toolCardsRef.current = {}
+    setPushConfirm(null)
+    sessionCreatedRef.current = null
+  }, [project])
+
+  useEffect(() => {
+    // 切会话桶（工程 ↔ 临时对话）：清空当前会话状态并加载目标桶的会话列表
     setSessionId(null)
     setMessages([])
     setCards({})
@@ -228,7 +243,7 @@ export default function ChatPanel({
     setPushConfirm(null)
     sessionCreatedRef.current = null
     refreshSessions()
-  }, [project, refreshSessions])
+  }, [chatBucket, refreshSessions])
 
   const newSession = useCallback(() => {
     setSessionId(null)
@@ -595,12 +610,21 @@ export default function ChatPanel({
     <>
       {/* 会话条 */}
       <div className="flex shrink-0 items-center gap-1 border-b border-panel-3 px-2 py-1.5 text-xs">
+        <button
+          onClick={() => setTempMode((v) => !v)}
+          title="临时对话：不落在任何工程下的会话（存于本机 settings）"
+          className={`shrink-0 whitespace-nowrap rounded px-1.5 py-1 ${
+            chatBucket === '__temp__' && project ? 'bg-accent/20 text-accent' : 'text-ink-dim hover:bg-panel-3'
+          }`}
+        >
+          ⧉ 临时
+        </button>
         <select
           value={sessionId ?? ''}
           onChange={(e) => (e.target.value ? loadSession(e.target.value) : newSession())}
           className="min-w-0 flex-1 rounded bg-panel-3 px-1.5 py-1 text-ink outline-none disabled:opacity-50"
         >
-          <option value="">{project ? '（当前会话）' : '临时对话（未落工程）'}</option>
+          <option value="">{chatBucket === '__temp__' ? '临时对话（未落工程）' : '（当前会话）'}</option>
           {sessions.map((s) => (
             <option key={s.id} value={s.id}>
               {s.title}
