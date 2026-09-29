@@ -113,6 +113,30 @@ function resolveDir(name: string): string | null {
   return refreshDirCache().get(name) ?? null
 }
 
+/** 工程名比对键：折叠全角/半角标点与空白（模型传参时常把 “” 写成 "" 或「」、：写成 :） */
+function nameKey(name: string): string {
+  return name
+    .normalize('NFKC')
+    .replace(/["'“”‘’「」『』【】〔〕()（）\[\]{}]/g, '')
+    .replace(/[：:；;，,。.、！!？?\s\-_—~～]/g, '')
+    .toLowerCase()
+}
+
+/** 按名找工程：精确 → 标点归一唯一匹配。命中返回真实工程名，未命中给候选名（供调用方报错） */
+export function matchProjectName(name: string): { hit: string | null; candidates: string[] } {
+  if (dirCache.has(name) && existsSync(join(dirCache.get(name) as string, 'project.json'))) return { hit: name, candidates: [] }
+  const all = [...refreshDirCache().keys()]
+  if (all.includes(name)) return { hit: name, candidates: [] }
+  const key = nameKey(name)
+  if (!key) return { hit: null, candidates: [] }
+  const same = all.filter((n) => nameKey(n) === key)
+  if (same.length === 1) return { hit: same[0], candidates: same }
+  if (same.length > 1) return { hit: null, candidates: same }
+  // 归一也匹配不上时，给前缀相同的候选名，让调用方能提示「是不是要……」
+  const near = all.filter((n) => nameKey(n).startsWith(key.slice(0, Math.min(8, key.length)))).slice(0, 5)
+  return { hit: null, candidates: near }
+}
+
 export function projectDir(name: string): string {
   const dir = resolveDir(name)
   if (dir) return dir

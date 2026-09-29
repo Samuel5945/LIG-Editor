@@ -56,6 +56,19 @@ function str(args: Record<string, unknown>, key: string, required = true): strin
   return ''
 }
 
+/** 工程名入参：先按标点归一匹配真实工程（模型常把全角 “” ： 写成半角或「」变体）。
+ *  匹配不到就报候选名——早先会掉进 projectDir 的兜底路径，报出 ENOENT workspace/<猜名>/project.json，
+ *  模型只能继续瞎猜（2026-09-29 实测：它把原因解释成「工具把特殊字符转成了方括号」，还让用户改名） */
+function projectArg(a: Record<string, unknown>): string {
+  const raw = str(a, 'project')
+  const { hit, candidates } = store.matchProjectName(raw)
+  if (hit) return hit
+  const hint = candidates.length ? `最接近的工程：${candidates.join(' / ')}` : '先用 list_projects 查准确名字'
+  throw new Error(
+    `工程不存在：${raw}。工程名必须原样使用 list_projects / create_project 返回的 name（全角标点不要换成半角或「」）。提示：${hint}`
+  )
+}
+
 /** 工程挂载了风格 Skill 时读出全文（注入系统提示） */
 function projectSkill(project: string): string | null {
   try {
@@ -118,14 +131,14 @@ export const TOOLS: ToolDef[] = [
       },
       required: ['project', 'category']
     },
-    handler: (a) => store.setProjectCategory(str(a, 'project'), str(a, 'category'))
+    handler: (a) => store.setProjectCategory(projectArg(a), str(a, 'category'))
   },
   {
     name: 'get_project',
     description: '读取工程详情：project.json 元数据（状态/选题/标题候选/封面）+ article.md 正文全文',
     inputSchema: { type: 'object', properties: { project: P.project }, required: ['project'] },
     handler: (a) => {
-      const project = str(a, 'project')
+      const project = projectArg(a)
       return { meta: store.readMeta(project), article: store.readTextFile(project, 'article.md') }
     }
   },
@@ -142,7 +155,7 @@ export const TOOLS: ToolDef[] = [
     },
     handler: (a) => {
       const file = (str(a, 'file', false) || 'article.md') as 'article.md' | 'ideas.md' | 'review.md'
-      return store.readTextFile(str(a, 'project'), file)
+      return store.readTextFile(projectArg(a), file)
     }
   },
   {
@@ -155,7 +168,7 @@ export const TOOLS: ToolDef[] = [
       required: ['project', 'content']
     },
     handler: (a) => {
-      const project = str(a, 'project')
+      const project = projectArg(a)
       store.writeTextFile(project, 'article.md', str(a, 'content'))
       notifyChange(project, 'article.md')
       ensureDrafting(project)
@@ -182,7 +195,7 @@ export const TOOLS: ToolDef[] = [
       required: ['project', 'patches']
     },
     handler: (a) => {
-      const project = str(a, 'project')
+      const project = projectArg(a)
       // 数组归一（patches 常被写成 JSON 字符串），并兼容只给顶层 old/new 的单次替换
       const rawPatches =
         a.patches === undefined && (a.old !== undefined || a.new !== undefined)
@@ -281,7 +294,7 @@ export const TOOLS: ToolDef[] = [
       required: ['project', 'ask']
     },
     handler: (a) => {
-      const project = str(a, 'project')
+      const project = projectArg(a)
       return {
         messages: outlineMessages(str(a, 'ask'), str(a, 'material', false), projectSkill(project)),
         next: '跑出大纲后调 article_prompt（传入大纲）取全文提示词'
@@ -301,7 +314,7 @@ export const TOOLS: ToolDef[] = [
       required: ['project', 'outline']
     },
     handler: (a) => ({
-      messages: fullArticleMessages(str(a, 'outline'), projectSkill(str(a, 'project'))),
+      messages: fullArticleMessages(str(a, 'outline'), projectSkill(projectArg(a))),
       next: '跑出 markdown 全文后调 write_article 写入 article.md'
     })
   },
@@ -318,7 +331,7 @@ export const TOOLS: ToolDef[] = [
       required: ['project']
     },
     handler: (a) => {
-      const project = str(a, 'project')
+      const project = projectArg(a)
       const article = store.readTextFile(project, 'article.md')
       if (!article.trim()) throw new Error('article.md 为空，先写正文再审阅')
       return {
@@ -336,7 +349,7 @@ export const TOOLS: ToolDef[] = [
       required: ['project', 'report']
     },
     handler: (a) => {
-      const project = str(a, 'project')
+      const project = projectArg(a)
       store.writeTextFile(project, 'review.md', str(a, 'report').trim() + '\n')
       notifyChange(project, 'review.md')
       return { ok: true }
@@ -348,7 +361,7 @@ export const TOOLS: ToolDef[] = [
       '取起标题的提示词消息组（内含当前正文与风格 Skill，本应用不代跑 LLM）。用你自己的模型跑出 6 个标题候选 JSON 后调 set_titles 落盘',
     inputSchema: { type: 'object', properties: { project: P.project }, required: ['project'] },
     handler: (a) => {
-      const project = str(a, 'project')
+      const project = projectArg(a)
       const article = store.readTextFile(project, 'article.md')
       if (!article.trim()) throw new Error('article.md 为空，先写正文再起标题')
       return {
@@ -381,7 +394,7 @@ export const TOOLS: ToolDef[] = [
       required: ['project', 'titles']
     },
     handler: (a) => {
-      const project = str(a, 'project')
+      const project = projectArg(a)
       const titles = coerceArrayArg(a.titles, 'titles', '[{"text":"标题","score":8,"reason":"为什么合适"}]') as TitleCandidate[]
       for (const t of titles) {
         if (!t || typeof t.text !== 'string' || !t.text.trim()) throw new Error('每个候选必须有 text')
@@ -414,7 +427,7 @@ export const TOOLS: ToolDef[] = [
       required: ['project']
     },
     handler: (a) => {
-      const project = str(a, 'project')
+      const project = projectArg(a)
       const meta = store.readMeta(project)
       // 有值覆盖 / null 恢复默认（写 undefined，JSON 序列化自动省略）/ 未传不动
       if (a.accent !== undefined) meta.accent = a.accent === null ? undefined : (a.accent as string)
@@ -450,7 +463,7 @@ export const TOOLS: ToolDef[] = [
       required: ['project']
     },
     handler: async (a) => {
-      const project = str(a, 'project')
+      const project = projectArg(a)
       const html = str(a, 'html', false)
       let rel = str(a, 'path', false)
       if (html) rel = saveFigureHtml(project, html, rel || undefined)
@@ -473,7 +486,7 @@ export const TOOLS: ToolDef[] = [
       required: ['project', 'prompt']
     },
     handler: async (a) => {
-      const project = str(a, 'project')
+      const project = projectArg(a)
       const base64 = await generateImage(str(a, 'prompt'), { ratio: str(a, 'ratio', false) || undefined })
       const rel = str(a, 'path', false) || `assets/gen-${Date.now()}.png`
       return { path: store.saveAsset(project, rel, base64) }
@@ -492,7 +505,7 @@ export const TOOLS: ToolDef[] = [
       required: ['project', 'source']
     },
     handler: (a) => {
-      const project = str(a, 'project')
+      const project = projectArg(a)
       const source = str(a, 'source')
       if (!isAbsolute(source) || !existsSync(source)) throw new Error(`源文件不存在：${source}`)
       if (!/\.(png|jpe?g|webp|gif)$/i.test(source)) throw new Error('仅支持 png/jpg/webp/gif')
@@ -514,7 +527,7 @@ export const TOOLS: ToolDef[] = [
       required: ['project', 'main']
     },
     handler: (a) => {
-      const project = str(a, 'project')
+      const project = projectArg(a)
       const main = str(a, 'main')
       if (!existsSync(join(store.projectDir(project), main))) throw new Error(`封面图不存在：${main}`)
       const meta = store.readMeta(project)
@@ -535,7 +548,7 @@ export const TOOLS: ToolDef[] = [
       required: ['project']
     },
     handler: (a) => {
-      const project = str(a, 'project')
+      const project = projectArg(a)
       const date = a.date === undefined || a.date === null ? null : String(a.date)
       if (date !== null && !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
         throw new Error(`非法排期日期（应为 YYYY-MM-DD）：${date}`)
@@ -565,7 +578,7 @@ export const TOOLS: ToolDef[] = [
       required: ['project']
     },
     handler: (a) => {
-      const project = str(a, 'project')
+      const project = projectArg(a)
       const platform = str(a, 'platform', false)
       const path =
         platform && platform !== 'wechat'
@@ -585,7 +598,7 @@ export const TOOLS: ToolDef[] = [
       required: ['project']
     },
     handler: async (a) => {
-      const project = str(a, 'project')
+      const project = projectArg(a)
       const path = await exportDocx(project)
       store.stampExported(project)
       return { path }
@@ -601,7 +614,7 @@ export const TOOLS: ToolDef[] = [
       required: ['project']
     },
     handler: async (a) => {
-      const project = str(a, 'project')
+      const project = projectArg(a)
       const path = await exportPdf(project)
       store.stampExported(project)
       return { path }
@@ -619,14 +632,14 @@ export const TOOLS: ToolDef[] = [
       },
       required: ['project']
     },
-    handler: (a) => pushDraft(str(a, 'project'), str(a, 'variant', false) === 'night' ? 'night' : 'day')
+    handler: (a) => pushDraft(projectArg(a), str(a, 'variant', false) === 'night' ? 'night' : 'day')
   },
   {
     name: 'push_cards',
     description:
       '把贴图组推送到公众号草稿箱（图片消息形态，读者可左右滑动看图）：每张卡片 PNG 传永久素材，配文用发布配文，标题取封面卡标题。需全部卡片已渲染、最多 20 张；AppID/AppSecret 与 IP 白名单要求同 push_draft',
     inputSchema: { type: 'object', properties: { project: P.project }, required: ['project'] },
-    handler: (a) => pushCards(str(a, 'project'))
+    handler: (a) => pushCards(projectArg(a))
   }
 ]
 
