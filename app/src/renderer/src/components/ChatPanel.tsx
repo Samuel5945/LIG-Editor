@@ -9,7 +9,7 @@ import type {
   ToolCallInfo,
   WebSearchResult
 } from '@shared/types'
-import { buildToolSchemas } from '@shared/llmText'
+import { buildToolSchemas, parseToolCallFence } from '@shared/llmText'
 import { extractInlineContent, parseSkillDirective } from '@shared/skillInstall'
 import { cardsPlainText, parseAccentDirective } from '@shared/cards'
 import { parseArticleUpdate } from '@shared/articleUpdate'
@@ -100,9 +100,9 @@ function summarizeToolResult(r: { ok: boolean; result?: unknown; error?: string 
   return s || '（无返回内容）'
 }
 
-/** 工具守则：注入系统提示（当前工程 + 补丁优先 + 一次一个工具） */
+/** 工具守则：注入系统提示（当前工程 + 补丁优先 + 一次一个工具 + 围栏降级协议） */
 function toolsGuardrail(project: string | null): string {
-  return `\n\n<工具守则>\n${project ? `当前工程：「${project}」，涉及它的操作默认对它执行。` : '当前未打开工程；需要工程参数时先 list_projects 查询。'}\n改正文优先用 patch_article（old/new 精准替换）；仅在整体重写时用 write_article，且写前先读原文。\n一次只调用一个工具，等结果返回再决定下一步；结论要基于工具结果而非猜测。\n</工具守则>`
+  return `\n\n<工具守则>\n${project ? `当前工程：「${project}」，涉及它的操作默认对它执行。` : '当前未打开工程；需要工程参数时先 list_projects 查询。'}\n改正文优先用 patch_article（old/new 精准替换）；仅在整体重写时用 write_article，且写前先读原文。\n一次只调用一个工具，等结果返回再决定下一步；结论要基于工具结果而非猜测。\n若无法原生调用工具，改用文本围栏发起（每次一个）：\n\`\`\`tool-call\n{"name": "工具名", "arguments": { 参数 }}\n\`\`\`\n</工具守则>`
 }
 
 /** 经主进程执行单个工具，返回给模型的文本结果（成功给内容/失败给原因） */
@@ -531,19 +531,26 @@ export default function ChatPanel({
           const { promise, abort } = chatOnceWithTools(history, { tools: useTools ? tools : undefined, onDelta })
           abortRef.current = abort
           const res = await promise
-          finalText = res.text
-          if (!res.toolCalls?.length) break
+          // 非原生路径：部分供应商不支持 tools 参数，模型用 ```tool-call 围栏发起调用——收编执行
+          const fenced = res.toolCalls?.length
+            ? { calls: [] as ToolCallInfo[], cleaned: res.text }
+            : parseToolCallFence(res.text)
+          const roundCalls: ToolCallInfo[] = res.toolCalls?.length
+            ? res.toolCalls
+            : fenced.calls.map((c, k) => ({ id: `fence_${round}_${k}`, name: c.name, arguments: c.arguments }))
+          finalText = fenced.cleaned
+          if (!roundCalls.length) break
           // 模型要调工具：assistant(tool_calls) 入 API 历史，逐个按确认分层执行
           history.push({
             role: 'assistant',
-            content: res.text || '',
-            tool_calls: res.toolCalls.map((t) => ({
+            content: finalText || '',
+            tool_calls: roundCalls.map((t) => ({
               id: t.id,
               type: 'function' as const,
               function: { name: t.name, arguments: t.arguments }
             }))
           })
-          for (const tc of res.toolCalls) {
+          for (const tc of roundCalls) {
             const cardIdx = addToolCard(tc)
             if (PUSH_TOOLS.includes(tc.name)) {
               // 外发动作：确认卡，用户点了才真正推送

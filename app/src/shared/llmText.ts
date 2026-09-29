@@ -57,3 +57,23 @@ export function buildToolSchemas(
       function: { name: t.name, description: t.description, parameters: t.parameters }
     }))
 }
+
+/** 解析 assistant 文本里的 ```tool-call 围栏（不支持原生 function calling 的模型的工具调用协议）。
+ *  返回围栏里的调用列表（arguments 统一为 JSON 字符串）与剥离围栏后的正文；无有效围栏返回空 */
+export function parseToolCallFence(text: string): { calls: { name: string; arguments: string }[]; cleaned: string } {
+  const calls: { name: string; arguments: string }[] = []
+  const re = /```tool-call\s*\n([\s\S]*?)```/g
+  let m: RegExpExecArray | null
+  while ((m = re.exec(text))) {
+    try {
+      const o = JSON.parse(m[1].trim()) as { name?: string; arguments?: unknown }
+      if (typeof o.name === 'string' && o.name) {
+        const args = typeof o.arguments === 'string' ? o.arguments : JSON.stringify(o.arguments ?? {})
+        calls.push({ name: o.name, arguments: args })
+      }
+    } catch {
+      // 非法 JSON 围栏不当调用处理
+    }
+  }
+  return { calls, cleaned: calls.length ? text.replace(re, '').trim() : text }
+}

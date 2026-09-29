@@ -4,7 +4,7 @@
  * buildToolSchemas 的提示词类过滤与 OpenAI function 映射决定暴露给对话模型的工具面。
  */
 import { describe, expect, it } from 'vitest'
-import { accumulateToolCalls, buildToolSchemas } from '../llmText'
+import { accumulateToolCalls, buildToolSchemas, parseToolCallFence } from '../llmText'
 
 describe('accumulateToolCalls', () => {
   it('单个工具分段到达：arguments 字符串拼接、id/name 覆盖', () => {
@@ -53,5 +53,39 @@ describe('buildToolSchemas', () => {
       type: 'function',
       function: { name: 'list_projects', description: '列工程', parameters: { type: 'object', properties: {} } }
     })
+  })
+})
+
+describe('parseToolCallFence', () => {
+  it('提取围栏里的调用（arguments 统一为 JSON 字符串）并剥离围栏', () => {
+    const text = '正在查询工程列表：\n```tool-call\n{"name": "list_projects", "arguments": {}}\n```\n请稍候。'
+    const r = parseToolCallFence(text)
+    expect(r.calls).toEqual([{ name: 'list_projects', arguments: '{}' }])
+    expect(r.cleaned).toBe('正在查询工程列表：\n\n请稍候。')
+  })
+
+  it('arguments 为对象时转为字符串；多围栏全部提取', () => {
+    const text = [
+      '```tool-call',
+      '{"name": "set_theme", "arguments": {"accent": "#7c3aed"}}',
+      '```',
+      '中间文字',
+      '```tool-call',
+      '{"name": "get_project", "arguments": {"name": "test"}}',
+      '```'
+    ].join('\n')
+    const r = parseToolCallFence(text)
+    expect(r.calls).toHaveLength(2)
+    expect(r.calls[0]).toEqual({ name: 'set_theme', arguments: '{"accent":"#7c3aed"}' })
+    expect(r.cleaned).not.toContain('tool-call')
+  })
+
+  it('无围栏原样返回；非法 JSON 围栏不当调用', () => {
+    expect(parseToolCallFence('普通回复').calls).toEqual([])
+    expect(parseToolCallFence('普通回复').cleaned).toBe('普通回复')
+    const bad = '```tool-call\n不是 JSON\n```'
+    const r = parseToolCallFence(bad)
+    expect(r.calls).toEqual([])
+    expect(r.cleaned).toBe(bad)
   })
 })
