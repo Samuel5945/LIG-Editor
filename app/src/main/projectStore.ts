@@ -577,8 +577,14 @@ export function writeTextFile(name: string, file: ProjectTextFile, content: stri
 
 // ---------- 会话历史（M5：chat/*.json） ----------
 
+/** 无工程临时对话的会话桶（settings/chat-temp/）：对话面板未开工程时也留记录 */
+export const TEMP_CHAT_KEY = '__temp__'
+
 function chatDir(name: string): string {
-  const dir = join(projectDir(name), 'chat')
+  const dir =
+    name === TEMP_CHAT_KEY
+      ? join(getAppPaths().settings, 'chat-temp')
+      : join(projectDir(name), 'chat')
   mkdirSync(dir, { recursive: true })
   return dir
 }

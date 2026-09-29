@@ -102,7 +102,7 @@ function summarizeToolResult(r: { ok: boolean; result?: unknown; error?: string 
 
 /** 工具守则：注入系统提示（当前工程 + 补丁优先 + 一次一个工具 + 围栏降级协议） */
 function toolsGuardrail(project: string | null): string {
-  return `\n\n<工具守则>\n${project ? `当前工程：「${project}」，涉及它的操作默认对它执行。` : '当前未打开工程；需要工程参数时先 list_projects 查询。'}\n改正文优先用 patch_article（old/new 精准替换）；仅在整体重写时用 write_article，且写前先读原文。\n一次只调用一个工具，等结果返回再决定下一步；结论要基于工具结果而非猜测。\n若无法原生调用工具，改用文本围栏发起（每次一个）：\n\`\`\`tool-call\n{"name": "工具名", "arguments": { 参数 }}\n\`\`\`\n</工具守则>`
+  return `\n\n<工具守则>\n${project ? `当前工程：「${project}」，涉及它的操作默认对它执行。` : '当前未打开工程；需要工程参数时先 list_projects 查询。'}\n改正文优先用 patch_article（old/new 精准替换）；仅在整体重写时用 write_article，且写前先读原文。\n一次只调用一个工具，等结果返回再决定下一步；结论要基于工具结果而非猜测。\n用户想把你脑暴/撰写的内容落成工程：create_project（起简洁工程名）→ write_article 写入全文，完成后明确告知用户已落到哪个工程；只想存选题灵感时用 save_ideas。\n若无法原生调用工具，改用文本围栏发起（每次一个）：\n\`\`\`tool-call\n{"name": "工具名", "arguments": { 参数 }}\n\`\`\`\n</工具守则>`
 }
 
 /** 经主进程执行单个工具，返回给模型的文本结果（成功给内容/失败给原因） */
@@ -200,6 +200,8 @@ export default function ChatPanel({
   const [toolCards, setToolCards] = useState<Record<number, ToolCardState[]>>({})
   const toolCardsRef = useRef<Record<number, ToolCardState[]>>({})
   const [pushConfirm, setPushConfirm] = useState<{ tool: string; summary: string; resolve: (ok: boolean) => void } | null>(null)
+  // 会话桶：有工程 = 工程 chat/ 目录；无工程 = 临时对话桶（settings/chat-temp/，与主进程 TEMP_CHAT_KEY 对应）
+  const chatBucket = project ?? '__temp__'
   // 附件：图片（dataURL 走 vision）+ 文档（提取文本拼入消息）
   const [attachImages, setAttachImages] = useState<{ name: string; dataUrl: string }[]>([])
   const [attachDocs, setAttachDocs] = useState<{ name: string; text: string }[]>([])
@@ -211,12 +213,8 @@ export default function ChatPanel({
   // ---- 会话列表 / 切换 ----
 
   const refreshSessions = useCallback(async () => {
-    if (!project) {
-      setSessions([])
-      return
-    }
-    setSessions(await window.api.invoke('chat:list', project))
-  }, [project])
+    setSessions(await window.api.invoke('chat:list', chatBucket))
+  }, [chatBucket])
 
   useEffect(() => {
     // 切工程：重置会话上下文
@@ -246,10 +244,10 @@ export default function ChatPanel({
 
   /** 删除当前会话：已落盘的删文件，未落盘的（临时对话）直接清空重开 */
   const deleteSession = useCallback(async () => {
-    if (project && sessionId) {
+    if (sessionId) {
       if (!window.confirm('删除当前会话？删除后不可恢复')) return
       try {
-        await window.api.invoke('chat:delete', project, sessionId)
+        await window.api.invoke('chat:delete', chatBucket, sessionId)
         onToast('会话已删除')
       } catch (err) {
         onToast(`删除失败：${err instanceof Error ? err.message : err}`)
@@ -257,12 +255,12 @@ export default function ChatPanel({
       refreshSessions()
     }
     newSession()
-  }, [project, sessionId, onToast, refreshSessions, newSession])
+  }, [chatBucket, sessionId, onToast, refreshSessions, newSession])
 
   const loadSession = useCallback(
     async (id: string) => {
-      if (!project || !id) return
-      const s = await window.api.invoke('chat:read', project, id)
+      if (!id) return
+      const s = await window.api.invoke('chat:read', chatBucket, id)
       setSessionId(s.id)
       setMessages(s.messages)
       setCards({})
@@ -273,13 +271,13 @@ export default function ChatPanel({
       setPushConfirm(null)
       sessionCreatedRef.current = s.created_at
     },
-    [project]
+    [chatBucket]
   )
 
-  /** 每轮完成后把消息落盘 chat/<id>.json（无工程时不持久化） */
+  /** 每轮完成后把消息落盘 chat/<id>.json（无工程走临时对话桶 settings/chat-temp/） */
   const persist = useCallback(
     async (msgs: ChatMessage[]) => {
-      if (!project || msgs.length === 0) return
+      if (msgs.length === 0) return
       const now = new Date().toISOString()
       let id = sessionId
       if (!id) {
@@ -288,7 +286,7 @@ export default function ChatPanel({
       }
       if (!sessionCreatedRef.current) sessionCreatedRef.current = now
       const firstUser = msgs.find((m) => m.role === 'user')
-      await window.api.invoke('chat:write', project, {
+      await window.api.invoke('chat:write', chatBucket, {
         id,
         title: contentText(firstUser?.content ?? '新会话').slice(0, 24),
         created_at: sessionCreatedRef.current,
@@ -297,7 +295,7 @@ export default function ChatPanel({
       })
       refreshSessions()
     },
-    [project, sessionId, refreshSessions]
+    [chatBucket, sessionId, refreshSessions]
   )
 
   // 自动滚到底
@@ -600,10 +598,9 @@ export default function ChatPanel({
         <select
           value={sessionId ?? ''}
           onChange={(e) => (e.target.value ? loadSession(e.target.value) : newSession())}
-          disabled={!project}
           className="min-w-0 flex-1 rounded bg-panel-3 px-1.5 py-1 text-ink outline-none disabled:opacity-50"
         >
-          <option value="">{project ? '（当前会话）' : '未打开工程，不保存会话'}</option>
+          <option value="">{project ? '（当前会话）' : '临时对话（未落工程）'}</option>
           {sessions.map((s) => (
             <option key={s.id} value={s.id}>
               {s.title}

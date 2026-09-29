@@ -91,7 +91,12 @@ export const TOOLS: ToolDef[] = [
       },
       required: ['name']
     },
-    handler: (a) => store.createProject(str(a, 'name'), str(a, 'category', false) || undefined)
+    handler: (a) => {
+      const r = store.createProject(str(a, 'name'), str(a, 'category', false) || undefined)
+      // 对话内立项：广播让工程树/向导立即看到新工程
+      broadcast('workspace:changed', null)
+      return r
+    }
   },
   {
     name: 'set_project_category',
