@@ -457,12 +457,14 @@ export default function Sidebar(props: SidebarProps): ReactElement {
             )}
             <span
               className="min-w-0 flex-1"
-              title={isOpen && !inBatch ? '点击收起' : undefined}
+              title={inBatch ? undefined : isOpen ? '点击收起' : '点击展开'}
               onClick={(e) => {
-                // 展开态点标题 = 收起；收起态/批量模式放行给行（打开工程 / 勾选）
-                if (inBatch || !isOpen) return
+                // 标题 = 纯展开/收起切换：已打开的工程收起后再点必须能再展开（走打开路径会因
+                // current 未变化而不触发自动展开）；未打开的工程顺带打开
+                if (inBatch) return
                 e.stopPropagation()
                 toggleProject(p.name)
+                if (!isOpen && !isCurrent) void onOpenProject(p.name)
               }}
             >
               <HoverScrollName name={p.name} />
