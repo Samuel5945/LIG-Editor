@@ -133,3 +133,28 @@ describe('parseXmlToolCalls / parseTextToolCalls', () => {
     expect(parseTextToolCalls('普通回复').cleaned).toBe('普通回复')
   })
 })
+
+describe('parseXmlToolCalls · 属性形式兼容', () => {
+  it('<function name="x"> 空格引号形式与 <function=x> 等价', () => {
+    const a = parseTextToolCalls('<tool_call>\n<function name="get_project">\n<parameter=project>test</parameter>\n</function>\n</tool_call>')
+    const b = parseTextToolCalls('<tool_call>\n<function=get_project>\n<parameter=project>test</parameter>\n</function>\n</tool_call>')
+    expect(a.calls[0].name).toBe('get_project')
+    expect(b.calls[0].name).toBe('get_project')
+  })
+
+  it('长文本/多行值不被 JSON 类型化破坏', () => {
+    const text = [
+      '<tool_call>',
+      '<function=write_article>',
+      '<parameter=content>',
+      '## 标题',
+      '',
+      '正文含 <特殊> 字符与多行。',
+      '</parameter>',
+      '</function>',
+      '</tool_call>'
+    ].join('\n')
+    const args = JSON.parse(parseTextToolCalls(text).calls[0].arguments) as { content: string }
+    expect(args.content).toBe('## 标题\n\n正文含 <特殊> 字符与多行。')
+  })
+})

@@ -79,23 +79,32 @@ export function parseToolCallFence(text: string): { calls: { name: string; argum
 }
 
 /** 解析 XML 标签风格工具调用（Qwen/GLM 系模型在无原生 tools 环境下的自发协议）：
- *  <tool_call><function=名><parameter=键>值（可多行）</parameter>…</function></tool_call>
- *  值尝试 JSON.parse（数字/布尔/对象），失败保留字符串；正文多行内容由字符串承载 */
+ *  兼容 <function=名> / <function name="名"> / <function 名> 三种属性写法；
+ *  值尝试 JSON.parse（数字/布尔/对象），长文本与多行值一律保留字符串（防正文被类型化破坏） */
 export function parseXmlToolCalls(text: string): { calls: { name: string; arguments: string }[]; cleaned: string } {
   const calls: { name: string; arguments: string }[] = []
-  const re = /<tool_call>\s*<function=([^>\n]+)>([\s\S]*?)<\/function>\s*<\/tool_call>/g
+  const re = /<tool_call>\s*<function[\s=]([^>]+)>([\s\S]*?)<\/function>\s*<\/tool_call>/g
+  const attr = (s: string): string => {
+    const m = /^(?:name\s*=\s*)?["']?\s*([^"']*?)\s*["']?$/.exec(s.trim())
+    return (m ? m[1] : s.trim()).trim()
+  }
   let m: RegExpExecArray | null
   while ((m = re.exec(text))) {
-    const name = m[1].trim()
+    const name = attr(m[1])
     const args: Record<string, unknown> = {}
-    const pre = /<parameter=([^>\n]+)>([\s\S]*?)<\/parameter>/g
+    const pre = /<parameter[\s=]([^>]+)>([\s\S]*?)<\/parameter>/g
     let p: RegExpExecArray | null
     while ((p = pre.exec(m[2]))) {
-      const key = p[1].trim()
+      const key = attr(p[1])
       const raw = p[2].trim()
-      try {
-        args[key] = JSON.parse(raw)
-      } catch {
+      if (!key) continue
+      if (!raw.includes('\n') && raw.length <= 60) {
+        try {
+          args[key] = JSON.parse(raw)
+        } catch {
+          args[key] = raw
+        }
+      } else {
         args[key] = raw
       }
     }

@@ -535,12 +535,15 @@ export default function ChatPanel({
         })
 
       abortRef.current = null
+      // 最后一轮的文本提升到 try 外：失败落盘（保留现场）时 catch 里也能拿到
+      let lastText = ''
       try {
         const tools = await getChatTools()
-        let finalText = ''
+        let forceTextOnly = false
+        let toolFails = 0
         for (let round = 0; round < TOOL_ROUNDS_MAX; round++) {
-          // 最后一轮不给工具：到达上限时模型只能文字总结
-          const useTools = tools.length > 0 && round < TOOL_ROUNDS_MAX - 1
+          // 最后一轮不给工具：到达上限时模型只能文字总结；连续失败后也强制文字收尾
+          const useTools = tools.length > 0 && !forceTextOnly && round < TOOL_ROUNDS_MAX - 1
           const { promise, abort } = chatOnceWithTools(history, { tools: useTools ? tools : undefined, onDelta })
           abortRef.current = abort
           const res = await promise
@@ -551,12 +554,12 @@ export default function ChatPanel({
           const roundCalls: ToolCallInfo[] = res.toolCalls?.length
             ? res.toolCalls
             : textCalls.calls.map((c, k) => ({ id: `text_${round}_${k}`, name: c.name, arguments: c.arguments }))
-          finalText = textCalls.cleaned
+          lastText = textCalls.cleaned
           if (!roundCalls.length) break
           // 模型要调工具：assistant(tool_calls) 入 API 历史，逐个按确认分层执行
           history.push({
             role: 'assistant',
-            content: finalText || '',
+            content: lastText || '',
             tool_calls: roundCalls.map((t) => ({
               id: t.id,
               type: 'function' as const,
@@ -575,25 +578,45 @@ export default function ChatPanel({
               }
             }
             const summary = await runToolCall(tc)
-            finishToolCard(cardIdx, !summary.startsWith('失败：'), summary)
+            const ok = !summary.startsWith('失败：')
+            finishToolCard(cardIdx, ok, summary)
             history.push({ role: 'tool', tool_call_id: tc.id, content: summary })
+            // 连续两次工具失败：停止重试，让模型向用户询问缺失信息而不是死循环
+            toolFails = ok ? 0 : toolFails + 1
+            if (toolFails >= 2) {
+              history.push({
+                role: 'user',
+                content: '工具连续失败。请停止重试，直接向用户说明哪里出了问题、需要用户提供什么信息。'
+              })
+              forceTextOnly = true
+              break
+            }
           }
           if (round === TOOL_ROUNDS_MAX - 2) {
             // 下一轮到上限：要求模型文本总结，不再给工具
             history.push({ role: 'user', content: '请直接用文字总结以上操作的结果与结论，不要再调用工具。' })
+            forceTextOnly = true
           }
         }
-        const all = [...display, { role: 'assistant', content: finalText } as ChatMessage]
+        const all = [...display, { role: 'assistant', content: lastText } as ChatMessage]
         setMessages(all)
         await persist(all)
         // 回复尾部带 skill-install 指令：自动发起预览，弹确认卡片（降级路径的围栏协议照常生效）
-        const { directive } = parseSkillDirective(finalText)
+        const { directive } = parseSkillDirective(lastText)
         if (directive) resolveCard(all.length - 1, directive, text)
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
         setError(msg)
         // 供应商不支持 tools 参数（报错带 tool 字样）：记住降级，后续回纯文本/围栏模式
         if (/tool/i.test(msg)) chatToolsUnsupported = true
+        // 失败也落盘：保留现场供取证 + 已生成的部分文本
+        if (lastText) {
+          try {
+            await persist([...display, { role: 'assistant', content: lastText } as ChatMessage])
+          } catch {
+            // 落盘失败不掩盖原错误
+          }
+        }
       } finally {
         setStreaming(false)
         abortRef.current = null
