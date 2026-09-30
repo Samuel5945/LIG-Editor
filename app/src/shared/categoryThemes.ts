@@ -1,4 +1,4 @@
-import type { ProjectMeta, ArticleTheme, H1Style, H2Style, H2Num, H3Mark } from './types'
+import type { ProjectMeta, ArticleTheme, H1Style, H2Style, H2Num, H3Mark, QuoteStyle, HrStyle, StrongStyle } from './types'
 import { isHexColor } from './cards'
 import { UNCATEGORIZED } from './categories'
 export type { ArticleTheme, H1Style, H2Style, H2Num, H3Mark, QuoteStyle, HrStyle, StrongStyle } from './types'
@@ -273,13 +273,84 @@ export const CATEGORY_THEMES: Record<string, ArticleTheme> = {
 /**
  * 解析工程最终排版调性：分类调性打底，项目显式设置覆盖。
  * custom 为运行时加载的自定义主题库（settings/customThemes.json，优先级高于预设分类）。
- * 覆盖字段（meta）：accent 强调色、bodyFontSize 正文字号、headingFontSize 标题字号、
- * bodyAlign 正文排列、headingAlign 标题排列，以及标题版式四项
- * （h1Style/h2Style/h2Num/h3Mark——顶栏「标题」面板与 AI set_theme 同源写入）。
+ * 覆盖字段（meta）：原有 10 字段（accent/两字号/两排列/标题版式四项/bodyBg）+
+ * B 期扩展 20 字段（字体/行高/字距/段距/正文字色/标题字色/引用形态与边色/分隔线/
+ * 加粗形态与色/图片圆角/卡片圆角内边距/表格风格与色系/H2 色块底）——
+ * 顶栏排版面板、AI set_theme 与排版优化对话框同源写入。
  * h2Num 覆盖值 'none' = 显式关掉主题自带序号（undefined 是「跟随主题」，
  * 与「关掉」语义不同，故用哨兵区分）。
- * 正文阅读色（bodyText）、块背景（h2Bg 黑块等）属排版形态，保持主题原值。
+ * 各覆盖字段逐项校验：hex 非法 / 枚举外值回落主题，数值越界夹取。
  */
+
+// ---- 排版覆盖的枚举白名单与数值范围（resolveArticleTheme 与 sanitizeThemePatch 共用） ----
+
+const QUOTE_STYLES: QuoteStyle[] = ['leftbar', 'card', 'quotes', 'dashcard']
+const HR_STYLES: HrStyle[] = ['line', 'dot', 'long']
+const STRONG_STYLES: StrongStyle[] = ['color', 'highlight', 'plain']
+const TABLE_STYLES = ['bordered', 'striped', 'plain'] as const
+const H2_NUMS: H2Num[] = ['01', '1.', '1、', '一、', '壹、', '①']
+
+function clampNum(v: number, min: number, max: number): number {
+  return Math.min(Math.max(v, min), max)
+}
+
+/** 把任意对象收敛为合法的排版覆盖键值对：剔未知键 / hex 校验 / 数值夹取 / 枚举守卫。
+ *  set_theme 工具与 save_theme_preset 共用；null/undefined 值由调用方先行处理清除语义 */
+export function sanitizeThemePatch(patch: Record<string, unknown>): Partial<ProjectMeta> {
+  const out: Record<string, unknown> = {}
+  const hex = (k: string): void => {
+    const v = patch[k]
+    if (typeof v === 'string' && isHexColor(v)) out[k] = v.trim()
+  }
+  const num = (k: string, min: number, max: number): void => {
+    const v = patch[k]
+    if (typeof v === 'number' && isFinite(v)) out[k] = clampNum(v, min, max)
+  }
+  const en = <T extends string>(k: string, list: readonly T[]): void => {
+    const v = patch[k]
+    if (typeof v === 'string' && (list as readonly string[]).includes(v)) out[k] = v
+  }
+  const str = (k: string): void => {
+    const v = patch[k]
+    if (typeof v === 'string' && v.trim()) out[k] = v.trim()
+  }
+  // 原有 10 字段
+  hex('accent')
+  num('bodyFontSize', 10, 40)
+  num('headingFontSize', 10, 40)
+  en('bodyAlign', ['indent', 'flush', 'center'])
+  en('headingAlign', ['center', 'left'])
+  en('h1Style', ['bar', 'pill', 'underline'])
+  en('h2Style', ['leftbar', 'block', 'underline', 'plain'])
+  if (patch.h2Num === 'none' || (typeof patch.h2Num === 'string' && (H2_NUMS as string[]).includes(patch.h2Num))) {
+    out.h2Num = patch.h2Num
+  }
+  en('h3Mark', ['diamond', 'dot', 'none'])
+  if (patch.bodyBg === 'none' || (typeof patch.bodyBg === 'string' && isHexColor(patch.bodyBg))) out.bodyBg = patch.bodyBg
+  // B 期扩展 20 字段
+  str('fontFamily')
+  num('lineHeight', 1.5, 3)
+  str('letterSpacing')
+  num('pGap', 0, 48)
+  hex('bodyText')
+  hex('headingColor')
+  en('quoteStyle', QUOTE_STYLES)
+  hex('quoteBorder')
+  en('hrStyle', HR_STYLES)
+  en('strongStyle', STRONG_STYLES)
+  hex('strongBg')
+  hex('strongColor')
+  num('imgRadius', 0, 40)
+  num('bodyRadius', 0, 40)
+  str('bodyPadding')
+  en('tableStyle', TABLE_STYLES)
+  hex('tableHeaderBg')
+  hex('tableBorder')
+  hex('tableHeaderText')
+  hex('h2Bg')
+  return out as Partial<ProjectMeta>
+}
+
 export function resolveArticleTheme(
   meta: Pick<
     ProjectMeta,
@@ -294,6 +365,26 @@ export function resolveArticleTheme(
     | 'h2Num'
     | 'h3Mark'
     | 'bodyBg'
+    | 'fontFamily'
+    | 'lineHeight'
+    | 'letterSpacing'
+    | 'pGap'
+    | 'bodyText'
+    | 'headingColor'
+    | 'quoteStyle'
+    | 'quoteBorder'
+    | 'hrStyle'
+    | 'strongStyle'
+    | 'strongBg'
+    | 'strongColor'
+    | 'imgRadius'
+    | 'bodyRadius'
+    | 'bodyPadding'
+    | 'tableStyle'
+    | 'tableHeaderBg'
+    | 'tableBorder'
+    | 'tableHeaderText'
+    | 'h2Bg'
   > | null | undefined,
   custom?: Record<string, ArticleTheme>
 ): ArticleTheme {
@@ -323,15 +414,49 @@ export function resolveArticleTheme(
         ? meta.bodyBg.trim()
         : base.bodyBg
     : base.bodyBg
-  const overrides = { fontSize, headingFontSize, bodyAlign, headingAlign, h1Style, h2Style, h2Num, h3Mark, bodyBg }
-  if (meta?.accent && isHexColor(meta.accent)) {
-    return {
-      ...base,
-      accent,
-      ...(base.headingColor ? { headingColor: accent } : {}),
-      ...(base.strongColor ? { strongColor: accent } : {}),
-      ...overrides
-    }
+  // ---- B 期视觉覆盖扩展：逐字段校验合并（hex 校验 / 数值夹取 / 枚举守卫 / 字符串非空） ----
+  const fontFamily = meta?.fontFamily?.trim() || base.fontFamily
+  const lineHeight = meta?.lineHeight && isFinite(meta.lineHeight) ? clampNum(meta.lineHeight, 1.5, 3) : base.lineHeight
+  const letterSpacing = meta?.letterSpacing?.trim() || base.letterSpacing
+  const pGap = meta?.pGap && isFinite(meta.pGap) ? clampNum(meta.pGap, 0, 48) : base.pGap
+  const bodyText = meta?.bodyText && isHexColor(meta.bodyText) ? meta.bodyText.trim() : base.bodyText
+  const quoteStyle = meta?.quoteStyle && QUOTE_STYLES.includes(meta.quoteStyle) ? meta.quoteStyle : base.quoteStyle
+  const quoteBorder = meta?.quoteBorder && isHexColor(meta.quoteBorder) ? meta.quoteBorder.trim() : base.quoteBorder
+  const hrStyle = meta?.hrStyle && HR_STYLES.includes(meta.hrStyle) ? meta.hrStyle : base.hrStyle
+  const strongStyle =
+    meta?.strongStyle && STRONG_STYLES.includes(meta.strongStyle) ? meta.strongStyle : base.strongStyle
+  const strongBg = meta?.strongBg && isHexColor(meta.strongBg) ? meta.strongBg.trim() : base.strongBg
+  const imgRadius = meta?.imgRadius && isFinite(meta.imgRadius) ? clampNum(meta.imgRadius, 0, 40) : base.imgRadius
+  const bodyRadius =
+    meta?.bodyRadius && isFinite(meta.bodyRadius) ? clampNum(meta.bodyRadius, 0, 40) : base.bodyRadius
+  const bodyPadding = meta?.bodyPadding?.trim() || base.bodyPadding
+  const tableStyle =
+    meta?.tableStyle && TABLE_STYLES.includes(meta.tableStyle) ? meta.tableStyle : base.tableStyle
+  const tableHeaderBg =
+    meta?.tableHeaderBg && isHexColor(meta.tableHeaderBg) ? meta.tableHeaderBg.trim() : base.tableHeaderBg
+  const tableBorder = meta?.tableBorder && isHexColor(meta.tableBorder) ? meta.tableBorder.trim() : base.tableBorder
+  const tableHeaderText =
+    meta?.tableHeaderText && isHexColor(meta.tableHeaderText) ? meta.tableHeaderText.trim() : base.tableHeaderText
+  const h2Bg = meta?.h2Bg && isHexColor(meta.h2Bg) ? meta.h2Bg.trim() : base.h2Bg
+  // 标题/加粗字色：meta 显式覆盖 > accent 重链（仅当 meta.accent 显式设置时重链）> 主题原值
+  const accentSet = !!(meta?.accent && isHexColor(meta.accent))
+  const headingColor =
+    meta?.headingColor && isHexColor(meta.headingColor)
+      ? meta.headingColor.trim()
+      : accentSet
+        ? accent
+        : base.headingColor
+  const strongColor =
+    meta?.strongColor && isHexColor(meta.strongColor)
+      ? meta.strongColor.trim()
+      : accentSet
+        ? accent
+        : base.strongColor
+  const overrides = {
+    fontSize, headingFontSize, bodyAlign, headingAlign, h1Style, h2Style, h2Num, h3Mark, bodyBg,
+    fontFamily, lineHeight, letterSpacing, pGap, bodyText, headingColor, quoteStyle, quoteBorder,
+    hrStyle, strongStyle, strongBg, strongColor, imgRadius, bodyRadius, bodyPadding,
+    tableStyle, tableHeaderBg, tableBorder, tableHeaderText, h2Bg
   }
   return { ...base, accent, ...overrides }
 }

@@ -138,6 +138,47 @@ export interface ProjectMeta {
   h3Mark?: H3Mark
   /** 文章背景卡覆盖（十六进制）：覆盖主题 bodyBg；'none' 显式去卡片（透明白底）；缺省跟随主题 */
   bodyBg?: string
+  // ---- 排版视觉覆盖扩展（B 期，20 字段）：缺省全部跟随主题；写值即覆盖，null/删除恢复（AI set_theme / 排版优化对话框 / 排版面板同源） ----
+  /** 正文字体族覆盖 */
+  fontFamily?: string
+  /** 正文行高覆盖（1.5–3，越界夹取） */
+  lineHeight?: number
+  /** 字距覆盖（如 '0.02em'） */
+  letterSpacing?: string
+  /** 段落间距覆盖 px（0–48，越界夹取） */
+  pGap?: number
+  /** 正文文字色覆盖（十六进制） */
+  bodyText?: string
+  /** 标题文字色覆盖（十六进制）；显式设置后不再跟随 accent 重链 */
+  headingColor?: string
+  /** 引用形态覆盖：leftbar 左条浅底 / card 圆角卡片 / quotes 引号 / dashcard 虚线边框卡 */
+  quoteStyle?: QuoteStyle
+  /** 虚线引用卡边框色覆盖（十六进制） */
+  quoteBorder?: string
+  /** 分隔线形态覆盖：line 居中短横 / dot 圆点列 / long 通栏细线 */
+  hrStyle?: HrStyle
+  /** 加粗强调覆盖：color 着色 / highlight 底色高亮 / plain 纯黑加粗 */
+  strongStyle?: StrongStyle
+  /** 高亮加粗底色覆盖（十六进制） */
+  strongBg?: string
+  /** 加粗强调色覆盖（十六进制）；显式设置后不再跟随 accent 重链 */
+  strongColor?: string
+  /** 图片圆角覆盖 px（0–40，越界夹取） */
+  imgRadius?: number
+  /** 正文容器圆角覆盖 px（0–40，越界夹取） */
+  bodyRadius?: number
+  /** 正文容器内边距覆盖（如 '20px 22px'） */
+  bodyPadding?: string
+  /** 表格风格覆盖：bordered 全边框 / striped 斑马纹 / plain 极简 */
+  tableStyle?: 'bordered' | 'striped' | 'plain'
+  /** 表头背景色覆盖（十六进制） */
+  tableHeaderBg?: string
+  /** 表格边框色覆盖（十六进制） */
+  tableBorder?: string
+  /** 表头文字色覆盖（十六进制） */
+  tableHeaderText?: string
+  /** H2 色块标签背景色覆盖（十六进制，配 h2Style: 'block'） */
+  h2Bg?: string
   /** 发布排期（本地日期 YYYY-MM-DD）：内容日历看板按此聚合；缺省 = 未排期 */
   plannedAt?: string
   /** 最近一次导出/复制/推送成功时刻（ISO）：创作向导「导出」步的完成事实源；缺省 = 从未导出 */
