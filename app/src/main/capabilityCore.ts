@@ -1,6 +1,7 @@
 import { basename, isAbsolute, join } from 'path'
 import { existsSync, readFileSync } from 'fs'
-import type { H1Style, H2Style, H2Num, H3Mark, IdeaCard, TitleCandidate } from '@shared/types'
+import type { ArticleTheme, H1Style, H2Style, H2Num, H3Mark, IdeaCard, TitleCandidate } from '@shared/types'
+import { sanitizeThemePatch } from '@shared/categoryThemes'
 import { ALL_CATEGORIES } from '@shared/categories'
 import {
   brainstormMessages,
@@ -17,6 +18,7 @@ import { exportArticleHtml, exportPlatformHtml } from './exporter'
 import { exportDocx, exportPdf } from './docExport'
 import { pushCards, pushDraft } from './wechatPublish'
 import { readSkill } from './skillStore'
+import { saveCustomTheme } from './themeStore'
 import { broadcast } from './ipc'
 
 /**
@@ -430,7 +432,27 @@ export const TOOLS: ToolDef[] = [
         h2Style: { type: ['string', 'null'], enum: ['leftbar', 'block', 'underline', 'plain', null], description: 'H2 装饰；null 跟随主题' },
         h2Num: { type: ['string', 'null'], enum: ['01', '1.', '1、', '一、', '壹、', '①', 'none', null], description: 'H2 自动序号格式；none 显式关闭；null 跟随主题' },
         h3Mark: { type: ['string', 'null'], enum: ['diamond', 'dot', 'none', null], description: 'H3 前缀标记；null 跟随主题' },
-        bodyBg: { type: ['string', 'null'], description: '文章背景卡十六进制（#rrggbb，建议浅色系）；none 去卡片；null 跟随主题' }
+        bodyBg: { type: ['string', 'null'], description: '文章背景卡十六进制（#rrggbb，建议浅色系）；none 去卡片；null 跟随主题' },
+        fontFamily: { type: ['string', 'null'], description: '正文字体栈（如 "Microsoft YaHei", sans-serif）；null 跟随主题' },
+        lineHeight: { type: ['number', 'null'], description: '正文行高（1.5-3，非法值回落）；null 跟随主题' },
+        letterSpacing: { type: ['string', 'null'], description: '字距（如 0.02em）；null 跟随主题' },
+        pGap: { type: ['number', 'null'], description: '段落间距 px（0-48）；null 跟随主题' },
+        bodyText: { type: ['string', 'null'], description: '正文文字色十六进制；null 跟随主题' },
+        headingColor: { type: ['string', 'null'], description: '标题文字色十六进制；显式设置后不随强调色重链；null 跟随主题' },
+        quoteStyle: { type: ['string', 'null'], enum: ['leftbar', 'card', 'quotes', 'dashcard', null], description: '引用形态；null 跟随主题' },
+        quoteBorder: { type: ['string', 'null'], description: '虚线引用卡边框色十六进制；null 跟随主题' },
+        hrStyle: { type: ['string', 'null'], enum: ['line', 'dot', 'long', null], description: '分隔线形态；null 跟随主题' },
+        strongStyle: { type: ['string', 'null'], enum: ['color', 'highlight', 'plain', null], description: '加粗强调方式；null 跟随主题' },
+        strongBg: { type: ['string', 'null'], description: '高亮加粗底色十六进制；null 跟随主题' },
+        strongColor: { type: ['string', 'null'], description: '加粗强调色十六进制；显式设置后不随强调色重链；null 跟随主题' },
+        imgRadius: { type: ['number', 'null'], description: '图片圆角 px（0-40）；null 跟随主题' },
+        bodyRadius: { type: ['number', 'null'], description: '正文容器圆角 px（0-40）；null 跟随主题' },
+        bodyPadding: { type: ['string', 'null'], description: '正文容器内边距（如 20px 22px）；null 跟随主题' },
+        tableStyle: { type: ['string', 'null'], enum: ['bordered', 'striped', 'plain', null], description: '表格风格；null 跟随主题' },
+        tableHeaderBg: { type: ['string', 'null'], description: '表头背景色十六进制；null 跟随主题' },
+        tableBorder: { type: ['string', 'null'], description: '表格边框色十六进制；null 跟随主题' },
+        tableHeaderText: { type: ['string', 'null'], description: '表头文字色十六进制；null 跟随主题' },
+        h2Bg: { type: ['string', 'null'], description: 'H2 色块标签背景色十六进制；null 跟随主题' }
       },
       required: ['project']
     },
@@ -452,9 +474,62 @@ export const TOOLS: ToolDef[] = [
       if (a.h2Num !== undefined) meta.h2Num = a.h2Num === null ? undefined : (a.h2Num as H2Num | 'none')
       if (a.h3Mark !== undefined) meta.h3Mark = a.h3Mark === null ? undefined : (a.h3Mark as H3Mark)
       if (a.bodyBg !== undefined) meta.bodyBg = a.bodyBg === null ? undefined : (a.bodyBg as string)
+      // B 期视觉覆盖扩展 20 字段：有值覆盖 / null 恢复默认 / 未传不动（非法值由 resolve 层兜底回落）
+      const STR_KEYS = ['fontFamily', 'letterSpacing', 'bodyPadding'] as const
+      for (const k of STR_KEYS) {
+        const v = a[k]
+        if (v !== undefined) (meta as unknown as Record<string, unknown>)[k] = v === null ? undefined : v
+      }
+      const NUM_KEYS = ['lineHeight', 'pGap', 'imgRadius', 'bodyRadius'] as const
+      for (const k of NUM_KEYS) {
+        const v = a[k]
+        if (v !== undefined) (meta as unknown as Record<string, unknown>)[k] = v === null ? undefined : (v as number)
+      }
+      const HEX_KEYS = [
+        'bodyText',
+        'headingColor',
+        'quoteBorder',
+        'strongBg',
+        'strongColor',
+        'tableHeaderBg',
+        'tableBorder',
+        'tableHeaderText',
+        'h2Bg'
+      ] as const
+      for (const k of HEX_KEYS) {
+        const v = a[k]
+        if (v !== undefined) (meta as unknown as Record<string, unknown>)[k] = v === null ? undefined : v
+      }
+      const ENUM_KEYS = ['quoteStyle', 'hrStyle', 'strongStyle', 'tableStyle'] as const
+      for (const k of ENUM_KEYS) {
+        const v = a[k]
+        if (v !== undefined) (meta as unknown as Record<string, unknown>)[k] = v === null ? undefined : v
+      }
       store.writeMeta(project, meta)
       notifyChange(project, 'project.json')
       return { ok: true }
+    }
+  },
+  {
+    name: 'save_theme_preset',
+    description:
+      '为分类设计并保存整套排版主题（写入自定义主题库，同名分类目录自动创建，保存即生效——该分类下打开工程即套用）。theme 为完整 ArticleTheme 主题对象：accent 必填（十六进制强调色）；常用字段 fontFamily 字体栈 / lineHeight 行高 1.5-3 / letterSpacing 字距 / fontSize 正文字号 / headingFontSize 标题字号 / bodyBg 正文背景卡（浅色系） / bodyRadius 圆角 / bodyPadding 内边距 / pGap 段间距 / h1Style·h2Style·h2Num·h3Mark 标题版式 / quoteStyle·quoteBorder 引用 / hrStyle 分隔线 / strongStyle·strongBg·strongColor 加粗 / tableStyle·tableHeaderBg·tableBorder·tableHeaderText 表格 / imgRadius 图片圆角 / bodyText·headingColor·h2Bg 色系。非法或缺失字段自动回落默认调性',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: '主题名（=分类名，将作为目录名自动创建）' },
+        theme: { type: 'object', description: '完整 ArticleTheme 主题对象（accent 必填）' }
+      },
+      required: ['name', 'theme']
+    },
+    handler: (a) => {
+      const name = str(a, 'name')
+      const patch = sanitizeThemePatch((a.theme ?? {}) as Record<string, unknown>) as Partial<ArticleTheme>
+      if (!patch.accent) throw new Error('theme.accent 必填（十六进制强调色），缺失则整套主题无法成立')
+      saveCustomTheme(name, patch as ArticleTheme)
+      // 对话内生成主题：广播让工程树/设置即时感知新分类目录
+      broadcast('workspace:changed', null)
+      return { ok: true, name, hint: `主题「${name}」已入库；打开该分类下的工程即可套用` }
     }
   },
   {
