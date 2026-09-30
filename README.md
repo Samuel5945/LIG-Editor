@@ -9,9 +9,9 @@
 ## 界面一览
 
 <p align="center">
-  <img src="docs/images/lig-editor-0.8.0-tour.gif" width="820" alt="立格编辑器 0.8.0 界面轮播：创作向导步步进工作台 / 选题看板 / 排期日历" />
+  <img src="docs/images/lig-editor-0.8.0-tour.gif" width="820" alt="立格编辑器 0.8.0 界面轮播：创作向导七步工作台 / 配图批量清单 / 标题封面 / 对话工具调用" />
 </p>
-<p align="center"><sub>创作向导（选题→大纲→成文→配图→标题封面→审阅→导出） · 选题看板 · 排期日历</sub></p>
+<p align="center"><sub>创作向导七步工作台 · 配图批量清单 · 标题封面 · 对话工具调用 · 外观系统</sub></p>
 
 <details>
 <summary>📸 查看全部高清截图</summary>
