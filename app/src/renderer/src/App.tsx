@@ -29,6 +29,7 @@ import CalendarBoard from './components/CalendarBoard'
 import IdeaBoard from './components/IdeaBoard'
 import Sidebar from './components/Sidebar'
 import ProjectWall from './components/ProjectWall'
+import ThemeLibrary, { type ThemeEntry } from './components/ThemeLibrary'
 import { Icon } from './ui/Icon'
 import { StatusDot } from './ui/primitives'
 import ArticleEditor, { type ArticleEditorHandle, type EditorSelection } from './editor/ArticleEditor'
@@ -98,7 +99,9 @@ export default function App(): JSX.Element {
     if (shouldAutoStart()) startTour(tourHandlers)
   }, [tourHandlers])
   // M5 副驾驶；中栏 = 创作向导（主工作面）+ 两个跨工程页签
-  const [centerTab, setCenterTab] = useState<'create' | 'calendar' | 'ideas'>('create')
+  const [centerTab, setCenterTab] = useState<'create' | 'calendar' | 'ideas' | 'themes'>('create')
+  /** 主题库里的「预览」：只覆盖编辑器观感，不写盘、退出即还原（§5.6） */
+  const [themePreview, setThemePreview] = useState<{ name: string; theme: ArticleTheme } | null>(null)
   // 向导深链跳步（工作树/对话/审阅定位等）：ts 变化即生效（仿 reviewRequest 模式）
   const [stepRequest, setStepRequest] = useState<{ id: WizardStepId; ts: number } | null>(null)
   // 分栏：拖拽调宽 + 可折叠，偏好本地记忆
@@ -173,7 +176,10 @@ export default function App(): JSX.Element {
   useEffect(() => setSavedAt(Date.now()), [saved])
 
   /** 排版调性：自定义主题 > 分类调性 > 默认（meta 变化即时跟换） */
-  const articleTheme = useMemo(() => resolveArticleTheme(meta, customThemes), [meta, customThemes])
+  const articleTheme = useMemo(
+    () => (themePreview ? { ...resolveArticleTheme(null, customThemes), ...themePreview.theme } : resolveArticleTheme(meta, customThemes)),
+    [meta, customThemes, themePreview]
+  )
 
   /** 分类调性的强调色：封面墙无封面占位卡用它，保证「墙上看到的颜色」= 该分类工程实际颜色 */
   const accentOf = useCallback(
@@ -664,7 +670,7 @@ export default function App(): JSX.Element {
    *  分类级调性此前只有「导入公众号文章」和「对话生成」两条路，作者手工调好的排版没法沉淀成分类主题 */
   const handleSaveThemePreset = useCallback(
     async (name: string) => {
-      await window.api.invoke('customTheme:save', name, articleTheme)
+      await window.api.invoke('customTheme:save', name, { ...articleTheme, origin: 'panel' })
       setCustomThemes(await window.api.invoke('customTheme:list'))
       setToast(`已把当前排版存为分类主题「${name}」`)
     },
@@ -1032,6 +1038,15 @@ export default function App(): JSX.Element {
             >
               <Icon name="calendar" size={13} />日历
             </button>
+            <button
+              onClick={() => setCenterTab('themes')}
+              title="主题库：内置 / 导入 / 面板沉淀的集中入口，可预览与绑定分类"
+              className={`inline-flex h-7 items-center gap-1.5 rounded-md px-3 text-xs transition-colors ${
+                centerTab === 'themes' ? 'bg-accent/15 font-semibold text-accent' : 'text-ink-dim hover:bg-panel-3 hover:text-ink'
+              }`}
+            >
+              <Icon name="layers" size={13} />主题库
+            </button>
             <span className="ml-auto flex min-w-0 items-center gap-2">
               {current && wordCount > 0 && (
                 <span className="shrink-0 rounded-full bg-panel-3 px-2.5 py-0.5 text-[11.5px] text-ink-dim" title="当前正文字数（不含标记）">
@@ -1057,6 +1072,36 @@ export default function App(): JSX.Element {
               onScheduleIdea={async (index, date, category) =>
                 window.api.invoke('ideas:schedule', index, date, category)
               }
+              onToast={setToast}
+            />
+          ) : centerTab === 'themes' ? (
+            <ThemeLibrary
+              categories={categories}
+              customThemes={customThemes}
+              project={current}
+              projectCategory={current && meta ? meta.category ?? UNCATEGORIZED : undefined}
+              onPreview={(entry) => setThemePreview(entry ? { name: entry.name, theme: entry.theme } : null)}
+              onBind={async (category, theme, source) => {
+                await window.api.invoke('customTheme:save', category, { ...theme, origin: source === 'panel' ? 'panel' : 'import' })
+                setCustomThemes(await window.api.invoke('customTheme:list'))
+                if (current) void refreshMeta()
+              }}
+              onUnbind={async (category) => {
+                await window.api.invoke('customTheme:delete', category)
+                setCustomThemes(await window.api.invoke('customTheme:list'))
+                if (current) void refreshMeta()
+              }}
+              onDelete={async (name) => {
+                await window.api.invoke('customTheme:delete', name)
+                setCustomThemes(await window.api.invoke('customTheme:list'))
+                if (themePreview?.name === name) setThemePreview(null)
+                if (current) void refreshMeta()
+              }}
+              onImport={() => setShowThemeImport(true)}
+              onSaveFromProject={() => {
+                setCenterTab('create')
+                setShowTypography(true)
+              }}
               onToast={setToast}
             />
           ) : centerTab === 'ideas' ? (
@@ -1455,6 +1500,10 @@ export default function App(): JSX.Element {
         category={meta?.category}
         onApply={handleApplyTypography}
         onSavePreset={handleSaveThemePreset}
+        onOpenThemeLibrary={() => {
+          setShowTypography(false)
+          setCenterTab('themes')
+        }}
       />
 
       {polish && current && (
@@ -1557,6 +1606,10 @@ export default function App(): JSX.Element {
           onClose={() => setShowCatManage(false)}
           onToast={setToast}
           onChanged={refreshAfterCategoryChange}
+          onOpenThemeLibrary={() => {
+            setShowCatManage(false)
+            setCenterTab('themes')
+          }}
         />
       )}
 

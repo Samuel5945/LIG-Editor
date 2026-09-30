@@ -543,7 +543,7 @@ export const TOOLS: ToolDef[] = [
           'theme.accent 必填（十六进制强调色），缺失则整套主题无法成立；theme 的键名须与工具说明一致'
         )
       if (!Object.keys(patch).length) throw new Error('theme 里没有一个可识别的键，请严格按工具说明的键名重发')
-      saveCustomTheme(name, patch as ArticleTheme)
+      saveCustomTheme(name, { ...(patch as ArticleTheme), origin: 'panel' })
       // 广播让工程树/设置即时感知新分类目录
       broadcast('workspace:changed', null)
       // 未识别的键必须照实报：否则模型拿着只落了 1 个字段的主题去描述整套排版（实测发生过）

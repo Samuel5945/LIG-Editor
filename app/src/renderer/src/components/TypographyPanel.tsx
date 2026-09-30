@@ -3,6 +3,7 @@ import { Icon } from '../ui/Icon'
 import type { ArticleTheme } from '@shared/types'
 import { isHexColor } from '@shared/cards'
 import { THEME_FIELD_LABELS } from '@shared/categoryThemes'
+import { DialogShell } from '../ui/DialogShell'
 import { THEME_FIELD_SPECS, THEME_GROUPS, themeFieldRange, type ThemeFieldSpec, type ThemeOverrides } from '@shared/themeFields'
 
 interface TypographyPanelProps {
@@ -19,6 +20,8 @@ interface TypographyPanelProps {
   onApply: (patch: ThemeOverrides) => void
   /** 把当前生效整套排版存成分类主题（分类级调性此前只能靠导入/对话生成） */
   onSavePreset?: (name: string) => Promise<void>
+  /** 打开中栏「主题库」页签（§5.10：沉淀完直接去库里看效果） */
+  onOpenThemeLibrary?: () => void
 }
 
 /**
@@ -34,7 +37,8 @@ export default function TypographyPanel({
   project,
   category,
   onApply,
-  onSavePreset
+  onSavePreset,
+  onOpenThemeLibrary
 }: TypographyPanelProps): ReactElement | null {
   // 草稿只给「边打字边预览」的字段用（滑杆/文本框），失焦或松手才落盘，免得每敲一下就写 project.json
   const [draft, setDraft] = useState<Record<string, string | number>>({})
@@ -72,21 +76,15 @@ export default function TypographyPanel({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
-      <div
-        className="flex max-h-[88vh] w-[720px] flex-col rounded-lg border border-panel-3 bg-panel-2 shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center gap-2 border-b border-panel-3 px-4 py-2.5">
-          <span className="text-sm font-bold text-ink"><Icon name="sliders" size={12} className="mr-1.5" />全量排版</span>
-          <span className="text-xs text-ink-dim">
-            {project ? `工程「${project}」· 分类「${category ?? '未分类'}」` : '未打开工程'}
-          </span>
-          <span className="ml-auto text-xs text-ink-dim">改动即写入工程 meta，导出与推送同源生效</span>
-          <button onClick={onClose} className="rounded px-2 py-1 text-xs text-ink-dim hover:bg-panel-3">
-            <Icon name="x" size={12} className="mr-1.5" />关闭
-          </button>
-        </div>
+    <DialogShell
+      icon="sliders"
+      title="全量排版"
+      hint={project ? `工程「${project}」· 分类「${category ?? '未分类'}」` : '未打开工程'}
+      width={720}
+      maxHeight="88vh"
+      bodyClass="p-0"
+      onClose={onClose}
+    >
 
         <div className="selectable min-h-0 flex-1 overflow-y-auto px-4 py-3 text-xs">
           <div className="grid grid-cols-2 gap-x-5 gap-y-4">
@@ -111,14 +109,14 @@ export default function TypographyPanel({
           </div>
         </div>
 
-        <div className="flex items-center gap-2 border-t border-panel-3 px-4 py-2.5 text-xs">
+        <div className="flex items-center gap-2 border-t border-panel-3 bg-panel px-4 py-2.5 text-xs">
           <button
             onClick={() => onApply(Object.fromEntries(THEME_FIELD_SPECS.map((s) => [s.key, null])) as ThemeOverrides)}
             disabled={disabled}
             className="rounded px-2.5 py-1 text-ink-dim hover:bg-panel-3 disabled:opacity-40"
             title="清掉本工程全部排版覆盖，整套回到分类主题"
           >
-            ↺ 全部跟随主题
+            <Icon name="undo" size={12} className="mr-1.5" />全部跟随主题
           </button>
           {onSavePreset && (
             <div className="ml-auto flex items-center gap-1.5">
@@ -158,9 +156,18 @@ export default function TypographyPanel({
               </button>
             </div>
           )}
+          {onOpenThemeLibrary && (
+            <button
+              onClick={onOpenThemeLibrary}
+              title="浏览内置 / 导入 / 面板沉淀的全部主题，可预览与绑定分类"
+              className={onSavePreset ? 'inline-flex items-center gap-1.5 rounded px-2.5 py-1 text-ink-dim hover:bg-panel-3' : 'ml-auto inline-flex items-center gap-1.5 rounded px-2.5 py-1 text-ink-dim hover:bg-panel-3'}
+            >
+              <Icon name="layers" size={12} />
+              打开主题库
+            </button>
+          )}
         </div>
-      </div>
-    </div>
+    </DialogShell>
   )
 }
 

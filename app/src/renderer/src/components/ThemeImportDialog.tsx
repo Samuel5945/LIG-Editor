@@ -90,7 +90,7 @@ export default function ThemeImportDialog({ onClose, onSaved, onToast }: Props):
     setSaving(true)
     try {
       const theme: ArticleTheme = { ...parsed.theme }
-      await window.api.invoke('customTheme:save', name.trim(), theme)
+      await window.api.invoke('customTheme:save', name.trim(), { ...theme, origin: 'import' })
       onSaved(name.trim())
       onToast(`已保存主题「${name.trim()}」，把工程切到该分类即可套用`)
       onClose()
