@@ -93,7 +93,7 @@ export default function App(): JSX.Element {
   const [centerTab, setCenterTab] = useState<'create' | 'calendar' | 'ideas'>('create')
   // 向导深链跳步（工作树/对话/审阅定位等）：ts 变化即生效（仿 reviewRequest 模式）
   const [stepRequest, setStepRequest] = useState<{ id: WizardStepId; ts: number } | null>(null)
-  // 分栏（ZCode 式）：拖拽调宽 + 可折叠，偏好本地记忆
+  // 分栏：拖拽调宽 + 可折叠，偏好本地记忆
   const [leftW, setLeftW] = useState(() => {
     const v = Number(localStorage.getItem('lig-pane-left-w'))
     return Number.isFinite(v) && v > 0 ? Math.min(Math.max(v, 180), 420) : 240
