@@ -194,13 +194,6 @@ select,
   width: 6px;
 }
 
-/* 行内图标与文字基线：非 flex 容器里的 svg 统一 nudge，避免每个组件各写 align-* */
-button > svg,
-span > svg,
-p > svg {
-  vertical-align: -2px;
-}
-
 /* 焦点可见（§6）：所有可点控件 focus-visible 主色描边，Tab 顺序 = 视觉顺序 */
 button:focus-visible,
 [role='switch']:focus-visible,

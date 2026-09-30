@@ -221,6 +221,9 @@
 - 审阅页：操作收进报告卡头部（次=重新审阅 / 主=优化正文 / 带标签 Switch=联网审阅），状态胶囊「已有报告」「尚未审阅 · 等待执行」随事实切换
 - 工具调用日志卡：以带 `toolTrace` 的会话实测折叠摘要「4 次 · 1 失败」与展开逐行（中文名 + 等宽参数 + 失败原因标红），并补 `src/renderer/src/__tests__/ToolLogCard.test.tsx` 4 例；全量 `npm test` 495 例通过
 - 状态栏：实测渲染（左=工作区路径，右=当前文档 + 「已自动保存 HH:MM」）
+- **图标/文字同行**：修 `Icon` 的 `display:block` 回归后复测——1309×818 与 1120×700（窗口下限）两档下，
+  「svg 与同层文字垂直重叠 <50%」的元素数 = 0；顶栏「外观」按钮高 37→24px、左栏「管理」32→20px、
+  左栏页签行 49→41px（回到单行）
 - 未覆盖：弹窗体系（§5.11）与看板/日历/贴图面板样式（§5.4/5.5/5.8）本轮未动，随 P1/P3
 
 ## 9. 维护约束
@@ -230,4 +233,8 @@
 - **组件先改壳后改瓤**：P0 批次的图标/按钮/胶囊先抽共享组件（Button/Chip/Stepper/StatusDot），逐界面替换，禁止各界面自造变体
   - ✅ 2026-09-30 共享控件单源落 `renderer/src/ui/`：`Icon.tsx`（24 视框、stroke-width=2、尺寸 13/14/15 三档的图标表）、`primitives.tsx`（Button/IconButton/Chip/ChipGroup/Stepper/StatusDot/StatusLegend/Switch/Card/CardTitle/EmptyState）、`status.ts`（工程状态 → 圆点语义单源，工作树与日历共用同一张表，禁各自另色）
   - 后续批次继续吃这条：新界面（封面墙/主题库）直接复用 `ChipGroup`/`StatusDot`/`Card`，不要再写内联样式变体
+  - ⚠ **`Icon` 基类必须自带 `inline-block align-middle`**：Tailwind 预置把 `svg` 设成 `display:block`，
+    图标一旦落在非 flex 容器（顶栏按钮、右键菜单行、行内徽标、错误提示 `<p>`）里就会被顶到文字上一行，
+    且构建期零报错——P0 首版实测踩过（顶栏按钮高 37px＝两行）。容器是 flex 时该声明无副作用，
+    所以统一在 `Icon` 一处解决，**不要**再往各调用点补 `align-[-2px]` 之类的补丁
 - 每完成一批次，回写本文对应章节状态（✅/进行中），并同步主 PRD §11.3；**文档债在主 PRD §14 已立过规矩，本文同样适用**

@@ -517,7 +517,7 @@ export default function Sidebar(props: SidebarProps): ReactElement {
             {isPinned && <span className={`${rowBox} opacity-70`} title="已置顶"><Icon name="pin" size={12} /></span>}
             {p.plannedAt && (
               <span className="shrink-0 rounded bg-panel px-1 py-0.5 text-[10px] text-accent" title={`排期：${p.plannedAt}`}>
-                <Icon name="calendar" size={10} className="mr-1 align-[-1px]" />{p.plannedAt.slice(5)}
+                <Icon name="calendar" size={10} className="mr-1" />{p.plannedAt.slice(5)}
               </span>
             )}
             <StatusDot status={dotOfStatus(p.status)} title={p.status} />
@@ -697,7 +697,7 @@ export default function Sidebar(props: SidebarProps): ReactElement {
             title="分类管理：删除（隐藏）/ 恢复 / 重命名"
             className="ml-auto whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] text-ink-dim hover:bg-panel-3"
           >
-            <Icon name="settings" size={12} className="mr-1 align-[-2px]" />管理
+            <Icon name="settings" size={12} className="mr-1" />管理
           </button>
         )}
       </nav>
@@ -783,7 +783,7 @@ export default function Sidebar(props: SidebarProps): ReactElement {
                   title="批量管理：勾选工程后批量归档/删除"
                   className={batchCat === g.category ? rowAction('on') : `${rowAction()} hidden group-hover:flex`}
                 >
-                  <Icon name="checkSquare" size={12} className="mr-1 align-[-2px]" />批量
+                  <Icon name="checkSquare" size={12} className="mr-1" />批量
                 </button>
                 <button
                   onClick={(e) => {
@@ -952,7 +952,7 @@ export default function Sidebar(props: SidebarProps): ReactElement {
               }}
               className="block w-full px-3 py-1.5 text-left text-ink hover:bg-panel-3"
             >
-              <Icon name="folderOpen" size={12} className="mr-1.5 align-[-2px]" />打开工程目录
+              <Icon name="folderOpen" size={12} className="mr-1.5" />打开工程目录
             </button>
             <button
               onClick={() => {

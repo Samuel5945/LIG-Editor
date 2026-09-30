@@ -846,7 +846,7 @@ export default function App(): JSX.Element {
               title="外观：主题（跟随系统/日间/夜间）与界面字号"
               className="rounded px-2 py-1 hover:bg-panel-3"
             >
-              <Icon name="palette" size={13} className="mr-1 align-[-2px]" />外观
+              <Icon name="palette" size={13} className="mr-1" />外观
             </button>
             {showAppearance && (
               <>
@@ -881,7 +881,7 @@ export default function App(): JSX.Element {
             )}
           </div>
           <button onClick={() => setShowSettings(true)} className="rounded px-2 py-1 hover:bg-panel-3">
-            <Icon name="plug" size={13} className="mr-1 align-[-2px]" />模型接入
+            <Icon name="plug" size={13} className="mr-1" />模型接入
           </button>
           <button onClick={() => setShowIntegration(true)} className="rounded px-2 py-1 hover:bg-panel-3">
             设置
@@ -891,7 +891,7 @@ export default function App(): JSX.Element {
             title="重新播放新手引导"
             className="rounded px-2 py-1 hover:bg-panel-3"
           >
-            <Icon name="help" size={13} className="mr-1 align-[-2px]" />帮助
+            <Icon name="help" size={13} className="mr-1" />帮助
           </button>
           <button
             onClick={() => void checkUpdate(true)}
@@ -899,14 +899,14 @@ export default function App(): JSX.Element {
             title={updateCurrent ? `检查更新（当前版本 v${updateCurrent}）` : '检查更新：有新版本时给出网盘/GitHub 下载入口'}
             className="rounded px-2 py-1 hover:bg-panel-3 disabled:opacity-50"
           >
-            {checkingUpdate ? '检查中…' : <><Icon name="refresh" size={13} className="mr-1 align-[-2px]" />版本更新</>}
+            {checkingUpdate ? '检查中…' : <><Icon name="refresh" size={13} className="mr-1" />版本更新</>}
           </button>
           <button
             onClick={() => window.open('https://ligdesign.win/')}
             title="LIG 立格 Studio 品牌官网：设计 · 工具 · 桌面美学"
             className="rounded px-2 py-1 hover:bg-panel-3"
           >
-            <Icon name="globe" size={13} className="mr-1 align-[-2px]" />官网
+            <Icon name="globe" size={13} className="mr-1" />官网
           </button>
         </div>
         <div className="flex h-full items-stretch">
@@ -1101,14 +1101,14 @@ export default function App(): JSX.Element {
                           disabled={!article.trim()}
                           className="rounded px-2 py-0.5 hover:bg-panel-3 disabled:opacity-40"
                         >
-                          <Icon name="sparkles" size={13} className="mr-1 align-[-2px]" />排版优化
+                          <Icon name="sparkles" size={13} className="mr-1" />排版优化
                         </button>
                         <button
                           onClick={() => setShowThemeImport(true)}
                           title="粘贴公众号 HTML 或链接，复用它的排版"
                           className="rounded px-2 py-0.5 hover:bg-panel-3"
                         >
-                          <Icon name="palette" size={13} className="mr-1 align-[-2px]" />排版
+                          <Icon name="palette" size={13} className="mr-1" />排版
                         </button>
                         <button
                           onClick={() => setShowConvert((v) => !v)}
@@ -1116,7 +1116,7 @@ export default function App(): JSX.Element {
                           title="把正文提炼成多张竖版图片卡片，工程切换为贴图形态"
                           className="rounded px-2 py-0.5 hover:bg-panel-3 disabled:opacity-40"
                         >
-                          {converting ? '转贴图中…' : <><Icon name="image" size={13} className="mr-1 align-[-2px]" />转贴图</>}
+                          {converting ? '转贴图中…' : <><Icon name="image" size={13} className="mr-1" />转贴图</>}
                         </button>
                         {showConvert && !converting && (
                           <>
@@ -1146,7 +1146,7 @@ export default function App(): JSX.Element {
                             title="不重新生成，直接切回已有卡片组；正文保留可随时切回来"
                             className="rounded px-2 py-0.5 hover:bg-panel-3"
                           >
-                            <Icon name="undo" size={13} className="mr-1 align-[-2px]" />回到贴图
+                            <Icon name="undo" size={13} className="mr-1" />回到贴图
                           </button>
                         )}
                       </div>

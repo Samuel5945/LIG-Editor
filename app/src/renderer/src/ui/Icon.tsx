@@ -131,7 +131,9 @@ export function Icon({ name, size = 14, strokeWidth = 2, className, title }: Ico
       strokeWidth={strokeWidth}
       strokeLinecap="round"
       strokeLinejoin="round"
-      className={`shrink-0 ${className ?? ''}`}
+      /* inline-block + align-middle 是必须的：Tailwind 预置把 svg 设成 display:block，
+         不显式改回行内，图标就会被顶到文字上一行（顶栏/菜单行实测踩过） */
+      className={`inline-block shrink-0 align-middle ${className ?? ''}`}
       aria-hidden={title ? undefined : true}
       role={title ? 'img' : undefined}
       aria-label={title}

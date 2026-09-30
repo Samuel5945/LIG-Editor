@@ -485,17 +485,17 @@ export default function CreationWizard({
           ) : (
             <p className="text-ink-dim">选题阶段已跳过——回到本步可重新脑暴选题。</p>
           )}
-          {searching && <p className="mb-2 rounded bg-panel p-2 text-ink-dim"><Icon name="globe" size={12} className="mr-1.5 align-[-2px]" />联网搜索中…</p>}
+          {searching && <p className="mb-2 rounded bg-panel p-2 text-ink-dim"><Icon name="globe" size={12} className="mr-1.5" />联网搜索中…</p>}
           {busy && !searching && !streamText && phase === 'brainstorming' && (
             <p className="mb-2 rounded bg-panel p-2 text-ink-dim">
-              <Icon name="brain" size={12} className="mr-1.5 align-[-2px]" />模型思考中…<span className="animate-pulse">▌</span>
+              <Icon name="brain" size={12} className="mr-1.5" />模型思考中…<span className="animate-pulse">▌</span>
             </p>
           )}
           {/* 脑暴中不露 JSON 原文，只展示已产出的选题进度 */}
           {phase === 'brainstorming' && streamText && (
             <div className="rounded bg-panel p-2 leading-6 text-ink-dim">
               <p>
-                <Icon name="bulb" size={12} className="mr-1.5 align-[-2px]" />选题产出中…<span className="animate-pulse">▌</span>
+                <Icon name="bulb" size={12} className="mr-1.5" />选题产出中…<span className="animate-pulse">▌</span>
               </p>
               {streamTitles(streamText).map((t, i) => (
                 <p key={i} className="truncate">
@@ -504,7 +504,7 @@ export default function CreationWizard({
               ))}
             </div>
           )}
-          {error && <p className="mt-2 break-all text-st-bad"><Icon name="xCircle" size={12} className="mr-1 align-[-2px]" />{error}</p>}
+          {error && <p className="mt-2 break-all text-st-bad"><Icon name="xCircle" size={12} className="mr-1" />{error}</p>}
           {/* 解析失败时保留原始输出便于排查 */}
           {error && streamText && phase === 'input' && (
             <div className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap rounded bg-panel p-2 text-[10px] text-ink-dim">{streamText}</div>
@@ -541,7 +541,7 @@ export default function CreationWizard({
               <span className="animate-pulse">▌</span>
             </div>
           )}
-          {error && phase !== 'input' && <p className="mt-2 break-all text-st-bad"><Icon name="xCircle" size={12} className="mr-1 align-[-2px]" />{error}</p>}
+          {error && phase !== 'input' && <p className="mt-2 break-all text-st-bad"><Icon name="xCircle" size={12} className="mr-1" />{error}</p>}
         </div>
       </div>
 
