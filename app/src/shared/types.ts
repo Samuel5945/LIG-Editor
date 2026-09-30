@@ -213,6 +213,18 @@ export interface ProjectSummary {
   updated_at: string
   /** 发布排期（YYYY-MM-DD；缺省 = 未排期，日历看板用） */
   plannedAt?: string
+  /** 工程形态（封面墙按它决定取文章封面还是首张贴图卡） */
+  format?: 'article' | 'cards'
+  /** 封面/首张贴图的工程内相对路径（正斜杠）；无封面 = null，卡片走主题色占位 */
+  cover?: string | null
+  /** 正文字数（口径同 shared/wordCount，列表与编辑器同一个函数） */
+  wordCount?: number
+  /** 已有非空审阅报告（封面墙角标与向导完成判定共用） */
+  hasReview?: boolean
+  /** 最近一次导出时间（ISO；缺省 = 未导出） */
+  exportedAt?: string
+  /** 标题候选数（贴图工程「只要标题不要封面」的进度线索） */
+  titlesCount?: number
 }
 
 /** 工程内直接可编辑的文本文件（约定文件名即 ID）；cards-review.md 按需创建不预建 */

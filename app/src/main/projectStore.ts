@@ -25,6 +25,7 @@ import type {
   ProjectTextFile
 } from '@shared/types'
 import { ideaStageOf } from '@shared/ideaStage'
+import { countWords } from '@shared/wordCount'
 import { UNCATEGORIZED, PROJECT_CATEGORIES, isKnownCategory } from '@shared/categories'
 import { sanitizeProjectName } from '@shared/projectName'
 import { getAppPaths } from './paths'
@@ -356,6 +357,49 @@ export function stampExported(name: string): void {
 
 // ---------- 工程 CRUD ----------
 
+/** 工程内相对路径 → 盘上是否真有这个文件 */
+function hasRel(dir: string, rel?: string | null): rel is string {
+  if (!rel) return false
+  return existsSync(join(dir, ...rel.split('/')))
+}
+
+/** 贴图工程取首张卡片 PNG 当封面（cards/<format>/card-N.png，按张数序取第一） */
+function firstCardImage(dir: string): string | null {
+  const base = join(dir, 'cards')
+  if (!existsSync(base)) return null
+  for (const fmt of readdirSync(base, { withFileTypes: true })) {
+    if (!fmt.isDirectory()) continue
+    const imgs = readdirSync(join(base, fmt.name))
+      .filter((f) => IMAGE_EXTS.has(extname(f).toLowerCase()))
+      .sort((a, b) => a.localeCompare(b, 'en', { numeric: true }))
+    if (imgs.length) return `cards/${fmt.name}/${imgs[0]}`
+  }
+  return null
+}
+
+/**
+ * 封面墙（主 PRD §7.13）要的工程事实：封面相对路径 / 字数 / 有无审阅报告 / 最近导出。
+ * 全部盘上现算，不落新存储；单个文件读失败只丢这几项，不影响工程列表。
+ */
+function wallFacts(dir: string, meta: ProjectMeta): Pick<ProjectSummary, 'format' | 'cover' | 'wordCount' | 'hasReview' | 'exportedAt' | 'titlesCount'> {
+  const isCards = meta.format === 'cards'
+  const cover = isCards ? firstCardImage(dir) : hasRel(dir, meta.cover?.main) ? meta.cover.main : hasRel(dir, meta.cover?.square) ? meta.cover.square : null
+  let wordCount: number | undefined
+  try {
+    if (!isCards && existsSync(join(dir, 'article.md'))) wordCount = countWords(readFileSync(join(dir, 'article.md'), 'utf-8'))
+  } catch {
+    wordCount = undefined
+  }
+  const reviewFile = isCards ? 'cards-review.md' : 'review.md'
+  let hasReview = false
+  try {
+    hasReview = existsSync(join(dir, reviewFile)) && !!readFileSync(join(dir, reviewFile), 'utf-8').trim()
+  } catch {
+    hasReview = false
+  }
+  return { format: meta.format ?? 'article', cover, wordCount, hasReview, exportedAt: meta.lastExportAt, titlesCount: meta.titles?.length ?? 0 }
+}
+
 export function listProjects(): ProjectSummary[] {
   const all = refreshDirCache()
   const out: ProjectSummary[] = []
@@ -368,7 +412,8 @@ export function listProjects(): ProjectSummary[] {
         status: meta.status,
         category: meta.category ?? UNCATEGORIZED,
         updated_at: meta.updated_at,
-        plannedAt: meta.plannedAt
+        plannedAt: meta.plannedAt,
+        ...wallFacts(dir, meta)
       })
     } catch {
       // project.json 损坏的目录跳过，不阻塞列表

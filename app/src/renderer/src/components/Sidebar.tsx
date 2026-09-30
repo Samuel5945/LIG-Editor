@@ -8,6 +8,7 @@ import HoverScrollName from './HoverScrollName'
 import { Icon, type IconName } from '../ui/Icon'
 import { StatusDot, StatusLegend } from '../ui/primitives'
 import { dotOfStatus } from '../ui/status'
+import { useTreeFlags } from '../ui/useTreeFlags'
 import IdeaLibrary from './IdeaLibrary'
 
 /** 状态圆点配色与语义见 `ui/status.ts`（全应用单源）；树上不放状态文字——省宽度给工程名，颜色即语义，图例常驻左栏底部 */
@@ -133,15 +134,9 @@ export default function Sidebar(props: SidebarProps): ReactElement {
   const [expanded, setExpanded] = useState<string[]>([])
   const [openGroups, setOpenGroups] = useState<string[]>([])
   const [skillsOpen, setSkillsOpen] = useState(false)
-  // 置顶工程（渲染层本地偏好，不入 project.json，避开 readMeta 白名单坑）
-  const [pinned, setPinned] = useState<string[]>(() => {
-    try {
-      const v = JSON.parse(localStorage.getItem('lig-tree-pinned') ?? '[]')
-      return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : []
-    } catch {
-      return []
-    }
-  })
+  // 置顶 / 归档名单走单源 hook（渲染层本地偏好，不入 project.json）：
+  // 与工程封面墙共用同一份 localStorage，任一侧改动即时同步，不出现两套事实
+  const { pinned, archived, setPinned, setArchived, pruneTo } = useTreeFlags()
   // 工程行右键菜单：{ x, y } 视口坐标 + 工程名
   const [menu, setMenu] = useState<{ x: number; y: number; name: string } | null>(null)
   const [assets, setAssets] = useState<Record<string, ProjectAssets>>({})
@@ -161,26 +156,8 @@ export default function Sidebar(props: SidebarProps): ReactElement {
   const expandedRef = useRef(expanded)
   expandedRef.current = expanded
 
-  // 归档工程（渲染层本地偏好）：完工工程收进树尾「已归档」折叠区，盘上文件不动
-  const [archived, setArchived] = useState<string[]>(() => {
-    try {
-      const v = JSON.parse(localStorage.getItem('lig-tree-archived') ?? '[]')
-      return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : []
-    } catch {
-      return []
-    }
-  })
+  // 「已归档」折叠区开关（名单本身在上面的单源 hook 里）
   const [archOpen, setArchOpen] = useState(false)
-  useEffect(() => {
-    localStorage.setItem('lig-tree-archived', JSON.stringify(archived))
-  }, [archived])
-  // 盘上已不存在的归档项顺手清掉
-  useEffect(() => {
-    setArchived((prev) => {
-      const next = prev.filter((n) => projects.some((p) => p.name === n))
-      return next.length === prev.length ? prev : next
-    })
-  }, [projects])
   const toggleArchive = useCallback(
     (name: string) => {
       const going = !archived.includes(name)
@@ -251,16 +228,8 @@ export default function Sidebar(props: SidebarProps): ReactElement {
     setOpenCats((prev) => (prev === null || prev.includes(name) ? prev : [...prev, name]))
   }, [revealKey])
 
-  // 置顶记忆 + 盘上已不存在的置顶项顺手清掉
-  useEffect(() => {
-    localStorage.setItem('lig-tree-pinned', JSON.stringify(pinned))
-  }, [pinned])
-  useEffect(() => {
-    setPinned((prev) => {
-      const next = prev.filter((n) => projects.some((p) => p.name === n))
-      return next.length === prev.length ? prev : next
-    })
-  }, [projects])
+  // 盘上已不存在的置顶 / 归档项顺手清掉（工程被删或改名后不留幽灵名）
+  useEffect(() => pruneTo(projects.map((x) => x.name)), [projects, pruneTo])
   const togglePin = useCallback((name: string) => {
     setPinned((prev) => (prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]))
   }, [])

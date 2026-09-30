@@ -770,7 +770,7 @@ export default function ChatPanel({
           onChange={(e) => (e.target.value ? loadSession(e.target.value) : newSession())}
           className="h-[26px] min-w-0 flex-1 rounded-full border border-panel-3 bg-panel-2 px-2.5 text-[11.5px] text-ink outline-none disabled:opacity-50"
         >
-          <option value="">{chatBucket === '__temp__' ? '临时对话 · 未落工程' : '当前会话'}</option>
+          <option value="">{chatBucket === '__temp__' ? '临时对话' : '当前会话'}</option>
           {sessions.map((s) => (
             <option key={s.id} value={s.id}>
               {s.title}
@@ -1083,7 +1083,7 @@ export default function ChatPanel({
           className="hidden"
           onChange={(e) => { void addAttachments(e.target.files); e.target.value = '' }}
         />
-        <div className="flex items-center gap-1 px-2 pb-2">
+        <div className="no-scrollbar flex min-w-0 items-center gap-1 overflow-x-auto px-2 pb-2">
           <ToolPill icon="clip" onClick={() => attachRef.current?.click()} title="附带图片（走 vision）或文档（提取文本）">
             附件
           </ToolPill>
@@ -1103,7 +1103,7 @@ export default function ChatPanel({
             <button
               onClick={abort}
               title="停止生成"
-              className="ml-auto inline-flex h-[30px] w-[30px] items-center justify-center rounded-lg bg-panel-3 text-st-bad hover:bg-panel"
+              className="ml-auto inline-flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-lg bg-panel-3 text-st-bad hover:bg-panel"
             >
               <Icon name="square" size={13} />
             </button>
@@ -1112,7 +1112,7 @@ export default function ChatPanel({
               onClick={() => void send()}
               disabled={!input.trim() && attachImages.length === 0 && attachDocs.length === 0}
               title="发送（Enter）"
-              className="ml-auto inline-flex h-[30px] w-[30px] items-center justify-center rounded-lg bg-accent text-white hover:brightness-110 disabled:opacity-40"
+              className="ml-auto inline-flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-lg bg-accent text-white hover:brightness-110 disabled:opacity-40"
             >
               <Icon name="send" size={14} />
             </button>
