@@ -64,17 +64,21 @@ function Chevron({ open }: { open: boolean }): ReactElement {
 
 const rowBase = 'group mb-0.5 flex cursor-pointer items-center gap-1 rounded px-2 py-1 text-left'
 
-/** 行内动作按钮统一规格。emoji 字形本身宽窄不一（同宽同高才看得出是一个家族），
- *  所以不靠字形对齐而靠盒子：固定 18×16 居中方框，配色只分三档——
- *  常态墨色、悬停上强调色、危险动作悬停变红；激活态（如已进入批量）用底色圈出——
- *  彩色 emoji 不跟随文字色，激活只能靠盒子底色表达 */
-const rowBox = 'flex h-4 w-[18px] shrink-0 items-center justify-center rounded text-[11px] leading-none'
-const rowAction = (tone: 'idle' | 'danger' | 'on' = 'idle'): string =>
-  tone === 'danger'
-    ? `${rowBox} text-ink hover:bg-panel hover:text-st-bad`
+/** 行内动作按钮统一规格。图标按钮走固定 18×16 方框（同宽同高才看得出是一个家族）；
+ *  **带文字的（如「批量」）必须换成自适应宽的位**——两个字塞进 18px 方框里会竖排。
+ *  配色只分三档：常态墨色、悬停上强调色、危险动作悬停变红；
+ *  激活态（如已进入批量）用底色圈出——线性图标跟随 currentColor，底色即激活信号 */
+const rowBox = 'flex h-4 shrink-0 items-center justify-center rounded text-[11px] leading-none'
+const rowBoxIcon = `${rowBox} w-[18px]`
+const rowBoxLayout = `${rowBox} gap-1 px-1.5`
+const rowAction = (tone: 'idle' | 'danger' | 'on' = 'idle', labeled = false): string => {
+  const box = labeled ? rowBoxLayout : rowBoxIcon
+  return tone === 'danger'
+    ? `${box} text-ink hover:bg-panel hover:text-st-bad`
     : tone === 'on'
-      ? `${rowBox} bg-accent/25 ring-1 ring-inset ring-accent/60 hover:bg-accent/30`
-      : `${rowBox} text-ink hover:bg-panel hover:text-accent`
+      ? `${box} bg-accent/25 ring-1 ring-inset ring-accent/60 hover:bg-accent/30`
+      : `${box} text-ink hover:bg-panel hover:text-accent`
+}
 
 /** 行内文字按钮（重命名/新建分类的确认与取消）：同高同字号，确认实底、取消幽灵 */
 const rowConfirm =
@@ -781,9 +785,9 @@ export default function Sidebar(props: SidebarProps): ReactElement {
                     }
                   }}
                   title="批量管理：勾选工程后批量归档/删除"
-                  className={batchCat === g.category ? rowAction('on') : `${rowAction()} hidden group-hover:flex`}
+                  className={batchCat === g.category ? rowAction('on', true) : `${rowAction('idle', true)} hidden group-hover:flex`}
                 >
-                  <Icon name="checkSquare" size={12} className="mr-1" />批量
+                  <Icon name="checkSquare" size={12} />批量
                 </button>
                 <button
                   onClick={(e) => {

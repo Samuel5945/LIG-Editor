@@ -770,7 +770,7 @@ export default function ChatPanel({
           onChange={(e) => (e.target.value ? loadSession(e.target.value) : newSession())}
           className="h-[26px] min-w-0 flex-1 rounded-full border border-panel-3 bg-panel-2 px-2.5 text-[11.5px] text-ink outline-none disabled:opacity-50"
         >
-          <option value="">{chatBucket === '__temp__' ? '临时对话（未落工程）' : '（当前会话）'}</option>
+          <option value="">{chatBucket === '__temp__' ? '临时对话 · 未落工程' : '当前会话'}</option>
           {sessions.map((s) => (
             <option key={s.id} value={s.id}>
               {s.title}
