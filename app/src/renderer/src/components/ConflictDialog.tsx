@@ -1,5 +1,8 @@
 import { useMemo } from 'react'
 import { diffLines } from '@shared/lineDiff'
+import { DialogShell } from '../ui/DialogShell'
+import { Button } from '../ui/primitives'
+import { Icon } from '../ui/Icon'
 
 interface Props {
   file: string
@@ -9,59 +12,57 @@ interface Props {
   onAcceptExternal: () => void
 }
 
-/** 外部修改与本地未保存内容冲突时的 diff 弹窗（保留本地 / 接受外部） */
-export default function ConflictDialog({
-  file,
-  local,
-  external,
-  onKeepLocal,
-  onAcceptExternal
-}: Props): JSX.Element {
+/**
+ * 外部修改与本地未保存内容冲突时的 diff 弹窗（保留本地 / 接受外部）。
+ * 统一壳（§5.11）：遮罩与 Esc 都不关——两条路都有代价，必须显式选一条；
+ * diff 配色走状态色单源（删除=danger 浅底+删除线，新增=success 浅底，§5.10）。
+ */
+export default function ConflictDialog({ file, local, external, onKeepLocal, onAcceptExternal }: Props): JSX.Element {
   const lines = useMemo(() => diffLines(local, external), [local, external])
+  const dels = lines.filter((l) => l.type === 'del').length
+  const adds = lines.filter((l) => l.type === 'add').length
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-      <div className="flex max-h-[80vh] w-[720px] flex-col rounded-lg border border-panel-3 bg-panel-2 shadow-xl">
-        <header className="border-b border-panel-3 px-4 py-3">
-          <h2 className="text-sm font-bold">检测到外部修改：{file}</h2>
-          <p className="mt-1 text-xs text-ink-dim">
-            该文件在编辑器之外被修改，而你有未保存的本地改动。红色为本地独有行，绿色为外部独有行。
-          </p>
-        </header>
-        <div className="selectable min-h-0 flex-1 overflow-auto p-3 font-mono text-xs leading-5">
-          {lines.map((line, idx) => (
-            <div
-              key={idx}
-              className={
-                line.type === 'del'
-                  ? 'bg-red-900/40 text-red-300 line-through'
-                  : line.type === 'add'
-                    ? 'bg-green-900/40 text-green-300'
-                    : 'text-ink-dim'
-              }
-            >
-              <span className="mr-2 inline-block w-3 select-none text-center">
-                {line.type === 'del' ? '-' : line.type === 'add' ? '+' : ' '}
-              </span>
-              {line.text || '\u00a0'}
-            </div>
-          ))}
-        </div>
-        <footer className="flex justify-end gap-2 border-t border-panel-3 px-4 py-3">
-          <button
-            onClick={onKeepLocal}
-            className="rounded border border-panel-3 px-3 py-1.5 text-xs text-ink hover:bg-panel-3"
+    <DialogShell
+      icon="alert"
+      title={`检测到外部修改：${file}`}
+      hint={`本地独有 ${dels} 行 · 外部独有 ${adds} 行`}
+      width={720}
+      maxHeight="80vh"
+      onClose={onKeepLocal}
+      closeOnBackdrop={false}
+      footer={
+        <>
+          <span className="mr-auto inline-flex items-center gap-1.5 text-[11.5px] text-ink-dim">
+            <Icon name="info" size={12} />
+            红色为本地独有行，绿色为外部独有行
+          </span>
+          <Button variant="sec" onClick={onKeepLocal} title="以编辑器里的内容为准，写回磁盘覆盖外部修改">
+            保留本地
+          </Button>
+          <Button variant="pri" onClick={onAcceptExternal} title="以磁盘上的外部版本为准，未保存的本地改动会丢失">
+            接受外部
+          </Button>
+        </>
+      }
+    >
+      <div className="selectable -mx-1.5 font-mono text-xs leading-5">
+        {lines.map((line, idx) => (
+          <div
+            key={idx}
+            className={`flex gap-2 rounded px-1.5 ${
+              line.type === 'del'
+                ? 'bg-st-bad/10 text-st-bad line-through'
+                : line.type === 'add'
+                  ? 'bg-st-done/10 text-st-done'
+                  : 'text-ink-dim'
+            }`}
           >
-            保留本地（覆盖外部修改）
-          </button>
-          <button
-            onClick={onAcceptExternal}
-            className="rounded bg-accent px-3 py-1.5 text-xs text-white hover:opacity-90"
-          >
-            接受外部（丢弃本地改动）
-          </button>
-        </footer>
+            <span className="w-3 shrink-0 select-none text-center">{line.type === 'del' ? '-' : line.type === 'add' ? '+' : ' '}</span>
+            <span className="min-w-0 flex-1 whitespace-pre-wrap break-words">{line.text || ' '}</span>
+          </div>
+        ))}
       </div>
-    </div>
+    </DialogShell>
   )
 }

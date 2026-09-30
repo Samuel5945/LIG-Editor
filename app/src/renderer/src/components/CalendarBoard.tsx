@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type DragEvent, type ReactElement } from 'react'
+import { Icon } from '../ui/Icon'
 import type { IdeaCard, IdeaEntry, ProjectStatus, ProjectSummary } from '@shared/types'
 import { addMonths, monthMatrix, todayYmd, ymd, ymdLabel } from '@shared/calendar'
 
@@ -364,13 +365,13 @@ export default function CalendarBoard({
               onClick={() => setAsideTab('unscheduled')}
               className={`flex-1 rounded px-2.5 py-1 ${asideTab === 'unscheduled' ? 'bg-panel-3 text-ink' : 'text-ink-dim hover:bg-panel-3'}`}
             >
-              🗂 未排期 {unscheduled.length}
+              <Icon name="archive" size={12} className="mr-1.5" />未排期 {unscheduled.length}
             </button>
             <button
               onClick={() => setAsideTab('ideas')}
               className={`flex-1 rounded px-2.5 py-1 ${asideTab === 'ideas' ? 'bg-panel-3 text-ink' : 'text-ink-dim hover:bg-panel-3'}`}
             >
-              💡 选题库 {ideas.length}
+              <Icon name="bulb" size={12} className="mr-1.5" />选题库 {ideas.length}
             </button>
           </div>
           <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto p-2">

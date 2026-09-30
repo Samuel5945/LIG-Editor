@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactElement } from 'react'
+import { Icon } from '../ui/Icon'
 import type { ArticleTheme } from '@shared/categoryThemes'
 import type { ProjectMeta, TitleCandidate } from '@shared/types'
 import { cardsPlainText } from '@shared/cards'
@@ -320,16 +321,16 @@ export default function TitleCoverPanel({
         <h3 className="text-sm font-bold text-ink">标题候选</h3>
         {titling ? (
           <button onClick={() => abortRef.current?.()} className="rounded bg-panel-3 px-2.5 py-1 text-red-400 hover:bg-panel">
-            ■ 停止
+             停止
           </button>
         ) : (
           <button onClick={runTitles} className="rounded bg-accent px-2.5 py-1 text-white hover:opacity-90">
-            ✦ {titles.length ? '重新起标题' : 'AI 起标题'}
+             {titles.length ? '重新起标题' : 'AI 起标题'}
           </button>
         )}
         {titling && <span className="text-ink-dim">基于正文生成中…</span>}
       </div>
-      {titleError && <p className="mb-2 break-all text-red-400">✗ {titleError}</p>}
+      {titleError && <p className="mb-2 break-all text-red-400"><Icon name="x" size={12} className="mr-1.5" />{titleError}</p>}
       {titles.length === 0 ? (
         <p className="mb-4 text-ink-dim">暂无候选。点上方按钮，AI 会基于{meta.format === 'cards' ? '贴图文案' : '正文'}起 6 个标题并打分。</p>
       ) : (
@@ -350,7 +351,7 @@ export default function TitleCoverPanel({
                 }}
                 className="shrink-0 rounded px-1.5 py-0.5 text-accent hover:bg-panel-3"
               >
-                ✓ 用这个
+                <Icon name="check" size={12} className="mr-1.5" />用这个
               </button>
               <button
                 onClick={() => {
@@ -373,7 +374,7 @@ export default function TitleCoverPanel({
       <h3 className="mb-2 text-sm font-bold text-ink">封面图</h3>
       {meta.cover && (
         <p className="mb-2 text-green-500">
-          ✓ 已保存：{meta.cover.main} / {meta.cover.square}
+          <Icon name="check" size={12} className="mr-1.5" />已保存：{meta.cover.main} / {meta.cover.square}
           {meta.cover.template ? `（模板：${COVER_TEMPLATES.find((t) => t.id === meta.cover?.template)?.name ?? meta.cover.template}）` : ''}
         </p>
       )}
@@ -429,7 +430,7 @@ export default function TitleCoverPanel({
           disabled={rendering || !coverTitle.trim()}
           className="rounded bg-accent px-3 py-1.5 text-white hover:opacity-90 disabled:opacity-40"
         >
-          {rendering ? '渲染中…' : '🖼 生成封面'}
+          {rendering ? '渲染中…' : ' 生成封面'}
         </button>
         {rendering && <span className="text-ink-dim">离屏渲染两种比例…</span>}
         <span className="text-ink-dim">强调色取自排版调性{theme?.accent ? `（${theme.accent}）` : ''}</span>
@@ -472,7 +473,7 @@ export default function TitleCoverPanel({
       <div className="mb-2 flex flex-wrap items-center gap-2">
         {prompting ? (
           <button onClick={() => promptAbortRef.current?.()} className="rounded bg-panel-3 px-3 py-1.5 text-red-400 hover:bg-panel">
-            ■ 停止
+             停止
           </button>
         ) : (
           <button
@@ -480,7 +481,7 @@ export default function TitleCoverPanel({
             disabled={genning}
             className="rounded border border-panel-3 px-3 py-1.5 text-ink-dim hover:border-accent hover:text-accent disabled:opacity-40"
           >
-            ✦ 从正文提取提示词
+             从正文提取提示词
           </button>
         )}
         <button
@@ -488,7 +489,7 @@ export default function TitleCoverPanel({
           disabled={genning || prompting || !coverPrompt.trim()}
           className="rounded bg-accent px-3 py-1.5 text-white hover:opacity-90 disabled:opacity-40"
         >
-          {genning ? '生成中…' : '✨ 生成封面'}
+          {genning ? '生成中…' : ' 生成封面'}
         </button>
         <button
           onClick={() => fileRef.current?.click()}

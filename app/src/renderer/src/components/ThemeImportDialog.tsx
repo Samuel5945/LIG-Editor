@@ -1,6 +1,8 @@
 import { useMemo, useState, type ReactElement } from 'react'
+import { Icon } from '../ui/Icon'
 import { parseThemeFromHtml, type ParsedTheme } from '@shared/themeParse'
 import { shouldSubmitOnEnter } from '@shared/imeEnter'
+import { DialogShell } from '../ui/DialogShell'
 import { mdToDoc } from '@shared/markdown'
 import { docToExportHtml } from '@shared/exportHtml'
 import type { ArticleTheme } from '@shared/types'
@@ -100,15 +102,16 @@ export default function ThemeImportDialog({ onClose, onSaved, onToast }: Props):
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="flex h-[86vh] w-[760px] flex-col rounded-lg border border-slate-700 bg-slate-900 shadow-2xl">
-        <div className="flex shrink-0 items-center justify-between border-b border-slate-700 px-4 py-2.5">
-          <span className="text-sm text-slate-200">🎨 导入排版（粘贴 HTML / 公众号链接）</span>
-          <button onClick={onClose} className="text-slate-500 hover:text-slate-300">
-            ✕
-          </button>
-        </div>
-
+    <DialogShell
+      icon="palette"
+      title="导入排版"
+      hint="粘贴公众号 HTML 或文章链接，解析出它的排版参数"
+      width={760}
+      maxHeight="86vh"
+      panelClass="h-[86vh]"
+      bodyClass="p-0"
+      onClose={onClose}
+    >
         <div className="flex min-h-0 flex-1">
           {/* 左：输入 + 解析结果 */}
           <div className="flex min-w-0 flex-1 flex-col gap-2 p-3">
@@ -132,7 +135,7 @@ export default function ThemeImportDialog({ onClose, onSaved, onToast }: Props):
             />
             <div className="flex gap-2">
               <button onClick={parse} disabled={!html.trim() || busy} className={btnPrimary}>
-                🔍 解析排版
+                <Icon name="search" size={12} className="mr-1.5" />解析排版
               </button>
               {parsed && (
                 <>
@@ -143,7 +146,7 @@ export default function ThemeImportDialog({ onClose, onSaved, onToast }: Props):
                     className={`${inputCls} max-w-[220px]`}
                   />
                   <button onClick={() => void save()} disabled={saving || !name.trim()} className={btnPrimary}>
-                    {saving ? '保存中…' : '💾 保存为主题'}
+                    {saving ? '保存中…' : ' 保存为主题'}
                   </button>
                 </>
               )}
@@ -162,25 +165,24 @@ export default function ThemeImportDialog({ onClose, onSaved, onToast }: Props):
           </div>
 
           {/* 右：手机宽度迷你预览（高度撑满右栏，不再是一小片） */}
-          <div className="flex w-[380px] shrink-0 flex-col border-l border-slate-700">
-            <p className="shrink-0 border-b border-slate-700 px-3 py-1.5 text-[11px] text-slate-500">
+          <div className="flex w-[380px] shrink-0 flex-col border-l border-panel-3">
+            <p className="shrink-0 border-b border-panel-3 px-3 py-1.5 text-[11px] text-ink-dim">
               预览（375px 手机宽度）
             </p>
-            <div className="flex min-h-0 flex-1 items-stretch justify-center overflow-auto bg-slate-950/60 p-2">
+            <div className="flex min-h-0 flex-1 items-stretch justify-center overflow-auto bg-panel p-2">
               {previewHtml ? (
                 <iframe
                   title="排版预览"
                   srcDoc={previewHtml}
                   sandbox=""
-                  className="h-full w-[375px] shrink-0 rounded border border-slate-700 bg-white"
+                  className="h-full w-[375px] shrink-0 rounded border border-panel-3 bg-white"
                 />
               ) : (
-                <p className="mt-8 text-xs text-slate-600">解析后这里显示排版效果</p>
+                <p className="mt-8 text-xs text-ink-dim">解析后这里显示排版效果</p>
               )}
             </div>
           </div>
         </div>
-      </div>
-    </div>
+    </DialogShell>
   )
 }

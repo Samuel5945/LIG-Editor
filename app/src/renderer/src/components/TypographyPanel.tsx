@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ReactElement } from 'react'
+import { Icon } from '../ui/Icon'
 import type { ArticleTheme } from '@shared/types'
 import { isHexColor } from '@shared/cards'
 import { THEME_FIELD_LABELS } from '@shared/categoryThemes'
@@ -77,13 +78,13 @@ export default function TypographyPanel({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-2 border-b border-panel-3 px-4 py-2.5">
-          <span className="text-sm font-bold text-ink">🎛 全量排版</span>
+          <span className="text-sm font-bold text-ink"><Icon name="sliders" size={12} className="mr-1.5" />全量排版</span>
           <span className="text-xs text-ink-dim">
             {project ? `工程「${project}」· 分类「${category ?? '未分类'}」` : '未打开工程'}
           </span>
           <span className="ml-auto text-xs text-ink-dim">改动即写入工程 meta，导出与推送同源生效</span>
           <button onClick={onClose} className="rounded px-2 py-1 text-xs text-ink-dim hover:bg-panel-3">
-            ✕ 关闭
+            <Icon name="x" size={12} className="mr-1.5" />关闭
           </button>
         </div>
 

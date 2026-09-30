@@ -9,6 +9,7 @@ import {
   type ReactElement,
   type ReactNode
 } from 'react'
+import { Icon } from '../ui/Icon'
 import { useEditor, EditorContent, BubbleMenu } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import type { JSONContent } from '@tiptap/react'
@@ -505,7 +506,7 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
           title="在光标处插入本地图片"
           className="rounded px-2 py-0.5 text-slate-300 hover:bg-slate-700"
         >
-          🖼 插入图片
+          <Icon name="image" size={12} className="mr-1.5" />插入图片
         </button>
         <input
           ref={fileInput}
@@ -674,7 +675,7 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
             <>
               <div className="relative">
                 <button type="button" title="正文排版：字号 / 排列（覆盖主题，导出同步）" onClick={() => togglePop('body')} className={typeBtn}>
-                  正文 {bodySize} <span className="text-[8px] text-slate-500">▾</span>
+                  正文 {bodySize} <span className="text-[8px] text-slate-500"></span>
                 </button>
                 {toolPop === 'body' && (
                   <div ref={fixPanel(256)} className={typePanel}>
@@ -706,11 +707,11 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
                 onClick={() => onOpenTypography?.()}
                 className={typeBtn}
               >
-                🎛
+                <Icon name="sliders" size={12} className="mr-1.5" />
               </button>
               <div className="relative">
                 <button type="button" title="标题排版：字号 / 排列 / 装饰版式 / 序号 / 前缀（覆盖主题，导出同步）" onClick={() => togglePop('heading')} className={typeBtn}>
-                  标题 {headingSize} <span className="text-[8px] text-slate-500">▾</span>
+                  标题 {headingSize} <span className="text-[8px] text-slate-500"></span>
                 </button>
                 {toolPop === 'heading' && (
                   <div ref={fixPanel(256)} className={typePanel}>
@@ -1105,7 +1106,7 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
               vars['--article-quote-border'] = `1px dashed ${t.quoteBorder && isHexColor(t.quoteBorder) ? t.quoteBorder : accent}`
               vars['--article-quote-bg'] = t.quoteBg && isHexColor(t.quoteBg) ? t.quoteBg.trim() : 'transparent'
             } else if (quote === 'quotes') {
-              vars['--article-quote-mark'] = '❝'
+              vars['--article-quote-mark'] = ''
             }
             // leftbar / quotes 的浅底同样允许整体换成作者指定的引用底色
             if ((quote === 'leftbar' || quote === 'quotes') && t.quoteBg && isHexColor(t.quoteBg))

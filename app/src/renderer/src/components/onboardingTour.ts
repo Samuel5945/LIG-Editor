@@ -39,7 +39,7 @@ const COMMON_CONFIG = {
 const MAIN_STEPS: DriveStep[] = [
   {
     popover: {
-      title: '👋 欢迎使用立格编辑器',
+      title: '欢迎使用立格编辑器',
       description:
         '本地优先的公众号图文创作工作台：脑暴选题 → AI 初稿 → 逐段修改 → 审阅 → 配图封面 → 排版导出，数据全部保存在本机。用 1 分钟认识一下界面。',
       showButtons: ['next'],
@@ -51,7 +51,7 @@ const MAIN_STEPS: DriveStep[] = [
     popover: {
       title: '左栏 · 工作树',
       description:
-        '「工作树」镜像本机工作区：分类（=账号）→ 工程 → 正文与交付，悬停可改名、删除、就地新建，右键工程可打开目录或置顶，行上角标实时反映配图/图表源变化，⚙️ 可管理分类；「选题库」页签独立管理灵感卡片，可一键转成大纲开工。',
+        '「工作树」镜像本机工作区：分类（=账号）→ 工程 → 正文与交付，悬停可改名、删除、就地新建，右键工程可打开目录或置顶，行上角标实时反映配图/图表源变化，点设置按钮可管理分类；「选题库」页签独立管理灵感卡片，可一键转成大纲开工。',
       side: 'right',
       align: 'start'
     }
@@ -71,7 +71,7 @@ const MAIN_STEPS: DriveStep[] = [
     popover: {
       title: '向导 · 步进器',
       description:
-        '完成打 ✓、当前亮 ●、未到 ○，点哪步去哪步，随时可跳可回。大纲步立项后正文在「成文」步流式生成，切去别的步也不会打断。',
+        '完成打对勾、当前亮实心圆点、未到空心圆点，点哪步去哪步，随时可跳可回。大纲步立项后正文在「成文」步流式生成，切去别的步也不会打断。',
       side: 'bottom',
       align: 'start'
     }
@@ -98,7 +98,7 @@ const MAIN_STEPS: DriveStep[] = [
   },
   {
     popover: {
-      title: '🎉 认识完毕',
+      title: '认识完毕',
       description: '去左栏新建第一个工程吧！首次使用建议先确认模型可用：',
       showButtons: ['next'],
       doneBtnText: '完成',

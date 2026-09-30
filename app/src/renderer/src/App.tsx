@@ -27,7 +27,7 @@ import TitleCoverPanel from './components/TitleCoverPanel'
 import CardsPanel, { type CardsPanelHandle } from './components/CardsPanel'
 import CalendarBoard from './components/CalendarBoard'
 import IdeaBoard from './components/IdeaBoard'
-import Sidebar from './components/Sidebar'
+import Sidebar from './components/Sidebar'
 import ProjectWall from './components/ProjectWall'
 import { Icon } from './ui/Icon'
 import { StatusDot } from './ui/primitives'
@@ -110,8 +110,8 @@ export default function App(): JSX.Element {
     const v = Number(localStorage.getItem('lig-pane-right-w'))
     return Number.isFinite(v) && v > 0 ? Math.min(Math.max(v, 260), 640) : 320
   })
-  const [leftCollapsed, setLeftCollapsed] = useState(() => localStorage.getItem('lig-pane-left-collapsed') === '1')
-  /** 封面墙让位给创作向导的开关（无工程时默认显示封面墙，主 PRD §7.13） */
+  const [leftCollapsed, setLeftCollapsed] = useState(() => localStorage.getItem('lig-pane-left-collapsed') === '1')
+  /** 封面墙让位给创作向导的开关（无工程时默认显示封面墙，主 PRD §7.13） */
   const [wallOff, setWallOff] = useState(() => localStorage.getItem('lig-wall-off') === '1')
   const [rightCollapsed, setRightCollapsed] = useState(() => localStorage.getItem('lig-pane-right-collapsed') === '1')
   const [skills, setSkills] = useState<SkillInfo[]>([])
@@ -173,15 +173,15 @@ export default function App(): JSX.Element {
   useEffect(() => setSavedAt(Date.now()), [saved])
 
   /** 排版调性：自定义主题 > 分类调性 > 默认（meta 变化即时跟换） */
-  const articleTheme = useMemo(() => resolveArticleTheme(meta, customThemes), [meta, customThemes])
-
-  /** 分类调性的强调色：封面墙无封面占位卡用它，保证「墙上看到的颜色」= 该分类工程实际颜色 */
-  const accentOf = useCallback(
-    (category?: string) => resolveArticleTheme(category ? { category } : null, customThemes).accent,
-    [customThemes]
-  )
-
-  /** 中栏创作页签的空态：未打开工程且用户没主动让位时 = 封面墙 */
+  const articleTheme = useMemo(() => resolveArticleTheme(meta, customThemes), [meta, customThemes])
+
+  /** 分类调性的强调色：封面墙无封面占位卡用它，保证「墙上看到的颜色」= 该分类工程实际颜色 */
+  const accentOf = useCallback(
+    (category?: string) => resolveArticleTheme(category ? { category } : null, customThemes).accent,
+    [customThemes]
+  )
+
+  /** 中栏创作页签的空态：未打开工程且用户没主动让位时 = 封面墙 */
   const showWall = centerTab === 'create' && !current && !wallOff
 
   /** 当前工程真实目录（分类布局后在 workspace/<分类>/<工程名>/，不能再用 workspace 根拼接） */
@@ -1481,7 +1481,24 @@ export default function App(): JSX.Element {
       )}
 
       {/* 模型接入设置 */}
-      {showSettings && <SettingsDialog onClose={() => setShowSettings(false)} />}
+      {showSettings && (
+        <SettingsDialog
+          onClose={() => setShowSettings(false)}
+          appearance={{
+            mode: themeMode,
+            onMode: setThemeMode,
+            scale: uiScale,
+            onScale: setUiScale,
+            version: updateCurrent ?? undefined,
+            onCheckUpdate: () => void checkUpdate(true)
+          }}
+          onOpenIntegration={(t) => {
+            setShowSettings(false)
+            if (t) setIntegrationTab(t)
+            setShowIntegration(true)
+          }}
+        />
+      )}
 
       {/* 版本更新弹窗（启动静默检查 / 顶栏手动检查共用） */}
       {updateResult && (

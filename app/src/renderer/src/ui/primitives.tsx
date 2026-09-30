@@ -51,7 +51,7 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 export function Button({ variant = 'sec', size = 'md', icon, className = '', children, ...rest }: ButtonProps): ReactElement {
   return (
     <button {...rest} className={`${BTN_BASE} ${BTN_SIZE[size]} ${BTN_VARIANT[variant]} ${className}`}>
-      {icon && <Icon name={icon} size={14} />}
+      {icon && <Icon name={icon} size={14} className={icon === 'spinner' ? 'animate-spin' : undefined} />}
       {children}
     </button>
   )

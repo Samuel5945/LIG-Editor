@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState, type ReactElement } from 'react'
 import { confirmAction } from '../confirm'
 import type { McpAccessCard, SkillInfo } from '@shared/types'
 import { shouldSubmitOnEnter } from '@shared/imeEnter'
+import { DialogShell } from '../ui/DialogShell'
+import { Icon } from '../ui/Icon'
 import type { WechatAccount, WechatConfig } from '@shared/wechatIpc'
 
 /**
@@ -167,29 +169,36 @@ export default function IntegrationDialog({
   }, [importPath, refreshSkills, onSkillsChanged, onToast])
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="flex max-h-[85vh] w-[620px] flex-col rounded-lg border border-slate-700 bg-slate-900 shadow-2xl">
-        <div className="flex shrink-0 items-center gap-2 border-b border-slate-700 px-4 py-2.5">
+    <DialogShell
+      icon="plug"
+      title="一键接入"
+      hint="把立格编辑器接给 Agent / 挂载 Skill"
+      width={620}
+      maxHeight="85vh"
+      bodyClass="p-0"
+      onClose={onClose}
+    >
+        <div className="flex shrink-0 items-center gap-2 border-b border-panel-3 px-4 py-2.5">
           <button
             onClick={() => setTab('mcp')}
             className={`rounded px-2.5 py-1 text-xs ${tab === 'mcp' ? 'bg-slate-700 text-slate-100' : 'text-slate-400 hover:bg-slate-800'}`}
           >
-            🔌 Agent 接入
+            <Icon name="plug" size={12} className="mr-1" />Agent 接入
           </button>
           <button
             onClick={() => setTab('skill')}
             className={`rounded px-2.5 py-1 text-xs ${tab === 'skill' ? 'bg-slate-700 text-slate-100' : 'text-slate-400 hover:bg-slate-800'}`}
           >
-            🧩 Skill 管理
+            <Icon name="zap" size={12} className="mr-1.5" />Skill 管理
           </button>
           <button
             onClick={() => setTab('push')}
             className={`rounded px-2.5 py-1 text-xs ${tab === 'push' ? 'bg-slate-700 text-slate-100' : 'text-slate-400 hover:bg-slate-800'}`}
           >
-            📮 推送设置
+            <Icon name="send" size={12} className="mr-1.5" />推送设置
           </button>
           <button onClick={onClose} className="ml-auto text-slate-500 hover:text-slate-300">
-            ✕
+            <Icon name="x" size={12} className="mr-1.5" />
           </button>
         </div>
 
@@ -270,7 +279,7 @@ export default function IntegrationDialog({
                   ＋ 添加账号
                 </button>
                 <button onClick={saveWechat} className={btnGhost}>
-                  💾 保存
+                  <Icon name="save" size={12} className="mr-1.5" />保存
                 </button>
                 <span className="text-[11px] text-slate-500">
                   AppID / AppSecret 在公众平台「设置与开发-基本配置」获取
@@ -284,18 +293,18 @@ export default function IntegrationDialog({
                 </p>
                 <div className="flex flex-wrap items-center gap-3">
                   <button onClick={fetchPublicIp} disabled={fetchingIp} className={btnGhost}>
-                    {fetchingIp ? '查询中…' : '🌐 获取本机公网 IP'}
+                    {fetchingIp ? '查询中…' : ' 获取本机公网 IP'}
                   </button>
                   <button
                     onClick={() => window.open('https://developers.weixin.qq.com/platform')}
                     className={btnGhost}
                   >
-                    🔗 前往微信开发者平台 ↗
+                    <Icon name="link" size={12} className="mr-1.5" />前往微信开发者平台 ↗
                   </button>
                 </div>
                 {ipResult && (
                   <p className={`break-all text-[11px] ${ipResult.ok ? 'text-green-400' : 'text-red-400'}`}>
-                    {ipResult.ok ? `✓ 公网 IP：${ipResult.text}（已复制，粘贴到白名单即可）` : `✗ ${ipResult.text}`}
+                    {ipResult.ok ? ` 公网 IP：${ipResult.text}（已复制，粘贴到白名单即可）` : ` ${ipResult.text}`}
                   </p>
                 )}
               </div>
@@ -313,7 +322,7 @@ export default function IntegrationDialog({
                   <div className="mb-1 flex items-center justify-between">
                     <span className="font-medium text-slate-200">Codex — ~/.codex/config.toml</span>
                     <button onClick={() => copy('Codex 片段', card.codexToml)} className={btnGhost}>
-                      📋 复制
+                      <Icon name="copy" size={12} className="mr-1.5" />复制
                     </button>
                   </div>
                   <pre className="selectable overflow-auto rounded bg-slate-950 p-3 text-[11px] leading-5 text-emerald-300">
@@ -324,7 +333,7 @@ export default function IntegrationDialog({
                   <div className="mb-1 flex items-center justify-between">
                     <span className="font-medium text-slate-200">Qoder / Claude — mcp.json</span>
                     <button onClick={() => copy('mcp.json 片段', card.qoderJson)} className={btnGhost}>
-                      📋 复制
+                      <Icon name="copy" size={12} className="mr-1.5" />复制
                     </button>
                   </div>
                   <pre className="selectable overflow-auto rounded bg-slate-950 p-3 text-[11px] leading-5 text-sky-300">
@@ -380,7 +389,7 @@ export default function IntegrationDialog({
                   className="min-w-0 flex-1 rounded bg-slate-800 px-2 py-1.5 text-slate-200 outline-none placeholder:text-slate-500"
                 />
                 <button onClick={doImport} disabled={!importPath.trim()} className={btnGhost}>
-                  ⬇ 导入
+                  <Icon name="download" size={12} className="mr-1.5" />导入
                 </button>
               </div>
             </div>
@@ -397,24 +406,23 @@ export default function IntegrationDialog({
               title="参考项目 Nomi：本地优先 + AI 副驾驶 + 无头能力核"
               className="rounded px-2 py-1 text-slate-400 hover:bg-slate-800 hover:text-sky-300"
             >
-              📖 Nomi
+              <Icon name="book" size={12} className="mr-1.5" />Nomi
             </a>
             <button
               onClick={() => window.open('https://ligdesign.win/')}
               title="LIG 立格 Studio 品牌官网"
               className="rounded px-2 py-1 text-slate-300 hover:bg-slate-800 hover:text-sky-300"
             >
-              🌐 官网 ↗
+              <Icon name="globe" size={12} className="mr-1" />官网<Icon name="external" size={10} className="ml-1" />
             </button>
             <button
               onClick={() => window.open('https://pan.quark.cn/s/1cb400aa407b')}
               className="rounded px-2 py-1 text-slate-300 hover:bg-slate-800 hover:text-sky-300"
             >
-              📥 版本更新 ↗
+              <Icon name="download" size={12} className="mr-1" />版本更新<Icon name="external" size={10} className="ml-1" />
             </button>
           </div>
         </div>
-      </div>
-    </div>
+    </DialogShell>
   )
 }

@@ -3,6 +3,7 @@ import { NodeViewWrapper, ReactNodeViewRenderer, type NodeViewProps } from '@tip
 import { useEffect, useState, type ReactElement } from 'react'
 import type { FigPipeline, FigureAttrs, FigureInsert } from './FigSuggest'
 import { figureInsertNode } from './FigSuggest'
+import { Icon } from '../ui/Icon'
 
 /**
  * figureImage：图片 + 图注 + figure-source 的原子块节点
@@ -99,10 +100,10 @@ function FigureImageView({ node, selected, updateAttributes, editor, getPos }: N
             {selected && (
               <>
                 <button type="button" onClick={() => fire('ai')} title="改用 AI 生图替换本图" className={opBtn}>
-                  ✨ AI 生图
+                  <Icon name="sparkles" size={12} className="mr-1" />AI 生图
                 </button>
                 <button type="button" onClick={() => fire('import')} title="导入本地图片替换本图" className={opBtn}>
-                  📁 导入替换
+                  <Icon name="folder" size={12} className="mr-1" />导入替换
                 </button>
               </>
             )}
@@ -111,13 +112,13 @@ function FigureImageView({ node, selected, updateAttributes, editor, getPos }: N
           selected && (
             <div className="mt-1 flex flex-wrap items-center justify-center gap-2 text-[11px]">
               <button type="button" onClick={() => fire('ai')} title="重新 AI 生图并替换本图" className={opBtn}>
-                🔄 重新生成
+                <Icon name="refresh" size={12} className="mr-1" />重新生成
               </button>
               <button type="button" onClick={() => fire('code')} title="改用代码绘图替换本图" className={opBtn}>
-                📊 代码绘图
+                <Icon name="chart" size={12} className="mr-1" />代码绘图
               </button>
               <button type="button" onClick={() => fire('import')} title="导入本地图片替换本图" className={opBtn}>
-                📁 导入替换
+                <Icon name="folder" size={12} className="mr-1" />导入替换
               </button>
             </div>
           )

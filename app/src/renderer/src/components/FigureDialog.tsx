@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactElement } from 'react'
+import { Icon } from '../ui/Icon'
+import { DialogShell } from '../ui/DialogShell'
 import {
   applyCutoutMasked,
   createCutoutMask,
@@ -41,9 +43,9 @@ interface FigureDialogProps {
 }
 
 const PIPELINE_TITLE: Record<FigPipeline, string> = {
-  ai: '✨ AI 生图',
-  code: '📊 代码绘图',
-  import: '📁 导入图片'
+  ai: ' AI 生图',
+  code: ' 代码绘图',
+  import: ' 导入图片'
 }
 
 const btnPrimary =
@@ -68,28 +70,22 @@ export default function FigureDialog({
     [projectDir]
   )
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="flex max-h-[86vh] w-[720px] flex-col rounded-lg border border-slate-700 bg-slate-900 shadow-2xl">
-        <div className="flex shrink-0 items-center justify-between border-b border-slate-700 px-4 py-2.5">
-          <span className="text-sm text-slate-200">
-            {PIPELINE_TITLE[request.pipeline]}
-            {request.htmlRelPath ? `（编辑 ${request.htmlRelPath}）` : ''}
-          </span>
-          <button onClick={onClose} className="text-slate-500 hover:text-slate-300">
-            ✕
-          </button>
-        </div>
-        <div className="min-h-0 flex-1 overflow-auto p-4">
-          {request.pipeline === 'ai' && (
+    <DialogShell
+      icon={request.pipeline === 'ai' ? 'sparkles' : request.pipeline === 'code' ? 'chart' : 'folder'}
+      title={PIPELINE_TITLE[request.pipeline]}
+      hint={request.htmlRelPath ? `编辑 ${request.htmlRelPath}` : undefined}
+      width={720}
+      maxHeight="86vh"
+      onClose={onClose}
+    >
+        {request.pipeline === 'ai' && (
             <AiPane project={project} article={article} request={request} skill={skill} />
           )}
           {request.pipeline === 'code' && (
             <CodePane project={project} request={request} skill={skill} assetUrl={assetUrl} />
           )}
-          {request.pipeline === 'import' && <ImportPane project={project} request={request} />}
-        </div>
-      </div>
-    </div>
+        {request.pipeline === 'import' && <ImportPane project={project} request={request} />}
+    </DialogShell>
   )
 }
 
@@ -213,10 +209,10 @@ function AiPane({
           title="用内置模型把描述扩写成详细无歧义的生图提示词"
           className={btnGhost}
         >
-          {polishing ? '优化中…' : '🪄 AI 优化描述'}
+          {polishing ? '优化中…' : ' AI 优化描述'}
         </button>
         <button onClick={generate} disabled={busy || polishing || !prompt.trim()} className={btnPrimary}>
-          {busy ? `生成中…（${spec.waitHint}）` : b64 ? '🔄 重新生成' : '✨ 生成图片'}
+          {busy ? `生成中…（${spec.waitHint}）` : b64 ? ' 重新生成' : ' 生成图片'}
         </button>
       </div>
       <p className="text-[11px] text-slate-500">{spec.hint}</p>
@@ -237,7 +233,7 @@ function AiPane({
               className={inputCls}
             />
             <button onClick={insert} className={btnPrimary}>
-              ✓ 插入正文
+              <Icon name="check" size={12} className="mr-1.5" />插入正文
             </button>
           </div>
         </>
@@ -361,13 +357,13 @@ function CodePane({
       )}
       <div className="flex flex-wrap items-center gap-2">
         <button onClick={aiGenerate} disabled={streaming || !instruction.trim()} className={btnPrimary}>
-          {streaming ? '生成中…' : editMode ? (rewrite ? '🤖 AI 重写源码' : '🤖 AI 改写源码') : '🤖 AI 生成图表'}
+          {streaming ? '生成中…' : editMode ? (rewrite ? ' AI 重写源码' : ' AI 改写源码') : ' AI 生成图表'}
         </button>
         <button onClick={renderPreview} disabled={rendering || streaming || !html.trim()} className={btnGhost}>
-          {rendering ? '渲染中…' : '🖼 渲染预览'}
+          {rendering ? '渲染中…' : ' 渲染预览'}
         </button>
         <button onClick={finish} disabled={editMode ? !previewV : !pngRel} className={btnPrimary}>
-          {editMode ? '✓ 完成' : '✓ 插入正文'}
+          {editMode ? ' 完成' : ' 插入正文'}
         </button>
       </div>
       {error && <div className="rounded bg-red-900/30 px-3 py-2 text-xs text-red-400">{error}</div>}
@@ -683,7 +679,7 @@ function ImportPane({ project, request }: { project: string; request: FigureRequ
                   title="移除这张"
                   className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-slate-700 text-[10px] text-slate-300 hover:bg-red-600 hover:text-white"
                 >
-                  ✕
+                  <Icon name="x" size={12} className="mr-1.5" />
                 </button>
               </div>
             ))}
@@ -722,13 +718,13 @@ function ImportPane({ project, request }: { project: string; request: FigureRequ
               title="根据各张图的横竖比例推荐布局与取景框"
               className={btnGhost}
             >
-              ✨ 智能推荐构图
+              <Icon name="sparkles" size={12} className="mr-1.5" />智能推荐构图
             </button>
           </div>
           {reason && <div className="rounded bg-sky-900/30 px-3 py-2 text-xs text-sky-300">{reason}</div>}
           <div className="flex flex-wrap items-center gap-2">
             <button onClick={insertGallery} disabled={multi.length < 2 || busy} className={btnPrimary}>
-              {busy ? '保存中…' : `✓ 生成图集并插入正文（${multi.length} 张）`}
+              {busy ? '保存中…' : ` 生成图集并插入正文（${multi.length} 张）`}
             </button>
             <button
               onClick={() => {
@@ -750,7 +746,7 @@ function ImportPane({ project, request }: { project: string; request: FigureRequ
           <img src={gifRaw.url} alt="GIF 预览" className="max-h-[340px] self-center rounded border border-slate-700" />
           <div className="flex flex-wrap items-center gap-2">
             <button onClick={insertGif} className={btnPrimary}>
-              ✓ 保存并插入正文
+              <Icon name="check" size={12} className="mr-1.5" />保存并插入正文
             </button>
             <button onClick={() => setGifRaw(null)} className={btnGhost}>
               换一张
@@ -861,7 +857,7 @@ function ImportPane({ project, request }: { project: string; request: FigureRequ
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <button onClick={insert} className={btnPrimary}>
-              ✓ 保存并插入正文
+              <Icon name="check" size={12} className="mr-1.5" />保存并插入正文
             </button>
             <button onClick={() => setRaw(null)} className={btnGhost}>
               换一张

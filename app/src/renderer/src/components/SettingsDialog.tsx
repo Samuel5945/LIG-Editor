@@ -2,19 +2,41 @@ import { useCallback, useEffect, useState, type ReactElement } from 'react'
 import type { LlmSettings, LlmTestResult, ModelInfo, ProviderConfig } from '@shared/types'
 import { imageFormatFor } from '@shared/imageFormats'
 import { isRhythmProvider, providerSiteLinks } from '@shared/providerSites'
+import { DialogShell } from '../ui/DialogShell'
+import { Button } from '../ui/primitives'
+import { Icon, type IconName } from '../ui/Icon'
 
 interface SettingsDialogProps {
   onClose: () => void
+  /** 外观与版本：与顶栏「外观」菜单共用 App 里那一份状态，不另存一套偏好 */
+  appearance: {
+    mode: 'system' | 'light' | 'dark'
+    onMode: (m: 'system' | 'light' | 'dark') => void
+    scale: 's' | 'm' | 'l'
+    onScale: (v: 's' | 'm' | 'l') => void
+    version?: string
+    onCheckUpdate?: () => void
+  }
+  /** Agent 接入 / Skill 库 / 推送设置仍在「一键接入」弹窗里，这里给明面入口 */
+  onOpenIntegration: (tab?: 'mcp' | 'skill' | 'push') => void
 }
 
-type SettingsTab = 'providers' | 'defaults'
+type SettingsTab = 'providers' | 'defaults' | 'appearance' | 'about'
+
+/** 左侧分组导航（§5.12：替代单页长滚） */
+const SECTIONS: { id: SettingsTab; label: string; icon: IconName; hint: string }[] = [
+  { id: 'providers', label: '模型供应商', icon: 'plug', hint: 'BaseURL / Key / 模型 / 测试连接' },
+  { id: 'defaults', label: '默认模型与检索', icon: 'sliders', hint: '默认文本与生图模型、联网搜索源' },
+  { id: 'appearance', label: '外观', icon: 'palette', hint: '日/夜间与界面字号，即时生效' },
+  { id: 'about', label: '关于', icon: 'info', hint: '版本、更新与官网' }
+]
 
 /**
  * 模型接入设置（两个标签页，互相解耦）：
  * - 模型供应商：管理接入参数（BaseURL / Key / 模型 / 图像协议 / 测试连接）
  * - 默认模型：独立指定默认文本 LLM 与默认生图模型（含图像协议一键切换），不与供应商列表耦合
  */
-export default function SettingsDialog({ onClose }: SettingsDialogProps): ReactElement {
+export default function SettingsDialog({ onClose, appearance, onOpenIntegration }: SettingsDialogProps): ReactElement {
   const [settings, setSettings] = useState<LlmSettings | null>(null)
   const [tab, setTab] = useState<SettingsTab>('providers')
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -217,24 +239,69 @@ export default function SettingsDialog({ onClose }: SettingsDialogProps): ReactE
   const imageSpec = imageFormatFor(imageProvider?.imageApi)
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/50">
-      <div className="flex h-[520px] w-[720px] flex-col overflow-hidden rounded-xl border border-panel-3 bg-panel-2 shadow-2xl">
-        {/* 顶部：标题 + 标签页 */}
-        <div className="flex shrink-0 items-center border-b border-panel-3 px-4 py-2">
-          <h2 className="text-sm font-bold">模型接入</h2>
-          <div className="ml-4 flex gap-1">
-            <button onClick={() => setTab('providers')} className={tabCls(tab === 'providers')}>
-              模型供应商
+    <DialogShell
+      icon="settings"
+      title="设置"
+      hint={SECTIONS.find((x) => x.id === tab)?.hint}
+      width={820}
+      maxHeight="88vh"
+      panelClass="h-[560px]"
+      bodyClass="p-0"
+      onClose={onClose}
+      footer={
+        tab === 'providers' || tab === 'defaults' ? (
+          <>
+            {saveError && (
+              <span className="mr-auto break-all text-xs text-st-bad">
+                <Icon name="xCircle" size={12} className="mr-1.5" />
+                保存失败：{saveError}
+              </span>
+            )}
+            {savedFlash && (
+              <span className="text-xs text-st-done">
+                <Icon name="checkCircle" size={12} className="mr-1.5" />
+                已保存，正在关闭…
+              </span>
+            )}
+            <Button variant="pri" icon="save" onClick={save}>
+              保存
+            </Button>
+          </>
+        ) : (
+          <span className="mr-auto text-[11px] text-ink-dim">外观与关于页无需保存</span>
+        )
+      }
+    >
+      <div className="flex min-h-0 flex-1">
+        {/* 左侧分组导航（§5.12）：替代原来挤在标题栏上的两个标签 */}
+        <nav className="flex w-[176px] shrink-0 flex-col gap-0.5 border-r border-panel-3 bg-panel p-2">
+          {SECTIONS.map((x) => (
+            <button
+              key={x.id}
+              onClick={() => setTab(x.id)}
+              title={x.hint}
+              className={`flex items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs transition-colors ${
+                tab === x.id ? 'bg-accent/15 font-semibold text-accent' : 'text-ink-dim hover:bg-panel-3 hover:text-ink'
+              }`}
+            >
+              <Icon name={x.icon} size={13} />
+              <span className="min-w-0 truncate">{x.label}</span>
             </button>
-            <button onClick={() => setTab('defaults')} className={tabCls(tab === 'defaults')}>
-              默认模型
-            </button>
-          </div>
-          <button onClick={onClose} className="ml-auto rounded px-2 py-1 text-xs text-ink-dim hover:bg-panel-3">
-            关闭 ✕
+          ))}
+          <button
+            onClick={() => onOpenIntegration()}
+            title="Agent 接入 / Skill 库 / 推送设置在「一键接入」里管"
+            className="mt-2 flex items-start gap-2 rounded-md border border-dashed border-panel-3 px-2.5 py-2 text-left text-xs text-ink-dim hover:border-accent hover:text-accent"
+          >
+            <Icon name="wrench" size={13} className="mt-0.5" />
+            <span className="min-w-0 flex-1">
+              Agent 接入 / Skill / 推送
+              <span className="mt-0.5 block text-[10px] leading-4">在「一键接入」里管</span>
+            </span>
+            <Icon name="external" size={10} className="mt-0.5" />
           </button>
-        </div>
-
+        </nav>
+        <div className="flex min-w-0 flex-1 flex-col">
         {tab === 'providers' ? (
           <div className="flex min-h-0 flex-1">
             {/* 左：供应商列表 */}
@@ -296,7 +363,7 @@ export default function SettingsDialog({ onClose }: SettingsDialogProps): ReactE
                             pinned ? 'text-accent' : 'text-ink-dim opacity-50 hover:opacity-100'
                           }`}
                         >
-                          {pinned ? '◆' : '◇'}
+                          {pinned ? '' : ''}
                         </span>
                         <span className="truncate">{p.name}</span>
                         {settings.textProviderId === p.id && (
@@ -387,7 +454,7 @@ export default function SettingsDialog({ onClose }: SettingsDialogProps): ReactE
                     >
                       {fetchingModels ? '拉取中…' : '↓ 拉取可用模型'}
                     </button>
-                    {modelsError && <span className="text-[11px] text-red-400">✗ {modelsError}</span>}
+                    {modelsError && <span className="text-[11px] text-red-400"><Icon name="x" size={12} className="mr-1.5" />{modelsError}</span>}
                   </div>
 
                   {models.length > 0 && (
@@ -461,7 +528,7 @@ export default function SettingsDialog({ onClose }: SettingsDialogProps): ReactE
                   </div>
                   {testResult && (
                     <p className={`mt-2 break-all text-xs ${testResult.ok ? 'text-green-500' : 'text-red-400'}`}>
-                      {testResult.ok ? '✓ ' : '✗ '}
+                      {testResult.ok ? ' ' : ' '}
                       {testResult.message}
                     </p>
                   )}
@@ -469,7 +536,7 @@ export default function SettingsDialog({ onClose }: SettingsDialogProps): ReactE
               )}
             </div>
           </div>
-        ) : (
+        ) : tab === 'defaults' ? (
           /* 默认模型页：与供应商列表解耦，直接指定文本/生图的默认供应商+模型 */
           <div className="min-h-0 flex-1 overflow-auto p-4">
             <p className="text-xs font-bold text-ink">默认文本模型（对话 / 写作 / 脑暴）</p>
@@ -580,17 +647,68 @@ export default function SettingsDialog({ onClose }: SettingsDialogProps): ReactE
               )}
             </div>
           </div>
+        ) : tab === 'appearance' ? (
+          /* 外观（§5.12）：三分段 + 字号三档，改一处即生效（沿用 App 里那份主题状态） */
+          <div className="min-h-0 flex-1 overflow-y-auto thin-scroll p-4">
+            <p className="mb-1 text-xs font-bold text-ink">主题</p>
+            <p className="mb-2 text-[11px] text-ink-dim">跟随系统会随 Windows 深浅色自动切换；界面字号即时生效。</p>
+            <div className="inline-flex rounded-lg bg-panel-3 p-0.5">
+              {([['system', '跟随系统'], ['light', '日间'], ['dark', '夜间']] as const).map(([v, label]) => (
+                <button
+                  key={v}
+                  onClick={() => appearance.onMode(v)}
+                  className={`h-[26px] rounded-md px-3 text-[11.5px] transition-colors ${
+                    appearance.mode === v
+                      ? 'bg-panel-2 font-semibold text-ink shadow-[0_1px_3px_rgba(0,0,0,.16)]'
+                      : 'text-ink-dim hover:text-ink'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <p className="mb-1 mt-5 text-xs font-bold text-ink">界面字号</p>
+            <div className="inline-flex rounded-lg bg-panel-3 p-0.5">
+              {([['s', '小'], ['m', '中'], ['l', '大']] as const).map(([v, label]) => (
+                <button
+                  key={v}
+                  onClick={() => appearance.onScale(v)}
+                  className={`h-[26px] rounded-md px-3 text-[11.5px] transition-colors ${
+                    appearance.scale === v
+                      ? 'bg-panel-2 font-semibold text-ink shadow-[0_1px_3px_rgba(0,0,0,.16)]'
+                      : 'text-ink-dim hover:text-ink'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          /* 关于：版本 / 检查更新 / 分发入口（与顶栏「版本更新」同一套结果） */
+          <div className="min-h-0 flex-1 overflow-y-auto thin-scroll p-4 text-xs">
+            <p className="mb-1 text-xs font-bold text-ink">关于立格编辑器</p>
+            <p className="leading-relaxed text-ink-dim">
+              @LIG人生如戏的图文创作平台公测版。当前版本 <span className="font-mono text-ink">v{appearance.version ?? '—'}</span>
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button size="sm" variant="sec" icon="refresh" onClick={appearance.onCheckUpdate}>
+                检查更新
+              </Button>
+              <Button size="sm" variant="sec" icon="globe" onClick={() => window.open('https://ligdesign.win/')}>
+                官网
+              </Button>
+              <Button size="sm" variant="sec" icon="download" onClick={() => window.open('https://pan.quark.cn/s/1cb400aa407b')}>
+                网盘下载
+              </Button>
+            </div>
+            <p className="mt-4 leading-relaxed text-ink-dim">
+              设置与工程数据都在本机：模型 Key 加密存储，工程正文即 Markdown 文件，删掉工程目录即彻底移除。
+            </p>
+          </div>
         )}
-
-        {/* 底部保存（两个标签页共用） */}
-        <div className="flex shrink-0 items-center justify-end gap-2 border-t border-panel-3 px-4 py-3">
-          {saveError && <span className="mr-auto break-all text-xs text-red-400">✗ 保存失败：{saveError}</span>}
-          {savedFlash && <span className="text-xs text-green-500">✓ 已保存，正在关闭…</span>}
-          <button onClick={save} className="rounded bg-accent px-4 py-1.5 text-xs text-white hover:opacity-90">
-            保存
-          </button>
         </div>
       </div>
-    </div>
+    </DialogShell>
   )
 }

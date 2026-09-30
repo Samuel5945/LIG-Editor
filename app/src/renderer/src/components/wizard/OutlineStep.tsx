@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react'
 import type { CardFormat } from '@shared/cards'
+import { Icon } from '../../ui/Icon'
 
 /**
  * 创作向导·步 2「大纲」：大纲可编辑 + 工程名 + 立项出口。
@@ -40,12 +41,12 @@ export default function OutlineStep({
       <div className="mb-2 flex items-center">
         <span className="font-bold text-ink">{phase === 'outlining' ? '大纲生成中…' : '大纲（可直接编辑）'}</span>
         {phase === 'outlining' ? (
-          <button onClick={onAbort} className="ml-auto rounded bg-panel-3 px-2 py-0.5 text-red-400 hover:bg-panel">
+          <button onClick={onAbort} className="ml-auto rounded bg-panel-3 px-2 py-0.5 text-st-bad hover:bg-panel">
             停止
           </button>
         ) : (
           <button onClick={onBack} className="ml-auto rounded px-2 py-0.5 text-ink-dim hover:bg-panel-3">
-            ← 返回
+            <Icon name="chevronLeft" size={12} className="mr-1" />返回
           </button>
         )}
       </div>
@@ -67,13 +68,13 @@ export default function OutlineStep({
           </div>
           <div className="flex flex-wrap gap-2">
             <button onClick={onCreateArticle} className="rounded bg-accent px-3 py-1.5 text-white hover:opacity-90" title="新建工程并生成公众号文章正文">
-              📄 公众号文章
+              <Icon name="file" size={13} className="mr-1" />公众号文章
             </button>
             <button onClick={() => onCreateCards('wechat')} className="rounded bg-accent px-3 py-1.5 text-white hover:opacity-90" title="新建工程并生成多张竖版公众号图片卡片">
-              🖼 公众号贴图
+              <Icon name="image" size={13} className="mr-1" />公众号贴图
             </button>
             <button onClick={() => onCreateCards('xhs')} className="rounded bg-accent px-3 py-1.5 text-white hover:opacity-90" title="新建工程并生成小红书风图文卡片">
-              📕 小红书贴图
+              <Icon name="layers" size={13} className="mr-1" />小红书贴图
             </button>
             {project && (
               <button onClick={onWriteToCurrent} className="rounded bg-panel-3 px-3 py-1.5 text-ink hover:bg-panel" title={`覆盖写入「${project}」的正文`}>

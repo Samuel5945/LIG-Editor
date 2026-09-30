@@ -4,6 +4,9 @@ import { describeThemePatch, parseLayoutOutput } from '@shared/layoutOutput'
 import type { ArticleTheme, ProjectMeta } from '@shared/types'
 import { chatOnce } from '../copilot/llm'
 import { polishLayoutMessages, applyReviewMessages } from '../copilot/prompts'
+import { DialogShell } from '../ui/DialogShell'
+import { Button } from '../ui/primitives'
+import { Icon } from '../ui/Icon'
 
 interface PolishDialogProps {
   /** 当前全文 */
@@ -117,22 +120,40 @@ export default function PolishDialog({
   const streamTail = running && result ? result.split('\n').slice(-4).join('\n') : ''
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="flex max-h-[85vh] w-[680px] flex-col rounded-lg border border-panel-3 bg-panel-2 shadow-2xl">
-        <div className="flex items-center border-b border-panel-3 px-4 py-2.5">
-          <span className="text-sm font-bold">{isReview ? '按审阅报告优化正文' : '排版优化'}</span>
-          <span className="ml-2 text-xs text-ink-dim">
-            {isReview ? '逐条落实审阅建议，未点名部分不动' : '不改内容，只拆段/理结构/标重点'}
-          </span>
-          <button onClick={cancel} className="ml-auto text-xs text-ink-dim hover:text-ink">
-            ✕ 关闭
-          </button>
-        </div>
+    <DialogShell
+      icon={isReview ? 'search' : 'sparkles'}
+      title={isReview ? '按审阅报告优化正文' : '排版优化'}
+      hint={isReview ? '逐条落实审阅建议，未点名部分不动' : '不改内容，只拆段/理结构/标重点'}
+      width={680}
+      maxHeight="85vh"
+      onClose={cancel}
+      closeOnBackdrop={!running}
+      footer={
+        <>
+          {done && (
+            <Button variant="ghost" onClick={run} className="mr-auto" icon="refresh">
+              重新生成
+            </Button>
+          )}
+          <Button variant="ghost" onClick={cancel}>
+            取消
+          </Button>
+          {done && themePatch && (
+            <Button variant="sec" onClick={() => onConfirm(result)} disabled={!result} title="只落排版参数，不动视觉层">
+              只应用排版
+            </Button>
+          )}
+          <Button variant="pri" icon="check" onClick={() => onConfirm(result, themePatch)} disabled={!done || !result}>
+            {isReview ? '应用修订' : themePatch ? '应用排版 + 视觉' : '应用新排版'}
+          </Button>
+        </>
+      }
+    >
 
         <div className="min-h-0 flex-1 overflow-auto p-4 text-xs">
           {error && (
             <>
-              <p className="mb-2 break-all text-red-400">✗ {error}</p>
+              <p className="mb-2 break-all text-st-bad"><Icon name="xCircle" size={12} className="mr-1.5" />{error}</p>
               <button onClick={run} className="rounded bg-accent px-3 py-1.5 text-white hover:opacity-90">
                 重试
               </button>
@@ -157,7 +178,7 @@ export default function PolishDialog({
 
           {done && patchInfo && (
             <p className="mb-2 text-ink-dim">
-              ✓ 已精准应用 {patchInfo.applied} 处修订
+              <Icon name="checkCircle" size={12} className="mr-1.5 text-st-done" />已精准应用 {patchInfo.applied} 处修订
               {patchInfo.failed.length > 0 && (
                 <span className="text-amber-400">；{patchInfo.failed.length} 处未命中原文已跳过：{patchInfo.failed.join('、')}</span>
               )}
@@ -207,7 +228,7 @@ export default function PolishDialog({
           )}
           {done && themePatch && (
             <div className="mt-3 rounded border border-accent/50 bg-panel p-2.5">
-              <p className="text-ink">🎨 视觉参数（模型判断本篇适合调整，随排版一起应用）</p>
+              <p className="flex items-center gap-1.5 text-ink"><Icon name="palette" size={12} className="text-accent" />视觉参数（模型判断本篇适合调整，随排版一起应用）</p>
               <div className="mt-1 grid grid-cols-2 gap-x-4 gap-y-0.5 text-[11px]">
                 {describeThemePatch(themePatch).map((f) => (
                   <div key={f.label} className="flex min-w-0 items-baseline gap-1">
@@ -222,35 +243,7 @@ export default function PolishDialog({
             </div>
           )}
         </div>
-
-        <div className="flex items-center justify-end gap-2 border-t border-panel-3 px-4 py-2.5">
-          {done && (
-            <button onClick={run} className="mr-auto rounded px-3 py-1.5 text-xs text-ink-dim hover:bg-panel-3">
-              ↻ 重新生成
-            </button>
-          )}
-          <button onClick={cancel} className="rounded px-3 py-1.5 text-xs text-ink-dim hover:bg-panel-3">
-            取消
-          </button>
-          {done && themePatch && (
-            <button
-              onClick={() => onConfirm(result)}
-              disabled={!result}
-              className="rounded px-3 py-1.5 text-xs text-ink-dim hover:bg-panel-3 disabled:opacity-40"
-            >
-              只应用排版
-            </button>
-          )}
-          <button
-            onClick={() => onConfirm(result, themePatch)}
-            disabled={!done || !result}
-            className="rounded bg-accent px-3 py-1.5 text-xs text-white hover:opacity-90 disabled:opacity-40"
-          >
-            {isReview ? '应用修订' : themePatch ? '应用排版 + 视觉' : '应用新排版'}
-          </button>
-        </div>
-      </div>
-    </div>
+    </DialogShell>
   )
 }
 

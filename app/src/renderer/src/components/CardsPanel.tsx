@@ -7,6 +7,7 @@ import {
   useState,
   type ReactElement
 } from 'react'
+import { Icon } from '../ui/Icon'
 import { confirmAction } from '../confirm'
 import {
   CARD_FORMAT_LABEL,
@@ -433,7 +434,7 @@ const CardsPanel = forwardRef<CardsPanelHandle, CardsPanelProps>(function CardsP
       const result = await window.api.invoke('wechat:push-cards', { project })
       onToast(
         result.ok
-          ? `✓ 贴图已推送到公众号${result.accountName ? `「${result.accountName}」` : ''}草稿箱，mediaId：${result.mediaId ?? ''}`
+          ? ` 贴图已推送到公众号${result.accountName ? `「${result.accountName}」` : ''}草稿箱，mediaId：${result.mediaId ?? ''}`
           : `推送失败：${result.error ?? '未知错误'}`
       )
     } catch (err) {
@@ -592,10 +593,10 @@ const CardsPanel = forwardRef<CardsPanelHandle, CardsPanelProps>(function CardsP
         <p>本工程是贴图形态，但还没有卡片数据</p>
         <div className="flex gap-2">
           <button onClick={() => createEmpty('wechat')} className="rounded bg-accent px-3 py-1.5 text-white hover:opacity-90">
-            🖼 新建公众号贴图
+            <Icon name="image" size={12} className="mr-1.5" />新建公众号贴图
           </button>
           <button onClick={() => createEmpty('xhs')} className="rounded bg-accent px-3 py-1.5 text-white hover:opacity-90">
-            📕 新建小红书贴图
+             新建小红书贴图
           </button>
           {hasArticle && (
             <button onClick={backToArticle} className="rounded bg-panel-3 px-3 py-1.5 text-ink hover:bg-panel">
@@ -615,7 +616,7 @@ const CardsPanel = forwardRef<CardsPanelHandle, CardsPanelProps>(function CardsP
       {/* 工具条：按钮不换行，放不下就整体折行成两排（格式/张数已移到中栏页签行） */}
       <div className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-panel-3 px-4 py-1.5 text-ink-dim">
         <button onClick={renderAll} disabled={globalBusy || !deck.cards.length} className="whitespace-nowrap rounded px-2 py-0.5 hover:bg-panel-3 disabled:opacity-40">
-          🔁 全部重渲染
+           全部重渲染
         </button>
         <button
           onClick={() => setShowAccent((v) => !v)}
@@ -623,7 +624,7 @@ const CardsPanel = forwardRef<CardsPanelHandle, CardsPanelProps>(function CardsP
           title="换强调色：角标、色条、页码、加粗词等点缀色跟随，选后整组重渲"
           className={`whitespace-nowrap rounded px-2 py-0.5 hover:bg-panel-3 disabled:opacity-40 ${showAccent ? 'bg-panel-3 text-ink' : ''}`}
         >
-          🎨 强调色
+          <Icon name="palette" size={12} className="mr-1.5" />强调色
           <span
             className="ml-1 inline-block h-2.5 w-2.5 rounded-full align-middle"
             style={{ background: deck.accent || (deck.format === 'wechat' ? '#b0803c' : '#ff2e63') }}
@@ -639,10 +640,10 @@ const CardsPanel = forwardRef<CardsPanelHandle, CardsPanelProps>(function CardsP
           </button>
         )}
         <button onClick={() => void refine()} disabled={globalBusy || !deck.cards.length} title="逐张润色标题与要点，并生成贴题的封面角标；背图、透出、深色、字号设置保留；逐张点评请用右栏「审阅」" className="whitespace-nowrap rounded px-2 py-0.5 hover:bg-panel-3 disabled:opacity-40">
-          ✨ AI 优化
+          <Icon name="sparkles" size={12} className="mr-1.5" />AI 优化
         </button>
         <button onClick={toArticle} disabled={globalBusy || !deck.cards.length} className="whitespace-nowrap rounded px-2 py-0.5 hover:bg-panel-3 disabled:opacity-40">
-          📄 扩写成文章
+          <Icon name="file" size={12} className="mr-1.5" />扩写成文章
         </button>
         {hasArticle && (
           <button onClick={backToArticle} disabled={globalBusy} title="不重新生成，直接切回已有正文；卡片数据保留可随时切回来" className="whitespace-nowrap rounded px-2 py-0.5 hover:bg-panel-3 disabled:opacity-40">
@@ -655,10 +656,10 @@ const CardsPanel = forwardRef<CardsPanelHandle, CardsPanelProps>(function CardsP
           title="以图片消息形态推送到公众号草稿箱（读者可左右滑动看图）；推送账号按工程所属分类的绑定决定，账号在「设置-推送设置」里管理"
           className="whitespace-nowrap rounded px-2 py-0.5 hover:bg-panel-3 disabled:opacity-40"
         >
-          {pushing ? '⏳ 推送中…' : '📮 推送草稿箱'}
+          {pushing ? ' 推送中…' : ' 推送草稿箱'}
         </button>
         <button onClick={openFolder} className="ml-auto whitespace-nowrap rounded px-2 py-0.5 hover:bg-panel-3" title="渲染好的 PNG 按平台分目录存在工程 cards/ 下，直接取用发布">
-          📂 打开图片文件夹
+          <Icon name="folder" size={12} className="mr-1.5" />打开图片文件夹
         </button>
       </div>
 
@@ -702,7 +703,7 @@ const CardsPanel = forwardRef<CardsPanelHandle, CardsPanelProps>(function CardsP
       {/* 长任务横幅 */}
       {busy && (
         <div className="flex items-center gap-2 border-b border-panel-3 bg-panel-2 px-4 py-1.5 text-ink-dim">
-          <span className="animate-pulse">✦</span>
+          <span className="animate-pulse"></span>
           <span className="min-w-0 flex-1 truncate">{busy}</span>
           <button onClick={() => abortRef.current?.()} className="rounded px-2 py-0.5 text-red-400 hover:bg-panel-3">
             停止
@@ -760,7 +761,7 @@ const CardsPanel = forwardRef<CardsPanelHandle, CardsPanelProps>(function CardsP
                     ＋
                   </button>
                   <button onClick={() => deleteCard(i)} disabled={globalBusy} title="删除" className="rounded px-1.5 py-0.5 hover:bg-panel-3 hover:text-red-400 disabled:opacity-30">
-                    ✕
+                    <Icon name="x" size={12} className="mr-1.5" />
                   </button>
                 </span>
               </div>
@@ -863,7 +864,7 @@ const CardsPanel = forwardRef<CardsPanelHandle, CardsPanelProps>(function CardsP
                   disabled={globalBusy || bgBusy !== null || aiBusy !== null || card.mode === 'ai' || !card.bgPrompt.trim()}
                   className="rounded bg-accent px-2.5 py-1 text-white hover:opacity-90 disabled:opacity-40"
                 >
-                  {bgBusy === i ? '背图生成中…' : '🎨 生成背图'}
+                  {bgBusy === i ? '背图生成中…' : ' 生成背图'}
                 </button>
                 <button
                   onClick={() => genAiFull(i)}
@@ -871,7 +872,7 @@ const CardsPanel = forwardRef<CardsPanelHandle, CardsPanelProps>(function CardsP
                   title="AI 一次画出整张成品卡（文字直接画进图里），不走排版模板；风格取背图描述"
                   className="rounded bg-panel-3 px-2.5 py-1 text-ink hover:bg-panel disabled:opacity-40"
                 >
-                  {aiBusy === i ? 'AI 成图中…' : '🪄 AI 直接成图'}
+                  {aiBusy === i ? 'AI 成图中…' : ' AI 直接成图'}
                 </button>
                 {card.mode === 'ai' && (
                   <button
@@ -888,7 +889,7 @@ const CardsPanel = forwardRef<CardsPanelHandle, CardsPanelProps>(function CardsP
                   disabled={globalBusy || bgBusy !== null || aiBusy !== null}
                   className="rounded bg-panel-3 px-2.5 py-1 text-ink hover:bg-panel disabled:opacity-40"
                 >
-                  🔄 重渲染
+                  <Icon name="refresh" size={12} className="mr-1.5" />重渲染
                 </button>
               </div>
             </div>
@@ -897,7 +898,7 @@ const CardsPanel = forwardRef<CardsPanelHandle, CardsPanelProps>(function CardsP
         {/* 卡片全删光后的兜底入口：平时加卡用每张卡操作行的「＋」 */}
         {!deck.cards.length && (
           <button onClick={addCard} disabled={globalBusy} className="mx-auto block rounded border border-dashed border-panel-3 px-4 py-2 text-ink-dim hover:border-accent hover:text-accent disabled:opacity-40">
-            ➕ 新建第一张卡片
+             新建第一张卡片
           </button>
         )}
 
@@ -905,14 +906,14 @@ const CardsPanel = forwardRef<CardsPanelHandle, CardsPanelProps>(function CardsP
         {deck.cards.length > 0 && (
           <div className="mt-1 rounded-lg border border-panel-3 bg-panel-2 p-3">
             <div className="mb-1.5 flex items-center gap-2">
-              <span className="font-bold text-ink">🏷 发布配文</span>
+              <span className="font-bold text-ink"> 发布配文</span>
               <span className="text-ink-dim">带话题标签，发图时直接复制粘贴</span>
               <button onClick={() => void genCaption()} disabled={globalBusy} className="ml-auto whitespace-nowrap rounded bg-accent px-2 py-0.5 text-white hover:opacity-90 disabled:opacity-40">
-                {deck.caption?.trim() ? '✨ 重新生成' : '✨ 生成配文'}
+                {deck.caption?.trim() ? ' 重新生成' : ' 生成配文'}
               </button>
               {deck.caption?.trim() && (
                 <button onClick={() => void copyCaption()} className="whitespace-nowrap rounded bg-panel-3 px-2 py-0.5 text-ink hover:bg-panel">
-                  📋 复制
+                  <Icon name="copy" size={12} className="mr-1.5" />复制
                 </button>
               )}
             </div>

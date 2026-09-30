@@ -2,6 +2,7 @@ import { Node } from '@tiptap/core'
 import { NodeViewWrapper, ReactNodeViewRenderer, type NodeViewProps } from '@tiptap/react'
 import type { ReactElement } from 'react'
 import type { FigureGalleryAttrs } from '@shared/markdown'
+import { Icon } from '../ui/Icon'
 
 /**
  * figSuggest：配图建议占位块（对应 md 单行 <!-- fig-suggest: 描述 -->）
@@ -58,7 +59,9 @@ function FigSuggestView({ node, editor, getPos, deleteNode, updateAttributes }: 
     <NodeViewWrapper className="my-3" data-drag-handle>
       <div className="rounded-lg border border-dashed border-slate-600 bg-slate-800/40 px-3 py-2.5">
         <div className="flex items-center gap-1.5 text-xs text-slate-400">
-          <span className="shrink-0">🖼 配图建议：</span>
+          <span className="shrink-0">
+            <Icon name="image" size={13} className="mr-1" />配图建议：
+          </span>
           <input
             value={desc}
             onChange={(e) => updateAttributes({ desc: e.target.value })}
@@ -68,21 +71,21 @@ function FigSuggestView({ node, editor, getPos, deleteNode, updateAttributes }: 
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
           <button type="button" onClick={() => fire('ai')} className={btn} title="AI 文生图 → 预览 → 插入正文">
-            ✨ AI 生图
+            <Icon name="sparkles" size={12} className="mr-1" />AI 生图
           </button>
           <button type="button" onClick={() => fire('code')} className={btn} title="AI 写 HTML 绘图 → 离屏渲染 PNG → 插入">
-            📊 代码绘图
+            <Icon name="chart" size={12} className="mr-1" />代码绘图
           </button>
           <button type="button" onClick={() => fire('import')} className={btn} title="导入本地图片，可选抠图去背景">
-            📁 导入图片
+            <Icon name="folder" size={12} className="mr-1" />导入图片
           </button>
           <button
             type="button"
             onClick={() => deleteNode()}
-            className="ml-auto rounded px-1.5 py-0.5 text-[11px] text-slate-500 hover:bg-slate-700 hover:text-red-400"
+            className="ml-auto rounded px-1.5 py-0.5 text-[11px] text-slate-500 hover:bg-slate-700 hover:text-st-bad"
             title="删除此配图占位"
           >
-            🗑
+            <Icon name="trash" size={12} />
           </button>
         </div>
       </div>

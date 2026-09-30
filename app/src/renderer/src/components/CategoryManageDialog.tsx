@@ -3,6 +3,8 @@ import type { CategoryPreset, CategoryPresetPatch, PlatformId, SkillInfo } from 
 import { PLATFORM_LABELS } from '@shared/platformHtml'
 import { shouldSubmitOnEnter } from '@shared/imeEnter'
 import type { WechatConfig } from '@shared/wechatIpc'
+import { DialogShell } from '../ui/DialogShell'
+import { Icon } from '../ui/Icon'
 
 /**
  * 分类管理弹窗：删除（隐藏）/ 恢复 / 重命名分类 / 账号预设（默认写作 Skill、默认分发平台、绑定的公众号）。
@@ -22,6 +24,8 @@ interface Props {
   onToast: (msg: string) => void
   /** 变更成功后刷新（重新拉分类/主题/工程列表）；reveal = 需要在左栏树里展开给人看到的分类名 */
   onChanged: (reveal?: string) => void
+  /** 打开中栏「主题库」页签（§5.6）：分类与主题的绑定关系在这里给一个明面入口 */
+  onOpenThemeLibrary?: () => void
 }
 
 const btn =
@@ -36,7 +40,8 @@ export default function CategoryManageDialog({
   skills,
   onClose,
   onToast,
-  onChanged
+  onChanged,
+  onOpenThemeLibrary
 }: Props): ReactElement {
   // 正在重命名的分类 + 输入值；正在确认删除的分类
   const [renaming, setRenaming] = useState<string | null>(null)
@@ -123,21 +128,21 @@ export default function CategoryManageDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60" onClick={onClose}>
-      <div
-        className="flex max-h-[85vh] w-[min(560px,92vw)] flex-col overflow-hidden rounded-xl border border-panel-3 bg-panel-2 shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex shrink-0 items-center justify-between border-b border-panel-3 px-4 py-3">
-          <h2 className="text-sm font-semibold text-ink">分类管理</h2>
-          <button onClick={onClose} className="rounded px-1.5 text-ink-dim hover:bg-panel-3" title="关闭">
-            ✕
-          </button>
-        </div>
+    <DialogShell icon="folder" title="分类管理" hint="账号 = 分类" width={560} maxHeight="85vh" bodyClass="px-4 pb-4" onClose={onClose}>
         {/* 内容区自己滚（面板 overflow-hidden + 内层 min-h-0 flex-1）：
             整块面板自己滚时，长分类名/账号预设会把内容撑宽，
             纵向滚动条便画在可视区右侧之外——这里保证只在面板内滚 */}
         <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
+          {onOpenThemeLibrary && (
+            <button
+              onClick={onOpenThemeLibrary}
+              title="浏览各分类当前套用的排版主题，可预览/绑定/导出"
+              className="mb-2 inline-flex h-[26px] items-center gap-1.5 rounded-full border border-panel-3 bg-panel-2 px-2.5 text-[11.5px] text-ink-dim hover:border-accent hover:text-accent"
+            >
+              <Icon name="layers" size={12} />
+              打开主题库
+            </button>
+          )}
           <p className="mb-3 text-[11px] leading-relaxed text-ink-dim">
             删除 = 隐藏：分类下的工程与目录全部保留，随时可恢复。重命名会同步移动工程目录并更新自定义排版、账号预设与公众号绑定。
             每个分类即一个账号，可配账号级默认：新建工程自动挂载的写作 Skill、导出时预选的分发平台、推送草稿用的公众号（凭据在「设置 → 推送设置」里管，这里只选绑哪个号）。
@@ -185,7 +190,7 @@ export default function CategoryManageDialog({
                               title="重命名分类"
                               className={btn}
                             >
-                              ✏️ 重命名
+                              <Icon name="pencil" size={11} className="mr-1" />重命名
                             </button>
                             {confirmDel === c ? (
                               <>
@@ -203,7 +208,7 @@ export default function CategoryManageDialog({
                                 title="删除分类（工程保留，可恢复）"
                                 className={btnDanger}
                               >
-                                🗑 删除
+                                <Icon name="trash" size={12} className="mr-1.5" />删除
                               </button>
                             )}
                           </>
@@ -297,14 +302,13 @@ export default function CategoryManageDialog({
               <div key={c} className="flex items-center gap-1.5 rounded bg-panel px-2 py-1 opacity-70">
                 <span className="min-w-0 flex-1 truncate text-xs text-ink">{c}</span>
                 <button onClick={() => doRestore(c)} disabled={busy} className={btn}>
-                  ↩ 恢复
+                  <Icon name="undo" size={11} className="mr-1" />恢复
                 </button>
               </div>
             ))}
             {hidden.length === 0 && <div className="px-1 text-[11px] text-ink-dim">（无）</div>}
           </div>
         </div>
-      </div>
-    </div>
+    </DialogShell>
   )
 }

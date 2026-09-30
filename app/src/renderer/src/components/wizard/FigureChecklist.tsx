@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react'
 import type { FigSuggestion, FigureOccurrence } from '@shared/wizardProgress'
 import type { FigPipeline } from '../../editor/FigSuggest'
+import { Icon } from '../../ui/Icon'
 
 /**
  * 创作向导·步 4「配图」：正文 fig-suggest 占位的批量清单。
@@ -61,7 +62,9 @@ export default function FigureChecklist({
               </p>
             </>
           ) : (
-            '✓ 配图建议已全部处理完。'
+            <>
+              <Icon name="checkCircle" size={14} className="mr-1 text-st-done" />配图建议已全部处理完。
+            </>
           )}
         </div>
       ) : (
@@ -93,21 +96,21 @@ export default function FigureChecklist({
                   className="rounded border border-panel-3 px-2 py-0.5 text-[11px] text-ink-dim hover:border-accent hover:text-accent"
                   title="AI 文生图 → 预览 → 插入正文"
                 >
-                  ✨ AI 生图
+                  <Icon name="sparkles" size={12} className="mr-1" />AI 生图
                 </button>
                 <button
                   onClick={() => onProcess(s, 'code')}
                   className="rounded border border-panel-3 px-2 py-0.5 text-[11px] text-ink-dim hover:border-accent hover:text-accent"
                   title="AI 写 HTML 绘图 → 离屏渲染 PNG → 插入"
                 >
-                  📊 代码绘图
+                  <Icon name="chart" size={12} className="mr-1" />代码绘图
                 </button>
                 <button
                   onClick={() => onProcess(s, 'import')}
                   className="rounded border border-panel-3 px-2 py-0.5 text-[11px] text-ink-dim hover:border-accent hover:text-accent"
                   title="导入本地图片，可选抠图去背景"
                 >
-                  📁 导入图片
+                  <Icon name="folder" size={12} className="mr-1" />导入图片
                 </button>
               </div>
             </div>

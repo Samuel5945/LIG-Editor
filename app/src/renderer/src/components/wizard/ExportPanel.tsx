@@ -5,6 +5,7 @@ import { docToPlatformHtml, wrapPlatformPage, PLATFORM_LABELS } from '@shared/pl
 import type { ArticleTheme } from '@shared/categoryThemes'
 import type { PlatformId } from '@shared/types'
 import type { PushDraftResult } from '@shared/wechatIpc'
+import { Icon } from '../../ui/Icon'
 
 /**
  * 导出面板体（创作向导「导出」步工作面；自 ExportDialog 抽出，原弹窗壳已随页签体系退役）：
@@ -242,14 +243,14 @@ export default function ExportPanel({ project, projectDir, markdown, theme, cate
             <span>发布配色：</span>
             <div className="flex overflow-hidden rounded border border-panel-3">
               <button type="button" onClick={() => setPubVariant('day')} className={segBtn(pubVariant === 'day')}>
-                ☀️ 日间
+                <Icon name="sun" size={12} className="mr-1" />日间
               </button>
               <button
                 type="button"
                 onClick={() => setPubVariant('night')}
                 className={`${segBtn(pubVariant === 'night')} border-l border-panel-3`}
               >
-                🌙 夜间
+                <Icon name="moon" size={12} className="mr-1" />夜间
               </button>
             </div>
             <label className="ml-1 flex cursor-pointer items-center gap-1 text-ink-dim">
@@ -266,25 +267,42 @@ export default function ExportPanel({ project, projectDir, markdown, theme, cate
 
         <div className="flex flex-wrap items-center gap-2">
           <button onClick={copyRich} disabled={busy} className={btnPrimary}>
-            {platform === 'wechat' ? '📋 复制富文本（粘贴公众号）' : `📋 复制（粘贴${PLATFORM_LABELS[platform]}）`}
+            <Icon name="copy" size={13} className="mr-1" />
+            {platform === 'wechat' ? '复制富文本（粘贴公众号）' : `复制（粘贴${PLATFORM_LABELS[platform]}）`}
           </button>
           <button onClick={exportHtml} disabled={busy} className={btnGhost}>
-            💾 导出 article.html
+            <Icon name="save" size={13} className="mr-1" />导出 article.html
           </button>
           {exportedPath && (
             <button onClick={openExported} className={btnGhost}>
-              🌐 浏览器打开
+              <Icon name="globe" size={13} className="mr-1" />浏览器打开
             </button>
           )}
           <button onClick={pushDraft} disabled={pushing || busy} className={btnPrimary}>
-            {pushing ? '推送中…' : '🚀 导出并推送草稿'}
+            {pushing ? (
+              <>
+                <Icon name="spinner" size={13} className="mr-1 animate-spin" />
+                推送中…
+              </>
+            ) : (
+              <>
+                <Icon name="send" size={13} className="mr-1" />导出并推送草稿
+              </>
+            )}
           </button>
         </div>
         {pushResult && (
-          <p className={`mt-2 break-all text-[11px] ${pushResult.ok ? 'text-green-500' : 'text-red-400'}`}>
-            {pushResult.ok
-              ? `✓ 草稿已推送到公众号${pushResult.accountName ? `「${pushResult.accountName}」` : ''}后台，mediaId：${pushResult.mediaId ?? ''}`
-              : `✗ 推送失败：${pushResult.error ?? '未知错误'}`}
+          <p className={`mt-2 break-all text-[11px] ${pushResult.ok ? 'text-st-done' : 'text-st-bad'}`}>
+            {pushResult.ok ? (
+              <>
+                <Icon name="checkCircle" size={12} className="mr-1" />草稿已推送到公众号
+                {pushResult.accountName ? `「${pushResult.accountName}」` : ''}后台，mediaId：{pushResult.mediaId ?? ''}
+              </>
+            ) : (
+              <>
+                <Icon name="xCircle" size={12} className="mr-1" />推送失败：{pushResult.error ?? '未知错误'}
+              </>
+            )}
           </p>
         )}
 
@@ -292,14 +310,14 @@ export default function ExportPanel({ project, projectDir, markdown, theme, cate
         <div className="mt-3 rounded border border-dashed border-panel-3 px-3 py-2">
           <div className="flex flex-wrap items-center gap-2">
             <button onClick={exportWord} disabled={busy} className={btnGhost}>
-              📄 导出 Word（可编辑）
+              <Icon name="file" size={13} className="mr-1" />导出 Word（可编辑）
             </button>
             <button onClick={exportPdf} disabled={busy} className={btnGhost}>
-              🖨 导出 PDF（A4 打印）
+              <Icon name="printer" size={13} className="mr-1" />导出 PDF（A4 打印）
             </button>
             {docPath && (
               <button onClick={openDocFile} className={btnGhost}>
-                📂 打开
+                <Icon name="folderOpen" size={13} className="mr-1" />打开
               </button>
             )}
           </div>

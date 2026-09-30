@@ -4,6 +4,7 @@ import { useRef, useState, type MouseEvent, type ReactElement, type UIEvent } fr
 import type { FigureGalleryAttrs, GalleryImage } from '@shared/markdown'
 import { figureInsertNode, type FigureInsert } from './FigSuggest'
 import type { FigureImageStorage } from './FigureImage'
+import { Icon } from '../ui/Icon'
 
 /**
  * figureGallery：多图图集的原子块节点（M6 多图导入）
@@ -185,7 +186,7 @@ function GalleryView({ node, selected, updateAttributes, editor, getPos }: NodeV
                 title="重新选择图片，整体替换本图集"
                 className={opBtn}
               >
-                📁 重新导入
+                <Icon name="folder" size={12} className="mr-1" />重新导入
               </button>
             </div>
             {/* 逐张管理：调序 / 删除 */}
@@ -205,15 +206,15 @@ function GalleryView({ node, selected, updateAttributes, editor, getPos }: NodeV
                       title="前移一位"
                       className={`${opBtn} disabled:opacity-30`}
                     >
-                      ◀
+                      <Icon name="chevronLeft" size={12} />
                     </button>
                     <button
                       type="button"
                       onClick={() => removeImage(k)}
                       title={images.length === 2 ? '删除后剩 1 张，自动退化为单图' : '删除这张'}
-                      className={`${opBtn} hover:border-red-500 hover:text-red-400`}
+                      className={`${opBtn} hover:border-red-500 hover:text-st-bad`}
                     >
-                      ✕
+                      <Icon name="x" size={12} />
                     </button>
                     <button
                       type="button"
@@ -222,7 +223,7 @@ function GalleryView({ node, selected, updateAttributes, editor, getPos }: NodeV
                       title="后移一位"
                       className={`${opBtn} disabled:opacity-30`}
                     >
-                      ▶
+                      <Icon name="chevronRight" size={12} />
                     </button>
                   </div>
                 </div>
