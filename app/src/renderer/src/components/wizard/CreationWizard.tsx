@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from 'react'
 import { confirmAction } from '../../confirm'
 import type { ContentPart, IdeaCard, ProjectMeta, WebSearchResult } from '@shared/types'
 import { CARD_FORMAT_LABEL, parseCardItems, type CardFormat } from '@shared/cards'
@@ -18,6 +18,8 @@ import { extractFileText } from '../../copilot/material'
 import type { FigPipeline } from '../../editor/FigSuggest'
 import BrainstormIdeas from './BrainstormIdeas'
 import type { Attachment } from './BrainstormIdeas'
+import { Stepper } from '../../ui/primitives'
+import { Icon } from '../../ui/Icon'
 import OutlineStep from './OutlineStep'
 import FigureChecklist from './FigureChecklist'
 
@@ -51,8 +53,6 @@ export interface CreationWizardProps {
   titlecoverBody: ReactNode
   reviewBody: ReactNode
   exportBody: ReactNode
-  /** 步进器右端状态区（字数/保存状态） */
-  headerRight: ReactNode
   /** 切到导出步先把未保存正文落盘（导出读磁盘文件） */
   onFlushArticle: () => Promise<void>
   onArticleGenerated: (md: string) => void
@@ -90,7 +90,6 @@ export default function CreationWizard({
   titlecoverBody,
   reviewBody,
   exportBody,
-  headerRight,
   onFlushArticle,
   onArticleGenerated,
   onOpenProject,
@@ -435,31 +434,24 @@ export default function CreationWizard({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* 步进器（步骤即导航：点哪步去哪步，完成态由工程事实推导）；间距收紧，窄栏/大字号横向滚动不折行 */}
-      <div data-tour="wizard-stepper" className="flex h-10 shrink-0 items-center gap-0.5 overflow-x-auto border-b border-panel-3 px-3 text-xs">
-        {steps.map((s, i) => (
-          <Fragment key={s.id}>
-            {i > 0 && <span className="h-px w-2 shrink-0 bg-panel-3" />}
-            <button
-              onClick={() => setActiveId(s.id)}
-              className={`flex shrink-0 items-center gap-1 whitespace-nowrap rounded px-1.5 py-0.5 ${activeId === s.id ? 'bg-panel-3 text-ink' : 'text-ink-dim hover:bg-panel-3'}`}
-              title={s.done ? '已完成' : undefined}
-            >
-              <span className={s.done ? 'text-green-500' : activeId === s.id ? 'text-accent' : 'text-ink-dim/70'}>
-                {s.done ? '✓' : activeId === s.id ? '●' : '○'}
-              </span>
-              <span className={writing && s.id === 'draft' ? 'animate-pulse' : undefined}>{s.label}</span>
-            </button>
-          </Fragment>
-        ))}
-        <span className="ml-auto flex shrink-0 items-center gap-2 whitespace-nowrap">{headerRight}</span>
+      {/* 步进器（步骤即导航：点哪步去哪步，完成态由工程事实推导）
+          紧凑 Stepper：单步定宽 + 连接线 flex 均分，任意窗口宽度零横向滚动条；
+          放不下时降级为「n/7 步骤名 ▾」下拉。字数/保存状态已挪到中栏页签行与底部状态栏。 */}
+      <div data-tour="wizard-stepper" className="shrink-0 border-b border-panel-3 px-2">
+        <Stepper
+          items={steps.map((s) => ({ id: s.id, label: s.label, done: s.done }))}
+          activeId={activeId}
+          onSelect={(id) => setActiveId(id as WizardStepId)}
+          busyId={writing ? 'draft' : null}
+        />
       </div>
 
       {/* 流式横幅（writing 阶段全局可见，切步不断流） */}
       {writing && (
         <div className="flex shrink-0 items-center gap-2 border-b border-panel-3 bg-panel-2 px-3 py-1.5 text-xs">
-          <span className="whitespace-nowrap text-ink">
-            {cardsFormat ? `🖼 ${CARD_FORMAT_LABEL[cardsFormat]}卡片生成中…` : '✍️ 正文生成中，正在流式写入…'}
+          <span className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap text-ink">
+            <Icon name={cardsFormat ? 'image' : 'file'} size={13} />
+            {cardsFormat ? `${CARD_FORMAT_LABEL[cardsFormat]}卡片生成中…` : '正文生成中，正在流式写入…'}
           </span>
           <span className="min-w-0 flex-1 truncate text-ink-dim">{streamText || '正在连接模型…'}</span>
           <button onClick={abort} className="shrink-0 rounded bg-panel-3 px-2 py-0.5 text-red-400 hover:bg-panel">
@@ -493,17 +485,17 @@ export default function CreationWizard({
           ) : (
             <p className="text-ink-dim">选题阶段已跳过——回到本步可重新脑暴选题。</p>
           )}
-          {searching && <p className="mb-2 rounded bg-panel p-2 text-ink-dim">🌐 联网搜索中…</p>}
+          {searching && <p className="mb-2 rounded bg-panel p-2 text-ink-dim"><Icon name="globe" size={12} className="mr-1.5 align-[-2px]" />联网搜索中…</p>}
           {busy && !searching && !streamText && phase === 'brainstorming' && (
             <p className="mb-2 rounded bg-panel p-2 text-ink-dim">
-              🤔 模型思考中…<span className="animate-pulse">▌</span>
+              <Icon name="brain" size={12} className="mr-1.5 align-[-2px]" />模型思考中…<span className="animate-pulse">▌</span>
             </p>
           )}
           {/* 脑暴中不露 JSON 原文，只展示已产出的选题进度 */}
           {phase === 'brainstorming' && streamText && (
             <div className="rounded bg-panel p-2 leading-6 text-ink-dim">
               <p>
-                💡 选题产出中…<span className="animate-pulse">▌</span>
+                <Icon name="bulb" size={12} className="mr-1.5 align-[-2px]" />选题产出中…<span className="animate-pulse">▌</span>
               </p>
               {streamTitles(streamText).map((t, i) => (
                 <p key={i} className="truncate">
@@ -512,7 +504,7 @@ export default function CreationWizard({
               ))}
             </div>
           )}
-          {error && <p className="mt-2 break-all text-red-400">✗ {error}</p>}
+          {error && <p className="mt-2 break-all text-st-bad"><Icon name="xCircle" size={12} className="mr-1 align-[-2px]" />{error}</p>}
           {/* 解析失败时保留原始输出便于排查 */}
           {error && streamText && phase === 'input' && (
             <div className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap rounded bg-panel p-2 text-[10px] text-ink-dim">{streamText}</div>
@@ -549,7 +541,7 @@ export default function CreationWizard({
               <span className="animate-pulse">▌</span>
             </div>
           )}
-          {error && phase !== 'input' && <p className="mt-2 break-all text-red-400">✗ {error}</p>}
+          {error && phase !== 'input' && <p className="mt-2 break-all text-st-bad"><Icon name="xCircle" size={12} className="mr-1 align-[-2px]" />{error}</p>}
         </div>
       </div>
 

@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState, type ReactElement } from 'rea
 import { cardsPlainText } from '@shared/cards'
 import { chatOnce } from '../copilot/llm'
 import { cardsReviewMessages } from '../copilot/prompts'
+import { Icon } from '../ui/Icon'
+import { Button, CardTitle } from '../ui/primitives'
 
 interface CardsReviewPanelProps {
   project: string
@@ -110,41 +112,74 @@ export default function CardsReviewPanel({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* 工具条：按钮一行，状态提示另起一行 */}
-      <div className="shrink-0 border-b border-panel-3 px-3 py-1.5 text-xs">
-        <div className="flex flex-wrap items-center gap-1.5">
-          {streaming ? (
-            <button onClick={() => abortRef.current?.()} className="whitespace-nowrap rounded bg-panel-3 px-2 py-1 text-red-400 hover:bg-panel">
-              ■ 停止
-            </button>
-          ) : (
-            <button onClick={() => void runReview()} className="whitespace-nowrap rounded bg-accent px-2 py-1 text-white hover:opacity-90">
-              {empty ? '🔍 审阅贴图' : '🔍 重新审阅'}
-            </button>
-          )}
-          {!streaming && !empty && (
-            <button
-              onClick={() => onOptimize(reviewMd)}
-              title="按报告逐条落实文案类修改；字号/深色这类排版建议用每张卡的滑杆和勾选手动调"
-              className="whitespace-nowrap rounded bg-panel-3 px-2 py-1 text-ink hover:bg-panel"
-            >
-              ✨ 按报告优化文案
-            </button>
-          )}
+      {/* 报告卡头部（与文章审阅页同构，稿 B 标注⑨）：主次按钮 + 状态胶囊右对齐归组 */}
+      <div className="shrink-0 px-3 pt-3">
+        <div className="rounded-xl border border-panel-3 bg-panel-2 p-3.5 shadow-[0_1px_6px_rgba(0,0,0,.18)]">
+          <div className="flex flex-wrap items-center gap-2">
+            <CardTitle>贴图审阅</CardTitle>
+            {!streaming && (
+              <span className="rounded-full bg-accent/15 px-2 py-0.5 text-[10.5px] font-semibold text-accent">当前步骤</span>
+            )}
+            <div className="ml-auto flex flex-wrap items-center gap-2">
+              {streaming ? (
+                <Button size="sm" variant="sec" icon="square" onClick={() => abortRef.current?.()} className="text-st-bad">
+                  停止
+                </Button>
+              ) : (
+                <Button size="sm" variant="sec" icon="search" onClick={() => void runReview()}>
+                  {empty ? '审阅贴图' : '重新审阅'}
+                </Button>
+              )}
+              {!streaming && !empty && (
+                <Button
+                  size="sm"
+                  variant="pri"
+                  icon="sparkles"
+                  onClick={() => onOptimize(reviewMd)}
+                  title="按报告逐条落实文案类修改；字号/深色这类排版建议用每张卡的滑杆和勾选手动调"
+                >
+                  按报告优化文案
+                </Button>
+              )}
+            </div>
+          </div>
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-[11.5px] text-ink-dim">
+            <span className="inline-flex items-center gap-1.5">
+              报告写入
+              <span className="rounded border border-panel-3 bg-panel px-1.5 py-0.5 font-mono text-[11px]">cards-review.md</span>
+            </span>
+            {streaming ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-panel-3 px-2.5 py-0.5 text-ink">
+                <Icon name="spinner" size={11} className="animate-spin" />
+                逐张点评文案与排版中…
+              </span>
+            ) : empty ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-st-draft/15 px-2.5 py-0.5 font-semibold text-st-draft">
+                <Icon name="alert" size={11} />
+                尚未审阅 · 等待执行
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-st-done/15 px-2.5 py-0.5 font-semibold text-st-done">
+                <Icon name="checkCircle" size={11} />
+                已有报告
+              </span>
+            )}
+            <span className="text-ink-dim">排版建议（字号/深色/拆卡）请在卡片上手动调</span>
+          </div>
         </div>
-        <p className="mt-1 text-ink-dim">
-          {streaming
-            ? '逐张点评文案与排版中…'
-            : '报告写入 cards-review.md；排版建议（字号/深色/拆卡）请在卡片上手动调'}
-        </p>
       </div>
 
       <div ref={scrollRef} className="selectable min-h-0 flex-1 overflow-auto p-3 text-xs leading-5">
-        {error && <p className="mb-2 break-all text-red-400">✗ {error}</p>}
+        {error && (
+          <p className="mb-2 break-all text-st-bad">
+            <Icon name="xCircle" size={12} className="mr-1.5" />
+            {error}
+          </p>
+        )}
 
         {/* 流式过程预览 */}
         {streaming && (
-          <div className="whitespace-pre-wrap rounded bg-panel p-2 text-ink-dim">
+          <div className="whitespace-pre-wrap rounded-lg border border-panel-3 bg-panel p-3 leading-6 text-ink-dim">
             {streamText || '…'}
             <span className="animate-pulse">▌</span>
           </div>

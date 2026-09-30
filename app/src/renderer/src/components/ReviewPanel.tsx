@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState, type ReactElement } from 'rea
 import type { WebSearchResult } from '@shared/types'
 import { chatOnce } from '../copilot/llm'
 import { reviewMessages } from '../copilot/prompts'
+import { Icon } from '../ui/Icon'
+import { Button, CardTitle, Switch } from '../ui/primitives'
 
 interface ReviewPanelProps {
   project: string
@@ -158,65 +160,102 @@ export default function ReviewPanel({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* 工具条：按钮一行，状态提示另起一行 */}
-      <div className="shrink-0 border-b border-panel-3 px-3 py-1.5 text-xs">
-        <div className="flex flex-wrap items-center gap-1.5">
-          {streaming ? (
-            <button onClick={() => abortRef.current?.()} className="whitespace-nowrap rounded bg-panel-3 px-2 py-1 text-red-400 hover:bg-panel">
-              ■ 停止
-            </button>
-          ) : (
-            <button onClick={() => runReview()} className="whitespace-nowrap rounded bg-accent px-2 py-1 text-white hover:opacity-90">
-              {empty ? '🔍 全文审阅' : '🔍 重新审阅'}
-            </button>
-          )}
-          {!streaming && !empty && (
-            <button
-              onClick={() => onOptimize(reviewMd)}
-              title="按审阅报告逐条修订正文，diff 确认后覆盖"
-              className="whitespace-nowrap rounded bg-panel-3 px-2 py-1 text-ink hover:bg-panel"
-            >
-              ✦ 优化正文
-            </button>
-          )}
-          <button
-            onClick={() => setWebOn((v) => !v)}
-            title="联网审阅：先搜索最新资料再审，事实核验以搜索结果为准"
-            className={`ml-auto whitespace-nowrap rounded px-2 py-1 ${webOn ? 'bg-accent/20 text-accent' : 'text-ink-dim hover:bg-panel-3'}`}
-          >
-            🌐{webOn ? ' 开' : ' 关'}
-          </button>
+      {/* 报告卡头部（稿 B 标注⑨）：操作从游离浮块收进卡头——主操作实心、次操作描边、
+          联网开关带文字标签，一组右对齐；状态用胶囊，不靠裸文字提示 */}
+      <div className="shrink-0 px-3 pt-3">
+        <div className="rounded-xl border border-panel-3 bg-panel-2 p-3.5 shadow-[0_1px_6px_rgba(0,0,0,.18)]">
+          <div className="flex flex-wrap items-center gap-2">
+            <CardTitle>审阅</CardTitle>
+            {!streaming && !searching && (
+              <span className="rounded-full bg-accent/15 px-2 py-0.5 text-[10.5px] font-semibold text-accent">当前步骤</span>
+            )}
+            <div className="ml-auto flex flex-wrap items-center gap-2">
+              {streaming ? (
+                <Button size="sm" variant="sec" icon="square" onClick={() => abortRef.current?.()} className="text-st-bad">
+                  停止
+                </Button>
+              ) : (
+                <Button size="sm" variant="sec" icon="search" onClick={() => runReview()}>
+                  {empty ? '全文审阅' : '重新审阅'}
+                </Button>
+              )}
+              {!streaming && !empty && (
+                <Button size="sm" variant="pri" icon="sparkles" onClick={() => onOptimize(reviewMd)} title="按审阅报告逐条修订正文，diff 确认后覆盖">
+                  优化正文
+                </Button>
+              )}
+              <Switch
+                checked={webOn}
+                onChange={setWebOn}
+                label="联网审阅"
+                title="先搜索最新资料再审，事实核验以搜索结果为准"
+                disabled={streaming}
+              />
+            </div>
+          </div>
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-[11.5px] text-ink-dim">
+            <span className="inline-flex items-center gap-1.5">
+              报告写入
+              <span className="rounded border border-panel-3 bg-panel px-1.5 py-0.5 font-mono text-[11px]">review.md</span>
+            </span>
+            {searching ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-panel-3 px-2.5 py-0.5 text-ink">
+                <Icon name="globe" size={11} />
+                联网检索最新资料中…
+              </span>
+            ) : streaming ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-panel-3 px-2.5 py-0.5 text-ink">
+                <Icon name="spinner" size={11} className="animate-spin" />
+                审阅中…{scopeTip ? `（${scopeTip}）` : ''}
+              </span>
+            ) : empty ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-st-draft/15 px-2.5 py-0.5 font-semibold text-st-draft">
+                <Icon name="alert" size={11} />
+                尚未审阅 · 等待执行
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-st-done/15 px-2.5 py-0.5 font-semibold text-st-done">
+                <Icon name="checkCircle" size={11} />
+                已有报告
+              </span>
+            )}
+          </div>
         </div>
-        <p className="mt-1 text-ink-dim">
-          {searching
-            ? '🌐 联网搜索最新资料中…'
-            : streaming
-              ? `审阅中…${scopeTip ? `（${scopeTip}）` : ''}`
-              : '报告写入 review.md'}
-        </p>
       </div>
 
       <div ref={scrollRef} className="selectable min-h-0 flex-1 overflow-auto p-3 text-xs leading-5">
-        {error && <p className="mb-2 break-all text-red-400">✗ {error}</p>}
+        {error && (
+          <p className="mb-2 break-all text-st-bad">
+            <Icon name="xCircle" size={12} className="mr-1.5" />{error}
+          </p>
+        )}
 
         {/* 流式过程预览 */}
         {streaming && (
-          <div className="whitespace-pre-wrap rounded bg-panel p-2 text-ink-dim">
+          <div className="selectable whitespace-pre-wrap rounded-lg border border-panel-3 bg-panel p-3 leading-6 text-ink-dim">
             {streamText || '…'}
             <span className="animate-pulse">▌</span>
           </div>
         )}
 
         {!streaming && empty && (
-          <p className="py-6 text-center text-ink-dim">暂无审阅报告，点上方按钮发起全文审阅。</p>
+          <div className="flex flex-col items-center gap-2 py-8 text-center">
+            <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-panel-3 text-ink-dim">
+              <Icon name="search" size={20} />
+            </span>
+            <p className="text-xs text-ink">还没有审阅报告</p>
+            <p className="max-w-[320px] text-[11.5px] leading-relaxed text-ink-dim">
+              点上方「全文审阅」发起一次独立上下文审阅（开联网会先检索最新资料），报告落 review.md 后可逐条跳转原文。
+            </p>
+          </div>
         )}
 
         {!streaming && missTip && <p className="mb-2 rounded bg-amber-950/60 px-2 py-1 text-amber-300">{missTip}</p>}
         {!streaming &&
           sections.map((sec, i) => (
-            <section key={i} className="mb-3">
+            <section key={i} className="mb-3 rounded-xl border border-panel-3 bg-panel-2 p-3.5 shadow-[0_1px_6px_rgba(0,0,0,.18)]">
               {sec.title && (
-                <h3 className="mb-1 border-b border-panel-3 pb-1 text-[13px] font-bold text-ink">
+                <h3 className="mb-2 text-[13.5px] font-bold leading-snug text-ink">
                   {sec.title}
                 </h3>
               )}

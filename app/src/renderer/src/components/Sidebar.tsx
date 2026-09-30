@@ -5,16 +5,12 @@ import { UNCATEGORIZED } from '@shared/categories'
 import { groupProjectsByCategory } from '@shared/workTree'
 import { shouldSubmitOnEnter } from '@shared/imeEnter'
 import HoverScrollName from './HoverScrollName'
+import { Icon, type IconName } from '../ui/Icon'
+import { StatusDot, StatusLegend } from '../ui/primitives'
+import { dotOfStatus } from '../ui/status'
 import IdeaLibrary from './IdeaLibrary'
 
-/** 状态圆点配色（树上不放状态文字/提示——省宽度给工程名，颜色即语义） */
-const STATUS_COLOR: Record<string, string> = {
-  ideating: 'bg-sky-400',
-  drafting: 'bg-amber-400',
-  reviewing: 'bg-violet-400',
-  ready: 'bg-green-500'
-}
-
+/** 状态圆点配色与语义见 `ui/status.ts`（全应用单源）；树上不放状态文字——省宽度给工程名，颜色即语义，图例常驻左栏底部 */
 interface SidebarProps {
   paths: AppPaths | null
   /** 栏宽（分栏拖拽调宽的落点，App 持有并记忆；缺省 240） */
@@ -59,7 +55,11 @@ function openPath(dir: string, rel: string | null, onToast: (msg: string) => voi
 }
 
 function Chevron({ open }: { open: boolean }): ReactElement {
-  return <span className="w-3 shrink-0 text-center text-ink-dim">{open ? '▾' : '▸'}</span>
+  return (
+    <span className="flex w-3 shrink-0 items-center justify-center text-ink-dim">
+      <Icon name={open ? 'chevronDown' : 'chevronRight'} size={12} />
+    </span>
+  )
 }
 
 const rowBase = 'group mb-0.5 flex cursor-pointer items-center gap-1 rounded px-2 py-1 text-left'
@@ -71,7 +71,7 @@ const rowBase = 'group mb-0.5 flex cursor-pointer items-center gap-1 rounded px-
 const rowBox = 'flex h-4 w-[18px] shrink-0 items-center justify-center rounded text-[11px] leading-none'
 const rowAction = (tone: 'idle' | 'danger' | 'on' = 'idle'): string =>
   tone === 'danger'
-    ? `${rowBox} text-ink hover:bg-panel hover:text-red-400`
+    ? `${rowBox} text-ink hover:bg-panel hover:text-st-bad`
     : tone === 'on'
       ? `${rowBox} bg-accent/25 ring-1 ring-inset ring-accent/60 hover:bg-accent/30`
       : `${rowBox} text-ink hover:bg-panel hover:text-accent`
@@ -83,8 +83,8 @@ const rowGhost =
   'inline-flex h-[26px] shrink-0 items-center rounded bg-panel px-2 text-[11px] leading-none text-ink-dim hover:bg-panel-3 hover:text-ink'
 
 /** 交付物按扩展名给可区分的小图标：同名 docx/pdf 在窄树里被截断后，只有图标和后缀分得清 */
-const DELIVERY_ICON: Record<string, string> = { docx: '📝', pdf: '📕', html: '🌐', md: '📝', zip: '🗜️', txt: '📃' }
-const deliveryIcon = (file: string): string => DELIVERY_ICON[file.split('.').pop()?.toLowerCase() ?? ''] ?? '📄'
+const DELIVERY_ICON: Record<string, IconName> = { docx: 'file', pdf: 'file', html: 'globe', md: 'file', zip: 'package', txt: 'filePlain' }
+const deliveryIcon = (file: string): IconName => DELIVERY_ICON[file.split('.').pop()?.toLowerCase() ?? ''] ?? 'filePlain'
 
 /**
  * 左栏：工作树 / 选题库 双页签。
@@ -385,12 +385,12 @@ export default function Sidebar(props: SidebarProps): ReactElement {
         <div onClick={() => onOpenProjectView(p.name, 'article')} className={`${rowBase} pl-8 text-ink-dim hover:bg-panel-3`} title="打开正文编辑器">
           {/* 空占位列与交付行的展开箭头同宽，保证两行图标对齐 */}
           <span className="w-3 shrink-0" />
-          <span>📄</span>
+          <span className="text-ink-dim"><Icon name="file" size={15} /></span>
           <span className="min-w-0 flex-1 truncate">正文</span>
         </div>
         <div onClick={() => toggleGroup(devKey)} className={`${rowBase} pl-8 text-ink-dim hover:bg-panel-3`} title="Word/PDF 交稿产物，点击文件直接打开">
           <Chevron open={openGroups.includes(devKey)} />
-          <span>📦</span>
+          <span className="text-ink-dim"><Icon name="package" size={15} /></span>
           <span className="min-w-0 flex-1 truncate">交付{a.deliveries.length > 0 && ` (${a.deliveries.length})`}</span>
         </div>
         {openGroups.includes(devKey) &&
@@ -410,7 +410,7 @@ export default function Sidebar(props: SidebarProps): ReactElement {
                   title={`${rel} · 用系统默认应用打开`}
                 >
                   {/* 图标 + 不截断的扩展名后缀：交付物同名，只有这两处能分清 Word 和 PDF */}
-                  <span className="w-3.5 shrink-0 text-center">{deliveryIcon(file)}</span>
+                  <span className="flex w-3.5 shrink-0 justify-center text-ink-dim"><Icon name={deliveryIcon(file)} size={13} /></span>
                   <span className="min-w-0 flex-1 truncate">{base}</span>
                   {ext && <span className="shrink-0 opacity-70">{ext}</span>}
                 </div>
@@ -493,11 +493,11 @@ export default function Sidebar(props: SidebarProps): ReactElement {
               title="展开/收起工程"
               className="w-3 shrink-0 text-center text-ink-dim"
             >
-              {isOpen ? '▾' : '▸'}
+              <Icon name={isOpen ? 'chevronDown' : 'chevronRight'} size={12} className="text-ink-dim" />
             </span>
             {inBatch && (
               <span className={`w-3 shrink-0 text-center text-[11px] ${checked ? 'text-accent' : 'text-ink-dim/50'}`}>
-                {checked ? '☑' : '☐'}
+                <Icon name={checked ? 'checkCircle' : 'circle'} size={13} />
               </span>
             )}
             <span
@@ -514,13 +514,13 @@ export default function Sidebar(props: SidebarProps): ReactElement {
             >
               <HoverScrollName name={p.name} />
             </span>
-            {isPinned && <span className={`${rowBox} opacity-60`} title="已置顶">📌</span>}
+            {isPinned && <span className={`${rowBox} opacity-70`} title="已置顶"><Icon name="pin" size={12} /></span>}
             {p.plannedAt && (
               <span className="shrink-0 rounded bg-panel px-1 py-0.5 text-[10px] text-accent" title={`排期：${p.plannedAt}`}>
-                📅{p.plannedAt.slice(5)}
+                <Icon name="calendar" size={10} className="mr-1 align-[-1px]" />{p.plannedAt.slice(5)}
               </span>
             )}
-            <span className={`h-2 w-2 shrink-0 rounded-full ${STATUS_COLOR[p.status] ?? 'bg-panel-3'}`} />
+            <StatusDot status={dotOfStatus(p.status)} title={p.status} />
             {/* 悬停动作浮层：绝对定位不占布局宽度——名称永不被挤出，行尾也不再跳动 */}
             <span
               className={`absolute right-1 hidden items-center gap-0.5 rounded px-0.5 ${inBatch ? '' : 'group-hover:flex'} ${
@@ -537,7 +537,7 @@ export default function Sidebar(props: SidebarProps): ReactElement {
                     title="恢复到原分类"
                     className={rowAction()}
                   >
-                    ↩️
+                    <Icon name="undo" size={12} />
                   </button>
                   <button
                     onClick={(e) => {
@@ -547,7 +547,7 @@ export default function Sidebar(props: SidebarProps): ReactElement {
                     title="删除工程"
                     className={rowAction('danger')}
                   >
-                    🗑️
+                    <Icon name="trash" size={12} />
                   </button>
                 </>
               ) : (
@@ -561,7 +561,7 @@ export default function Sidebar(props: SidebarProps): ReactElement {
                     title="重命名工程（本地文件夹同步改名）"
                     className={rowAction()}
                   >
-                    ✏️
+                    <Icon name="pencil" size={12} />
                   </button>
                   <button
                     onClick={(e) => {
@@ -571,7 +571,7 @@ export default function Sidebar(props: SidebarProps): ReactElement {
                     title="归档工程（收进树尾「已归档」，盘上文件不动）"
                     className={rowAction()}
                   >
-                    🗃️
+                    <Icon name="archive" size={12} />
                   </button>
                   <button
                     onClick={(e) => {
@@ -581,7 +581,7 @@ export default function Sidebar(props: SidebarProps): ReactElement {
                     title="删除工程"
                     className={rowAction('danger')}
                   >
-                    🗑️
+                    <Icon name="trash" size={12} />
                   </button>
                 </>
               )}
@@ -592,8 +592,8 @@ export default function Sidebar(props: SidebarProps): ReactElement {
         {isCurrent && isOpen && !renamingFor && (
           <div className="py-0.5 pl-8 pr-2">
             <div className="flex items-center gap-1">
-              <span className="shrink-0 text-[11px] text-ink-dim" title="所属分类（=账号）">
-                📁
+              <span className="flex h-[26px] shrink-0 items-center text-folder" title="所属分类（=账号）">
+                <Icon name="folder" size={13} />
               </span>
               <select
                 value={cat}
@@ -620,9 +620,10 @@ export default function Sidebar(props: SidebarProps): ReactElement {
                 onClick={onAiCategorize}
                 disabled={categorizing}
                 title="AI 通读正文推荐分类"
-                className="shrink-0 rounded bg-panel px-1.5 py-0.5 text-[10px] text-accent hover:bg-panel-2 disabled:opacity-40"
+                className="inline-flex shrink-0 items-center gap-1 rounded bg-panel px-1.5 py-0.5 text-[10px] text-accent hover:bg-panel-2 disabled:opacity-40"
               >
-                {categorizing ? '判断中…' : '✦ AI'}
+                {categorizing ? '判断中…' : <Icon name="sparkles" size={11} />}
+                {!categorizing && 'AI'}
               </button>
             </div>
             {newCatFor === p.name && (
@@ -696,7 +697,7 @@ export default function Sidebar(props: SidebarProps): ReactElement {
             title="分类管理：删除（隐藏）/ 恢复 / 重命名"
             className="ml-auto whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] text-ink-dim hover:bg-panel-3"
           >
-            ⚙️ 管理
+            <Icon name="settings" size={12} className="mr-1 align-[-2px]" />管理
           </button>
         )}
       </nav>
@@ -707,7 +708,7 @@ export default function Sidebar(props: SidebarProps): ReactElement {
         {/* 钉住：Skill 库（skills/ 目录，轻量启停；导入走设置弹窗） */}
         <div className={rowBase} onClick={() => setSkillsOpen((v) => !v)}>
           <Chevron open={skillsOpen} />
-          <span>🧩</span>
+          <span className="text-accent"><Icon name="zap" size={15} /></span>
           <span className="min-w-0 flex-1 truncate text-ink">Skill 库 ({skills.length})</span>
         </div>
         {skillsOpen && (
@@ -728,7 +729,7 @@ export default function Sidebar(props: SidebarProps): ReactElement {
                   onClick={() => void removeSkill(s.name)}
                   className={`${rowAction('danger')} hidden group-hover:flex`}
                 >
-                  🗑️
+                  <Icon name="trash" size={12} />
                 </button>
               </div>
             ))}
@@ -760,7 +761,7 @@ export default function Sidebar(props: SidebarProps): ReactElement {
                 }
               >
                 <Chevron open={isOpen} />
-                <span>📁</span>
+                <span className="text-folder"><Icon name="folder" size={15} /></span>
                 <span className={`min-w-0 flex-1 truncate ${filterCat === g.category ? 'font-bold' : ''}`}>{g.category}</span>
                 {badge && (
                   <span className="shrink-0 rounded bg-panel px-1 py-0.5 text-[10px] text-accent" title={`绑定公众号：${badge}`}>
@@ -782,7 +783,7 @@ export default function Sidebar(props: SidebarProps): ReactElement {
                   title="批量管理：勾选工程后批量归档/删除"
                   className={batchCat === g.category ? rowAction('on') : `${rowAction()} hidden group-hover:flex`}
                 >
-                  ☑️
+                  <Icon name="checkSquare" size={12} className="mr-1 align-[-2px]" />批量
                 </button>
                 <button
                   onClick={(e) => {
@@ -795,7 +796,7 @@ export default function Sidebar(props: SidebarProps): ReactElement {
                   title={`在「${g.category}」下新建工程`}
                   className={`${rowAction()} hidden group-hover:flex`}
                 >
-                  ➕
+                  <Icon name="plus" size={12} />
                 </button>
               </div>
               {isOpen && (
@@ -821,7 +822,7 @@ export default function Sidebar(props: SidebarProps): ReactElement {
                         disabled={!batchSel.length}
                         className="rounded bg-panel px-1.5 py-0.5 text-ink hover:bg-panel-3 disabled:opacity-40"
                       >
-                        🗃️ 归档
+                        <Icon name="archive" size={12} /> 归档
                       </button>
                       <button
                         onClick={() => {
@@ -830,12 +831,12 @@ export default function Sidebar(props: SidebarProps): ReactElement {
                           exitBatch()
                         }}
                         disabled={!batchSel.length}
-                        className="rounded bg-panel px-1.5 py-0.5 text-red-400 hover:bg-panel-3 disabled:opacity-40"
+                        className="rounded bg-panel px-1.5 py-0.5 text-st-bad hover:bg-panel-3 disabled:opacity-40"
                       >
-                        🗑️ 删除
+                        <Icon name="trash" size={12} /> 删除
                       </button>
                       <button onClick={exitBatch} title="退出批量管理" className="ml-auto text-ink-dim hover:text-ink">
-                        ✕
+                        <Icon name="x" size={12} />
                       </button>
                     </div>
                   )}
@@ -879,7 +880,7 @@ export default function Sidebar(props: SidebarProps): ReactElement {
           <div className="mt-1">
             <div onClick={() => setArchOpen((v) => !v)} className={`${rowBase} text-ink-dim/70 hover:bg-panel-3`}>
               <Chevron open={archOpen} />
-              <span>🗃️</span>
+              <span><Icon name="archive" size={15} /></span>
               <span className="min-w-0 flex-1 truncate">已归档 ({archivedProjects.length})</span>
             </div>
             {archOpen && archivedProjects.map(renderProjectRow)}
@@ -951,7 +952,7 @@ export default function Sidebar(props: SidebarProps): ReactElement {
               }}
               className="block w-full px-3 py-1.5 text-left text-ink hover:bg-panel-3"
             >
-              📂 打开工程目录
+              <Icon name="folderOpen" size={12} className="mr-1.5 align-[-2px]" />打开工程目录
             </button>
             <button
               onClick={() => {
@@ -960,7 +961,7 @@ export default function Sidebar(props: SidebarProps): ReactElement {
               }}
               className="block w-full px-3 py-1.5 text-left text-ink hover:bg-panel-3"
             >
-              📌 {pinned.includes(menu.name) ? '取消置顶' : '置顶'}
+              <Icon name="pin" size={12} /> {pinned.includes(menu.name) ? '取消置顶' : '置顶'}
             </button>
             <button
               onClick={() => {
@@ -969,20 +970,13 @@ export default function Sidebar(props: SidebarProps): ReactElement {
               }}
               className="block w-full px-3 py-1.5 text-left text-ink hover:bg-panel-3"
             >
-              🗃️ {archived.includes(menu.name) ? '取消归档' : '归档'}
+              <Icon name="archive" size={12} /> {archived.includes(menu.name) ? '取消归档' : '归档'}
             </button>
           </div>
         </>
       )}
-      {paths && (
-        <footer
-          onClick={() => window.api.invoke('export:openFile', paths.workspace).catch(() => {})}
-          title={`点击打开工作区文件夹\n${paths.workspace}`}
-          className="cursor-pointer truncate border-t border-panel-3 p-2 text-[10px] text-ink-dim hover:bg-panel-3 hover:text-ink"
-        >
-          📂 {paths.workspace}
-        </footer>
-      )}
+      {/* 左栏底部常驻状态图例（§5.2）：工作区路径已上移到窗口底部状态栏，这里不再重复占行 */}
+      <StatusLegend className="shrink-0 border-t border-panel-3 py-2" />
     </aside>
   )
 }

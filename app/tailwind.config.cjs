@@ -15,6 +15,13 @@ module.exports = {
         ink: v('ink'),
         'ink-dim': v('ink-dim'),
         accent: v('accent'),
+        // 状态色单源（UI/UX PRD §3.1）：黄=草稿、蓝=进行中、绿=已成稿/已发布、红=危险
+        'st-draft': v('st-draft'),
+        'st-doing': v('st-doing'),
+        'st-done': v('st-done'),
+        'st-bad': v('st-bad'),
+        // 树节点分类文件夹琥珀（§5.2）
+        folder: v('folder'),
         // slate 灰阶整体变量化：深色模式保持原 slate 语义，日间模式整套翻转，
         // 存量 slate-* 类名无需改动即可随主题切换
         slate: {

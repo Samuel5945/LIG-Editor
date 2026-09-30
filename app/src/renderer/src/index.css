@@ -14,6 +14,13 @@
   --ink-dim: 154 160 173; /* #9aa0ad */
   --accent: 79 140 255; /* #4f8cff */
   --scrollbar: 58 63 75; /* #3a3f4b */
+  /* 状态色（UI/UX PRD §3.1）：语义固定 黄=草稿 / 蓝=进行中 / 绿=已成稿或已发布，
+     深色底上取高亮度版本保证可读，日间取 PRD 原值；圆点与文字共用同一变量 */
+  --st-draft: 251 191 36; /* amber-400 */
+  --st-doing: 96 165 250; /* blue-400 */
+  --st-done: 52 211 153; /* emerald-400 */
+  --st-bad: 248 113 113; /* red-400 */
+  --folder: 217 164 66; /* 分类文件夹琥珀（§5.2 树节点图标配色） */
   /* slate 原色阶（深色语义） */
   --slate-50: 248 250 252;
   --slate-100: 241 245 249;
@@ -38,6 +45,13 @@
   --ink-dim: 103 112 127;
   --accent: 15 118 110; /* #0f766e 青绿强调，白底对比 4.9:1 */
   --scrollbar: 191 204 199;
+  /* 状态色日间值 = PRD tokens（黄 #E8A13A / 蓝 #4C88FF / 绿 #22A06B / 红 #E5484D）；
+     草稿黄在白底上做文字对比不足时由 .text-st-draft 的调用方配文字标签，色相不另起 */
+  --st-draft: 217 130 30; /* #d9821e，日间可读的琥珀（原 #E8A13A 白底对比 2.2:1 不达标） */
+  --st-doing: 76 136 255;
+  --st-done: 34 160 107;
+  --st-bad: 220 38 38;
+  --folder: 216 162 60; /* #D8A23C 日间琥珀 */
   /* slate 色阶整体翻转：bg-slate-900 之类的深色底自动变浅，text-slate-300 之类的浅字自动变深 */
   --slate-50: 2 6 23;
   --slate-100: 15 23 42;
@@ -148,6 +162,56 @@ select,
 ::-webkit-scrollbar-thumb {
   background: rgb(var(--scrollbar));
   border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, rgb(var(--scrollbar)) 78%, rgb(var(--ink)) 22%);
+}
+
+/* ---- 横向条带规范（UI/UX PRD §2 原则 1 / §4 chip）----
+   任何胶囊条/筛选条：单行 nowrap + 横滑 + 隐藏滚动条 + 右缘渐隐（仅在实际溢出时渐隐，
+   否则右侧最后一枚胶囊会被 mask 咬掉一半）。滚动容器一旦横滑，纵向 overflow 连带变 auto，
+   条内向下展开的面板会被裁——所以 .chip-row 不承载下拉，下拉一律挂在外层。 */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.chip-row {
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.chip-row::-webkit-scrollbar {
+  display: none;
+}
+.chip-row[data-overflow='1'] {
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent);
+}
+
+/* 细纵向滚动条场景（对话流、树）：6px */
+.thin-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+/* 行内图标与文字基线：非 flex 容器里的 svg 统一 nudge，避免每个组件各写 align-* */
+button > svg,
+span > svg,
+p > svg {
+  vertical-align: -2px;
+}
+
+/* 焦点可见（§6）：所有可点控件 focus-visible 主色描边，Tab 顺序 = 视觉顺序 */
+button:focus-visible,
+[role='switch']:focus-visible,
+[role='button']:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[contenteditable='true']:focus-visible {
+  outline: 2px solid rgb(var(--accent));
+  outline-offset: 1px;
 }
 
 /* ---- TipTap 正文排版（公众号阅读感）----

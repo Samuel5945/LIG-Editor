@@ -1,5 +1,9 @@
-import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactElement, type ReactNode } from 'react'
 import { confirmAction } from '../confirm'
+import { ToolLogCard, type ToolCardState } from './ToolLogCard'
+import { TOOL_LABELS } from '../copilot/toolLabels'
+import { Icon, type IconName } from '../ui/Icon'
+import { Button, Chip, IconButton } from '../ui/primitives'
 import type {
   ChatMessage,
   ChatSessionMeta,
@@ -32,38 +36,6 @@ function contentText(content: string | ContentPart[]): string {
 
 const PUSH_TOOLS = ['push_draft', 'push_cards']
 const TOOL_ROUNDS_MAX = 6
-
-interface ToolCardState {
-  name: string
-  argsSummary: string
-  status: 'running' | 'done' | 'error'
-  result?: string
-}
-
-const TOOL_LABELS: Record<string, string> = {
-  list_projects: '查询工程列表',
-  create_project: '新建工程',
-  set_project_category: '迁移工程分类',
-  get_project: '读取工程',
-  read_article: '读取正文',
-  write_article: '覆写正文',
-  patch_article: '修改正文',
-  save_ideas: '保存选题',
-  save_review: '写入审阅报告',
-  set_titles: '写入标题候选',
-  set_theme: '调整排版参数',
-  save_theme_preset: '保存分类主题',
-  render_figure: '渲染图表',
-  generate_image: 'AI 生图',
-  import_image: '导入图片',
-  set_cover: '设置封面',
-  schedule_set: '设置排期',
-  export_html: '导出 HTML',
-  export_docx: '导出 Word',
-  export_pdf: '导出 PDF',
-  push_draft: '推送公众号草稿',
-  push_cards: '推送贴图草稿'
-}
 
 /** 工具注册表缓存（静态，与供应商无关）+ 按「baseUrl|模型」记忆原生 tools 参数不被接受。
  *  两件事必须分开：模型不接受原生 tools ≠ 没有工具——文本协议（围栏/XML 标签）照样由本渲染层执行，
@@ -166,21 +138,34 @@ async function runToolCall(tc: ToolCallInfo): Promise<string> {
   return summarizeToolResult(r)
 }
 
-/** 工具调用卡：进行中转圈 / 完成 ✓ / 失败 ✗，可展开看完整结果 */
-function ToolCardView({ card }: { card: ToolCardState }): ReactElement {
-  const [open, setOpen] = useState(false)
+/** 输入框内的工具胶囊（§5.9 输入区整合）：开启态主色软底 */
+function ToolPill({
+  icon,
+  on,
+  disabled,
+  onClick,
+  title,
+  children
+}: {
+  icon: IconName
+  on?: boolean
+  disabled?: boolean
+  onClick: () => void
+  title?: string
+  children: ReactNode
+}): ReactElement {
   return (
-    <div className="max-w-[90%] break-words rounded border border-panel-3 bg-panel-2 px-2 py-1 text-[11px]">
-      <button onClick={() => setOpen((v) => !v)} className="flex w-full items-center gap-1.5 text-left">
-        <span>{card.status === 'running' ? '⏳' : card.status === 'done' ? '✅' : '✗'}</span>
-        <span className="shrink-0 text-ink">{TOOL_LABELS[card.name] ?? card.name}</span>
-        {card.argsSummary && <span className="min-w-0 flex-1 truncate text-ink-dim">{card.argsSummary}</span>}
-        <span className={`shrink-0 text-ink-dim transition-transform ${open ? 'rotate-90' : ''}`}>▸</span>
-      </button>
-      {open && card.result && (
-        <p className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-all text-ink-dim">{card.result}</p>
-      )}
-    </div>
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      className={`inline-flex h-[26px] shrink-0 items-center gap-1.5 rounded-md px-2.5 text-[11.5px] transition-colors disabled:opacity-40 ${
+        on ? 'bg-accent/20 font-semibold text-accent' : 'text-ink-dim hover:bg-panel-3 hover:text-ink'
+      }`}
+    >
+      <Icon name={icon} size={12} />
+      {children}
+    </button>
   )
 }
 
@@ -427,7 +412,7 @@ export default function ChatPanel({
       try {
         const name = await window.api.invoke('skill:installResolved', card.result.name, card.result.content)
         setCards((prev) => ({ ...prev, [idx]: { ...card, status: 'done' } }))
-        onToast(`✅ 已安装 Skill：${name}`)
+        onToast(`已安装 Skill：${name}`)
         onSkillsChanged()
       } catch (err) {
         setCards((prev) => ({
@@ -731,9 +716,9 @@ export default function ChatPanel({
           )
         const emittedBlock = /```(article-update|tool-call|skill-install|cards-accent)/.test(lastText)
         const notes: string[] = []
-        if (stillFailing.length) notes.push(`⚠️ 本轮仍有工具失败（${stillFailing.join('、')}），相关内容未确认写入工程。`)
+        if (stillFailing.length) notes.push(`注意：本轮仍有工具失败（${stillFailing.join('、')}），相关内容未确认写入工程。`)
         else if (claimsWrite && outcomes.size === 0 && !emittedBlock)
-          notes.push('⚠️ 本轮没有执行任何工具，也没有产出修改稿卡片——上述「已完成」不可信，内容并未落到工程。')
+          notes.push('注意：本轮没有执行任何工具，也没有产出修改稿卡片——上述「已完成」不可信，内容并未落到工程。')
         const note = notes.length ? `${lastText.trim() ? '\n\n' : ''}${notes.join('\n')}` : ''
         const all = [...display, { role: 'assistant', content: lastText + note } as ChatMessage]
         setMessages(all)
@@ -769,21 +754,21 @@ export default function ChatPanel({
 
   return (
     <>
-      {/* 会话条 */}
-      <div className="flex shrink-0 items-center gap-1 border-b border-panel-3 px-2 py-1.5 text-xs">
-        <button
+      {/* 会话条（稿 A 标注④）：临时=可切换上下文胶囊，会话选择=圆角下拉，新建/删除收成图标按钮 */}
+      <div className="flex shrink-0 items-center gap-1.5 border-b border-panel-3 px-3 py-2 text-xs">
+        <Chip
+          on={chatBucket === '__temp__' && !!project}
+          icon="message"
           onClick={() => setTempMode((v) => !v)}
           title="临时对话：不落在任何工程下的会话（存于本机 settings）"
-          className={`shrink-0 whitespace-nowrap rounded px-1.5 py-1 ${
-            chatBucket === '__temp__' && project ? 'bg-accent/20 text-accent' : 'text-ink-dim hover:bg-panel-3'
-          }`}
+          className="shrink-0"
         >
-          ⧉ 临时
-        </button>
+          临时
+        </Chip>
         <select
           value={sessionId ?? ''}
           onChange={(e) => (e.target.value ? loadSession(e.target.value) : newSession())}
-          className="min-w-0 flex-1 rounded bg-panel-3 px-1.5 py-1 text-ink outline-none disabled:opacity-50"
+          className="h-[26px] min-w-0 flex-1 rounded-full border border-panel-3 bg-panel-2 px-2.5 text-[11.5px] text-ink outline-none disabled:opacity-50"
         >
           <option value="">{chatBucket === '__temp__' ? '临时对话（未落工程）' : '（当前会话）'}</option>
           {sessions.map((s) => (
@@ -792,17 +777,14 @@ export default function ChatPanel({
             </option>
           ))}
         </select>
-        <button onClick={newSession} title="新会话" className="shrink-0 rounded px-2 py-1 text-ink-dim hover:bg-panel-3">
-          ＋
-        </button>
-        <button
+        <IconButton icon="plus" onClick={newSession} title="新会话" className="shrink-0 px-1.5" />
+        <IconButton
+          icon="trash"
           onClick={() => void deleteSession()}
           disabled={!project || (!sessionId && messages.length === 0)}
           title="删除当前会话"
-          className="shrink-0 rounded px-2 py-1 text-ink-dim hover:bg-panel-3 hover:text-red-400 disabled:opacity-40"
-        >
-          🗑
-        </button>
+          className="shrink-0 px-1.5 hover:text-st-bad"
+        />
       </div>
 
       {/* 消息区：min-h-0 是必须的——flex 项默认 min-height:auto 不肯缩到内容以下，
@@ -811,14 +793,14 @@ export default function ChatPanel({
         {messages.length === 0 && (
           <div>
             <p className="mb-2 text-ink-dim">
-              自由对话，Enter 发送。默认自动带上当前正文/贴图内容，可用下方 📎 开关。
+              自由对话，Enter 发送。默认自动带上当前正文/贴图内容，可用下方「附件」胶囊。
             </p>
             <div className="grid grid-cols-2 gap-2">
               <button
                 onClick={() => void send(PRESET_INSPIRE)}
                 className="rounded-lg border border-panel-3 bg-panel-2 p-2.5 text-left hover:bg-panel-3"
               >
-                <span className="font-medium text-ink">💡 今日灵感</span>
+                <span className="inline-flex items-center gap-1.5 font-semibold text-ink"><Icon name="bulb" size={12} className="text-accent" />今日灵感</span>
                 <span className="mt-1 block leading-4 text-ink-dim">结合今天日期给 5 个选题灵感</span>
               </button>
               <button
@@ -827,14 +809,14 @@ export default function ChatPanel({
                 title={project ? undefined : '先打开工程'}
                 className="rounded-lg border border-panel-3 bg-panel-2 p-2.5 text-left hover:bg-panel-3 disabled:opacity-40"
               >
-                <span className="font-medium text-ink">🏷 话题标签推荐</span>
+                <span className="inline-flex items-center gap-1.5 font-semibold text-ink"><Icon name="tag" size={12} className="text-accent" />话题标签推荐</span>
                 <span className="mt-1 block leading-4 text-ink-dim">按当前正文/贴图推荐发布标签</span>
               </button>
               <button
                 onClick={onGoBrainstorm}
                 className="rounded-lg border border-panel-3 bg-panel-2 p-2.5 text-left hover:bg-panel-3"
               >
-                <span className="font-medium text-ink">🧠 脑暴选题</span>
+                <span className="inline-flex items-center gap-1.5 font-semibold text-ink"><Icon name="brain" size={12} className="text-accent" />脑暴选题</span>
                 <span className="mt-1 block leading-4 text-ink-dim">去「脑暴创作」出选题和正文</span>
               </button>
               <button
@@ -843,7 +825,7 @@ export default function ChatPanel({
                 title={project ? undefined : '先打开工程'}
                 className="rounded-lg border border-panel-3 bg-panel-2 p-2.5 text-left hover:bg-panel-3 disabled:opacity-40"
               >
-                <span className="font-medium text-ink">🔍 审阅打磨</span>
+                <span className="inline-flex items-center gap-1.5 font-semibold text-ink"><Icon name="search" size={12} className="text-accent" />审阅打磨</span>
                 <span className="mt-1 block leading-4 text-ink-dim">去「审阅」逐段/逐张点评</span>
               </button>
             </div>
@@ -861,45 +843,39 @@ export default function ChatPanel({
           return (
             <div key={i} className={`mb-2 flex flex-col ${m.role === 'user' ? 'items-end' : 'items-start'}`}>
               <div
-                className={`max-w-[90%] whitespace-pre-wrap break-words rounded-lg px-2.5 py-1.5 leading-5 ${
-                  m.role === 'user' ? 'bg-accent/20 text-ink' : 'bg-panel-3 text-ink'
+                className={`max-w-[92%] break-words whitespace-pre-wrap px-3 py-2 text-[12.5px] leading-relaxed ${
+                  m.role === 'user' ? 'rounded-[12px_4px_12px_12px] bg-accent/15 text-ink' : 'rounded-[4px_12px_12px_12px] bg-panel-3 text-ink'
                 }`}
               >
                 {(articleParsed ? articleParsed.cleaned : mText) ||
                   (streaming && i === messages.length - 1 ? '…' : '')}
                 {articleParsed?.pending && (
-                  <span className="block text-ink-dim">✍ 正在生成修改稿…</span>
+                  <span className="block text-ink-dim"><Icon name="pencil" size={12} className="mr-1" />正在生成修改稿…</span>
                 )}
               </div>
-              {toolCards[i]?.length ? (
-                <div className="mt-1 flex w-full max-w-[90%] flex-col gap-1">
-                  {toolCards[i].map((c, k) => (
-                    <ToolCardView key={k} card={c} />
-                  ))}
-                </div>
-              ) : null}
+              {toolCards[i]?.length ? <ToolLogCard cards={toolCards[i]} /> : null}
               {articleParsed?.update !== undefined && (
                 <div className="mt-1 max-w-[90%] rounded-lg border border-panel-3 bg-panel-2 px-2.5 py-2">
-                  <p className="font-medium text-ink">📝 修改正文（{articleParsed.update.length} 字）</p>
+                  <p className="flex items-center gap-1.5 font-semibold text-ink"><Icon name="file" size={12} className="text-accent" />修改正文（{articleParsed.update.length} 字）</p>
                   <p className="mt-0.5 line-clamp-3 whitespace-pre-wrap break-words text-ink-dim">
                     {articleParsed.update.slice(0, 120)}…
                   </p>
                   {format !== 'article' || !onApplyArticle ? (
                     <p className="mt-1 text-ink-dim">当前工程不是文章形态，无法应用</p>
                   ) : articleState === 'done' ? (
-                    <p className="mt-1 text-ink">✅ 已应用到正文</p>
+                    <p className="mt-1 flex items-center gap-1.5 text-st-done"><Icon name="checkCircle" size={12} className="" />已应用到正文</p>
                   ) : (
                     <>
                       {article.length > 8000 && (
                         <p className="mt-1 text-amber-400">
-                          ⚠ 当前正文较长，AI 可能只看到开头部分，应用前请确认结尾完整
+                          <Icon name="alert" size={12} className="mr-1" />当前正文较长，AI 可能只看到开头部分，应用前请确认结尾完整
                         </p>
                       )}
                       <button
                         onClick={() => applyArticle(i, articleParsed.update!)}
                         className="mt-1.5 rounded bg-accent px-3 py-1 text-white hover:opacity-90"
                       >
-                        ✓ 应用到正文
+                        应用到正文
                       </button>
                     </>
                   )}
@@ -908,7 +884,7 @@ export default function ChatPanel({
               {accentParsed?.accent !== undefined && (
                 <div className="mt-1 max-w-[90%] rounded-lg border border-panel-3 bg-panel-2 px-2.5 py-2">
                   <p className="flex items-center gap-2 font-medium text-ink">
-                    🎨 换{format === 'cards' ? '贴图' : '文章'}强调色：
+                    <Icon name="palette" size={12} className="mr-1" />换{format === 'cards' ? '贴图' : '文章'}强调色：
                     {accentParsed.accent ? (
                       <>
                         <span className="inline-block h-4 w-4 rounded-full border border-panel-3" style={{ background: accentParsed.accent }} />
@@ -922,26 +898,26 @@ export default function ChatPanel({
                     !onApplyAccent ? (
                       <p className="mt-1 text-ink-dim">换色通道未就绪，无法应用</p>
                     ) : accentState === 'done' ? (
-                      <p className="mt-1 text-ink">✅ 已应用，全组重渲完成</p>
+                      <p className="mt-1 flex items-center gap-1.5 text-st-done"><Icon name="checkCircle" size={12} className="" />已应用，全组重渲完成</p>
                     ) : (
                       <button
                         onClick={() => void applyAccent(i, accentParsed.accent ?? null)}
                         disabled={accentState === 'applying'}
                         className="mt-1.5 rounded bg-accent px-3 py-1 text-white hover:opacity-90 disabled:opacity-40"
                       >
-                        {accentState === 'applying' ? '应用中，整组重渲…' : '✓ 应用并重渲全组'}
+                        {accentState === 'applying' ? '应用中，整组重渲…' : '应用并重渲全组'}
                       </button>
                     )
                   ) : format === 'article' && onApplyArticleAccent ? (
                     accentState === 'done' ? (
-                      <p className="mt-1 text-ink">✅ 已应用，编辑器与导出排版已跟色</p>
+                      <p className="mt-1 flex items-center gap-1.5 text-st-done"><Icon name="checkCircle" size={12} className="" />已应用，编辑器与导出排版已跟色</p>
                     ) : (
                       <button
                         onClick={() => void applyAccent(i, accentParsed.accent ?? null)}
                         disabled={accentState === 'applying'}
                         className="mt-1.5 rounded bg-accent px-3 py-1 text-white hover:opacity-90 disabled:opacity-40"
                       >
-                        {accentState === 'applying' ? '应用中…' : '✓ 应用到文章排版'}
+                        {accentState === 'applying' ? '应用中…' : '应用到文章排版'}
                       </button>
                     )
                   ) : (
@@ -956,24 +932,24 @@ export default function ChatPanel({
                       onClick={() => resolveCard(i, parsed.directive!, userTextBefore(i))}
                       className="rounded bg-panel-3 px-2 py-1 text-ink hover:bg-panel"
                     >
-                      📦 处理这个 Skill 安装请求
+                      <Icon name="package" size={12} className="mr-1" />处理这个 Skill 安装请求
                     </button>
                   )}
-                  {card?.status === 'resolving' && <p className="text-ink-dim">⏳ 正在获取 Skill…</p>}
+                  {card?.status === 'resolving' && <p className="flex items-center gap-1.5 text-ink-dim"><Icon name="spinner" size={12} className="mr-0 animate-spin" />正在获取 Skill…</p>}
                   {(card?.status === 'ready' || card?.status === 'installing') && card.result && (
                     <>
-                      <p className="font-medium text-ink">📦 安装 Skill：{card.result.name}</p>
+                      <p className="flex items-center gap-1.5 font-semibold text-ink"><Icon name="package" size={12} className="" />安装 Skill：{card.result.name}</p>
                       <p className="mt-0.5 break-all text-ink-dim">来源：{card.result.origin}</p>
                       {card.result.description && (
                         <p className="mt-0.5 text-ink-dim">{card.result.description}</p>
                       )}
                       <p className="mt-0.5 text-ink-dim">
                         {card.result.content.length} 字
-                        {card.result.exists ? '　⚠ 将覆盖现有同名 Skill' : ''}
+                        {card.result.exists ? '（已存在同名 Skill，装完会覆盖）' : ''}
                       </p>
                       {card.result.scriptDep && (
-                        <p className="mt-0.5 break-all text-red-400">
-                          ⚠ 检测到依赖脚本执行（{card.result.scriptDep}），本应用只能注入提示词、无法执行脚本，已阻止安装
+                        <p className="mt-0.5 break-all text-st-bad">
+                          <Icon name="alert" size={12} className="mr-1" />检测到依赖脚本执行（{card.result.scriptDep}），本应用只能注入提示词、无法执行脚本，已阻止安装
                         </p>
                       )}
                       <div className="mt-1.5 flex gap-2">
@@ -983,7 +959,7 @@ export default function ChatPanel({
                             disabled={card.status === 'installing'}
                             className="rounded bg-accent px-3 py-1 text-white hover:opacity-90 disabled:opacity-40"
                           >
-                            {card.status === 'installing' ? '安装中…' : '✓ 安装'}
+                            {card.status === 'installing' ? '安装中…' : '安装'}
                           </button>
                         )}
                         <button
@@ -1003,11 +979,11 @@ export default function ChatPanel({
                     </>
                   )}
                   {card?.status === 'done' && (
-                    <p className="text-ink">✅ 已安装 Skill：{card.result?.name}</p>
+                    <p className="flex items-center gap-1.5 text-st-done"><Icon name="checkCircle" size={12} className="" />已安装 Skill：{card.result?.name}</p>
                   )}
                   {card?.status === 'error' && (
                     <>
-                      <p className="break-all text-red-400">✗ {card.error}</p>
+                      <p className="break-all text-st-bad"><Icon name="xCircle" size={12} className="mr-1" />{card.error}</p>
                       <button
                         onClick={() => resolveCard(i, parsed.directive!, userTextBefore(i))}
                         className="mt-1 rounded bg-panel-3 px-2 py-1 text-ink hover:bg-panel"
@@ -1021,34 +997,40 @@ export default function ChatPanel({
             </div>
           )
         })}
-        {error && <p className="mt-1 break-all text-red-400">✗ {error}</p>}
-        {searching && <p className="mt-1 text-ink-dim">🌐 联网搜索中…</p>}
+        {error && <p className="mt-1 break-all text-st-bad"><Icon name="xCircle" size={12} className="mr-1" />{error}</p>}
+        {searching && <p className="mt-1 text-ink-dim"><Icon name="globe" size={12} className="mr-1" />联网搜索中…</p>}
       </div>
 
       {/* 推送确认卡（chat-tools v1 外发动作）：用户点了才真正执行 */}
       {pushConfirm && (
-        <div className="mx-2 mb-1 rounded border border-accent/60 bg-panel-2 p-2 text-xs">
-          <p className="font-medium text-ink">🚀 确认推送：{TOOL_LABELS[pushConfirm.tool] ?? pushConfirm.tool}</p>
-          <p className="mt-0.5 break-all text-ink-dim">{pushConfirm.summary || '（无参数摘要）'}</p>
-          <div className="mt-1.5 flex gap-2">
-            <button
+        <div className="mx-3 mb-1.5 rounded-xl border border-accent/50 bg-panel-2 p-3 shadow-[0_4px_16px_rgba(0,0,0,.18)]">
+          <p className="flex items-center gap-1.5 text-[13px] font-bold text-ink">
+            <Icon name="send" size={13} className="text-accent" />
+            确认推送：{TOOL_LABELS[pushConfirm.tool] ?? pushConfirm.tool}
+          </p>
+          <p className="mt-1 break-all font-mono text-[11px] text-ink-dim">{pushConfirm.summary || '（无参数摘要）'}</p>
+          <div className="mt-2 flex justify-end gap-2">
+            <Button
+              size="sm"
+              variant="pri"
+              icon="check"
               onClick={() => {
                 pushConfirm.resolve(true)
                 setPushConfirm(null)
               }}
-              className="rounded bg-accent px-3 py-1 text-white hover:opacity-90"
             >
-              ✓ 确认推送
-            </button>
-            <button
+              确认推送
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
               onClick={() => {
                 pushConfirm.resolve(false)
                 setPushConfirm(null)
               }}
-              className="rounded bg-panel-3 px-3 py-1 text-ink hover:bg-panel"
             >
               取消
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -1063,20 +1045,22 @@ export default function ChatPanel({
                 <img src={img.dataUrl} alt={img.name} className="h-10 w-10 rounded border border-panel-3 object-cover" />
                 <button
                   onClick={() => setAttachImages((prev) => prev.filter((_, k) => k !== i))}
-                  className="absolute -right-1 -top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-red-500 text-[8px] text-white"
+                  className="absolute -right-1 -top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-st-bad text-white"
                 >
-                  ✕
+                  <Icon name="x" size={8} />
                 </button>
               </span>
             ))}
             {attachDocs.map((doc, i) => (
               <span key={`doc-${i}`} className="inline-flex items-center gap-1 rounded bg-panel-3 px-1.5 py-0.5 text-[10px] text-ink-dim">
-                📄 {doc.name.length > 12 ? doc.name.slice(0, 12) + '…' : doc.name}
-                <button onClick={() => setAttachDocs((prev) => prev.filter((_, k) => k !== i))} className="text-red-400">✕</button>
+                <Icon name="file" size={12} className="mr-1" /> {doc.name.length > 12 ? doc.name.slice(0, 12) + '…' : doc.name}
+                <button onClick={() => setAttachDocs((prev) => prev.filter((_, k) => k !== i))} className="text-st-bad"><Icon name="x" size={10} /></button>
               </span>
             ))}
           </div>
         )}
+        {/* 输入框壳（稿 A 标注⑥）：附件/联网/上下文并进框内工具胶囊行，聚焦主色描边 + 3px 光晕 */}
+        <div className="rounded-xl border border-panel-3 bg-panel-2 transition-[border-color,box-shadow] focus-within:border-accent focus-within:shadow-[0_0_0_3px_rgb(var(--accent)/.18)]">
         <textarea
           rows={2}
           value={input}
@@ -1089,7 +1073,7 @@ export default function ChatPanel({
             void send()
           }}
           placeholder="自由对话，Enter 发送（可附带图片/文档）"
-          className="w-full resize-none rounded bg-panel-3 p-2 text-xs text-ink outline-none placeholder:text-ink-dim"
+          className="w-full resize-none bg-transparent px-3 pt-2.5 pb-1 text-xs leading-relaxed text-ink outline-none placeholder:text-ink-dim"
         />
         <input
           ref={attachRef}
@@ -1099,42 +1083,41 @@ export default function ChatPanel({
           className="hidden"
           onChange={(e) => { void addAttachments(e.target.files); e.target.value = '' }}
         />
-        <div className="mt-1 flex items-center justify-end gap-2">
-          <button
-            onClick={() => attachRef.current?.click()}
-            title="附带图片（走 vision）或文档（提取文本）"
-            className="whitespace-nowrap rounded px-2 py-1 text-xs text-ink-dim hover:bg-panel-3"
-          >
-            📎 附件
-          </button>
-          <button
-            onClick={() => setWebOn((v) => !v)}
-            title="联网搜索：开启后每轮先搜索再回答（时效性问题建议开）；高亮 = 已开启"
-            className={`whitespace-nowrap rounded px-2 py-1 text-xs ${webOn ? 'bg-accent/20 text-accent' : 'text-ink-dim hover:bg-panel-3'}`}
-          >
-            🌐 联网
-          </button>
-          <button
-            onClick={() => setCtxOn((v) => !v)}
+        <div className="flex items-center gap-1 px-2 pb-2">
+          <ToolPill icon="clip" onClick={() => attachRef.current?.click()} title="附带图片（走 vision）或文档（提取文本）">
+            附件
+          </ToolPill>
+          <ToolPill on={webOn} icon="globe" onClick={() => setWebOn((v) => !v)} title="联网搜索：开启后每轮先搜索再回答（时效性问题建议开）">
+            联网
+          </ToolPill>
+          <ToolPill
+            on={ctxOn && !!project}
             disabled={!project}
-            title="工程上下文：开启后每轮自动附带当前正文/贴图文案，AI 能直接回答内容相关问题；高亮 = 已开启"
-            className={`mr-auto whitespace-nowrap rounded px-2 py-1 text-xs disabled:opacity-40 ${ctxOn && project ? 'bg-accent/20 text-accent' : 'text-ink-dim hover:bg-panel-3'}`}
+            icon="book"
+            onClick={() => setCtxOn((v) => !v)}
+            title="工程上下文：开启后每轮自动附带当前正文/贴图文案，AI 能直接回答内容相关问题"
           >
-            📄 上下文
-          </button>
+            上下文
+          </ToolPill>
           {streaming ? (
-            <button onClick={abort} className="whitespace-nowrap rounded bg-panel-3 px-3 py-1 text-xs text-red-400 hover:bg-panel">
-              停止
+            <button
+              onClick={abort}
+              title="停止生成"
+              className="ml-auto inline-flex h-[30px] w-[30px] items-center justify-center rounded-lg bg-panel-3 text-st-bad hover:bg-panel"
+            >
+              <Icon name="square" size={13} />
             </button>
           ) : (
             <button
               onClick={() => void send()}
               disabled={!input.trim() && attachImages.length === 0 && attachDocs.length === 0}
-              className="whitespace-nowrap rounded bg-accent px-3 py-1 text-xs text-white hover:opacity-90 disabled:opacity-40"
+              title="发送（Enter）"
+              className="ml-auto inline-flex h-[30px] w-[30px] items-center justify-center rounded-lg bg-accent text-white hover:brightness-110 disabled:opacity-40"
             >
-              发送
+              <Icon name="send" size={14} />
             </button>
           )}
+        </div>
         </div>
       </div>
     </>

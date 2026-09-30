@@ -28,6 +28,8 @@ import CardsPanel, { type CardsPanelHandle } from './components/CardsPanel'
 import CalendarBoard from './components/CalendarBoard'
 import IdeaBoard from './components/IdeaBoard'
 import Sidebar from './components/Sidebar'
+import { Icon } from './ui/Icon'
+import { StatusDot } from './ui/primitives'
 import ArticleEditor, { type ArticleEditorHandle, type EditorSelection } from './editor/ArticleEditor'
 import type { FigPipeline } from './editor/FigSuggest'
 import { shouldAutoStart, startTour } from './components/onboardingTour'
@@ -40,6 +42,8 @@ export default function App(): JSX.Element {
   const [meta, setMeta] = useState<ProjectMeta | null>(null)
   const [article, setArticle] = useState('')
   const [saved, setSaved] = useState('')
+  /** 正文基线最近一次变化时刻（自动保存落盘 / 外部热载 / 切工程），底部状态栏显示用 */
+  const [savedAt, setSavedAt] = useState(() => Date.now())
   const [conflict, setConflict] = useState<{ file: string; external: string } | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [showSettings, setShowSettings] = useState(false)
@@ -162,6 +166,8 @@ export default function App(): JSX.Element {
   savedRef.current = saved
 
   const dirty = article !== saved
+
+  useEffect(() => setSavedAt(Date.now()), [saved])
 
   /** 排版调性：自定义主题 > 分类调性 > 默认（meta 变化即时跟换） */
   const articleTheme = useMemo(() => resolveArticleTheme(meta, customThemes), [meta, customThemes])
@@ -840,7 +846,7 @@ export default function App(): JSX.Element {
               title="外观：主题（跟随系统/日间/夜间）与界面字号"
               className="rounded px-2 py-1 hover:bg-panel-3"
             >
-              🎨 外观
+              <Icon name="palette" size={13} className="mr-1 align-[-2px]" />外观
             </button>
             {showAppearance && (
               <>
@@ -848,7 +854,7 @@ export default function App(): JSX.Element {
                 <div className="no-drag absolute right-0 top-full z-50 mt-1 w-48 rounded border border-panel-3 bg-panel-2 p-2 shadow-lg">
                   <p className="mb-1 text-[10px] text-ink-dim">主题</p>
                   <div className="mb-2 flex overflow-hidden rounded border border-panel-3 text-[11px]">
-                    {([['system', '跟随系统'], ['light', '☀ 日间'], ['dark', '☾ 夜间']] as const).map(([v, label]) => (
+                    {([['system', '跟随系统'], ['light', '日间'], ['dark', '夜间']] as const).map(([v, label]) => (
                       <button
                         key={v}
                         onClick={() => setThemeMode(v)}
@@ -875,7 +881,7 @@ export default function App(): JSX.Element {
             )}
           </div>
           <button onClick={() => setShowSettings(true)} className="rounded px-2 py-1 hover:bg-panel-3">
-            模型接入
+            <Icon name="plug" size={13} className="mr-1 align-[-2px]" />模型接入
           </button>
           <button onClick={() => setShowIntegration(true)} className="rounded px-2 py-1 hover:bg-panel-3">
             设置
@@ -885,7 +891,7 @@ export default function App(): JSX.Element {
             title="重新播放新手引导"
             className="rounded px-2 py-1 hover:bg-panel-3"
           >
-            ❓ 帮助
+            <Icon name="help" size={13} className="mr-1 align-[-2px]" />帮助
           </button>
           <button
             onClick={() => void checkUpdate(true)}
@@ -893,14 +899,14 @@ export default function App(): JSX.Element {
             title={updateCurrent ? `检查更新（当前版本 v${updateCurrent}）` : '检查更新：有新版本时给出网盘/GitHub 下载入口'}
             className="rounded px-2 py-1 hover:bg-panel-3 disabled:opacity-50"
           >
-            {checkingUpdate ? '检查中…' : '🔄 版本更新'}
+            {checkingUpdate ? '检查中…' : <><Icon name="refresh" size={13} className="mr-1 align-[-2px]" />版本更新</>}
           </button>
           <button
             onClick={() => window.open('https://ligdesign.win/')}
             title="LIG 立格 Studio 品牌官网：设计 · 工具 · 桌面美学"
             className="rounded px-2 py-1 hover:bg-panel-3"
           >
-            🌐 官网
+            <Icon name="globe" size={13} className="mr-1 align-[-2px]" />官网
           </button>
         </div>
         <div className="flex h-full items-stretch">
@@ -909,21 +915,21 @@ export default function App(): JSX.Element {
             title="最小化"
             className="w-11 text-sm text-ink-dim hover:bg-panel-3"
           >
-            ─
+            <Icon name="minimize" size={13} />
           </button>
           <button
             onClick={() => void window.api.invoke('win:toggleMaximize')}
             title="最大化 / 还原"
             className="w-11 text-sm text-ink-dim hover:bg-panel-3"
           >
-            ▢
+            <Icon name="maximize" size={13} />
           </button>
           <button
             onClick={() => void window.api.invoke('win:close')}
             title="关闭"
             className="w-11 text-sm text-ink-dim hover:bg-red-600 hover:text-white"
           >
-            ✕
+            <Icon name="x" size={13} />
           </button>
         </div>
       </header>
@@ -979,34 +985,48 @@ export default function App(): JSX.Element {
             title={leftCollapsed ? '展开左栏' : '收起左栏'}
             className="absolute left-1/2 top-8 -translate-x-1/2 rounded bg-panel-3 px-1 py-1 text-[10px] text-ink-dim hover:text-ink"
           >
-            {leftCollapsed ? '❯' : '❮'}
+            {leftCollapsed ? <Icon name="chevronRight" size={12} /> : <Icon name="chevronLeft" size={12} />}
           </button>
         </div>
 
         {/* 中栏：创作向导（主工作面）/ 选题看板 / 日历 */}
         <main className="flex min-w-0 flex-1 flex-col bg-panel">
-          <div data-tour="center-toolbar" className="flex h-9 shrink-0 items-center gap-2 border-b border-panel-3 px-4 text-xs text-ink-dim">
+          {/* 中栏页签行：页签 + 右端字数胶囊（字数从步进器里拆出，标注③）；单行不折行 */}
+          <div data-tour="center-toolbar" className="flex h-[42px] shrink-0 items-center gap-1 border-b border-panel-3 px-4">
             <button
               onClick={() => setCenterTab('create')}
               title="创作向导：选题 → 大纲 → 成文 → 配图 → 标题封面 → 审阅 → 导出"
-              className={`rounded px-2 py-0.5 ${centerTab === 'create' ? 'bg-panel-3 text-ink' : 'hover:bg-panel-3'}`}
+              className={`inline-flex h-7 items-center gap-1.5 rounded-md px-3 text-xs transition-colors ${
+                centerTab === 'create' ? 'bg-accent/15 font-semibold text-accent' : 'text-ink-dim hover:bg-panel-3 hover:text-ink'
+              }`}
             >
-              🧭 创作
+              <Icon name="compass" size={13} />创作
             </button>
             <button
               onClick={() => setCenterTab('ideas')}
               title="选题流转看板：待立项 / 已立项 / 已排期 / 已成稿，状态由对应工程推导"
-              className={`rounded px-2 py-0.5 ${centerTab === 'ideas' ? 'bg-panel-3 text-ink' : 'hover:bg-panel-3'}`}
+              className={`inline-flex h-7 items-center gap-1.5 rounded-md px-3 text-xs transition-colors ${
+                centerTab === 'ideas' ? 'bg-accent/15 font-semibold text-accent' : 'text-ink-dim hover:bg-panel-3 hover:text-ink'
+              }`}
             >
-              💡 选题看板
+              <Icon name="bulb" size={13} />选题看板
             </button>
             <button
               onClick={() => setCenterTab('calendar')}
               title="跨工程发布排期看板：拖拽工程卡片到日期即排期"
-              className={`rounded px-2 py-0.5 ${centerTab === 'calendar' ? 'bg-panel-3 text-ink' : 'hover:bg-panel-3'}`}
+              className={`inline-flex h-7 items-center gap-1.5 rounded-md px-3 text-xs transition-colors ${
+                centerTab === 'calendar' ? 'bg-accent/15 font-semibold text-accent' : 'text-ink-dim hover:bg-panel-3 hover:text-ink'
+              }`}
             >
-              📅 日历
+              <Icon name="calendar" size={13} />日历
             </button>
+            <span className="ml-auto flex min-w-0 items-center gap-2">
+              {current && wordCount > 0 && (
+                <span className="shrink-0 rounded-full bg-panel-3 px-2.5 py-0.5 text-[11.5px] text-ink-dim" title="当前正文字数（不含标记）">
+                  本文 {wordCount} 字
+                </span>
+              )}
+            </span>
           </div>
           {centerTab === 'calendar' ? (
             <CalendarBoard
@@ -1050,18 +1070,6 @@ export default function App(): JSX.Element {
               reviewExists={reviewExists}
               stepRequest={stepRequest}
               projectDir={currentDir}
-              headerRight={
-                current ? (
-                  <>
-                    {wordCount > 0 && <span className="mr-2 text-ink-dim">{wordCount} 字</span>}
-                    <span className={dirty ? 'text-amber-400' : 'text-green-500'}>
-                      {dirty ? '● 未保存' : '✓ 已保存'}
-                    </span>
-                  </>
-                ) : (
-                  <span className="text-ink-dim">未打开工程</span>
-                )
-              }
               draftBody={
                 current ? (
                   meta?.format === 'cards' ? (
@@ -1093,14 +1101,14 @@ export default function App(): JSX.Element {
                           disabled={!article.trim()}
                           className="rounded px-2 py-0.5 hover:bg-panel-3 disabled:opacity-40"
                         >
-                          ✦ 排版优化
+                          <Icon name="sparkles" size={13} className="mr-1 align-[-2px]" />排版优化
                         </button>
                         <button
                           onClick={() => setShowThemeImport(true)}
                           title="粘贴公众号 HTML 或链接，复用它的排版"
                           className="rounded px-2 py-0.5 hover:bg-panel-3"
                         >
-                          🎨 排版
+                          <Icon name="palette" size={13} className="mr-1 align-[-2px]" />排版
                         </button>
                         <button
                           onClick={() => setShowConvert((v) => !v)}
@@ -1108,7 +1116,7 @@ export default function App(): JSX.Element {
                           title="把正文提炼成多张竖版图片卡片，工程切换为贴图形态"
                           className="rounded px-2 py-0.5 hover:bg-panel-3 disabled:opacity-40"
                         >
-                          {converting ? '转贴图中…' : '🖼 转贴图'}
+                          {converting ? '转贴图中…' : <><Icon name="image" size={13} className="mr-1 align-[-2px]" />转贴图</>}
                         </button>
                         {showConvert && !converting && (
                           <>
@@ -1138,7 +1146,7 @@ export default function App(): JSX.Element {
                             title="不重新生成，直接切回已有卡片组；正文保留可随时切回来"
                             className="rounded px-2 py-0.5 hover:bg-panel-3"
                           >
-                            ↩ 回到贴图
+                            <Icon name="undo" size={13} className="mr-1 align-[-2px]" />回到贴图
                           </button>
                         )}
                       </div>
@@ -1262,6 +1270,35 @@ export default function App(): JSX.Element {
               onToast={setToast}
             />
           </div>
+          {/* 底部状态栏（§5.1）：左=当前工作区路径，右=当前文档 + 保存状态与时间 */}
+          <footer className="flex h-[26px] shrink-0 items-center gap-3 border-t border-panel-3 bg-panel-2 px-3.5 text-[10.5px] text-ink-dim">
+            <button
+              onClick={() => {
+                if (paths) void window.api.invoke('export:openFile', paths.workspace).catch(() => {})
+              }}
+              title={`点击打开工作区文件夹\n${paths?.workspace ?? ''}`}
+              className="inline-flex min-w-0 items-center gap-1.5 font-mono hover:text-ink"
+            >
+              <Icon name="folder" size={11} />
+              <span className="truncate">{paths?.workspace ?? '工作区未就绪'}</span>
+            </button>
+            <span className="ml-auto inline-flex min-w-0 items-center gap-2">
+              {current ? (
+                <>
+                  <span className="truncate">
+                    {filterCat && filterCat !== 'all' ? `${filterCat} / ` : ''}
+                    {current}
+                  </span>
+                  <span className="inline-flex shrink-0 items-center gap-1.5">
+                    <StatusDot status={dirty ? 'draft' : 'done'} />
+                    {dirty ? '未保存' : `已自动保存 ${new Date(savedAt).toTimeString().slice(0, 5)}`}
+                  </span>
+                </>
+              ) : (
+                <span className="shrink-0">未打开工程</span>
+              )}
+            </span>
+          </footer>
         </main>
 
         {/* 分栏拖拽条（右）：拖拽调宽 / 双击或按钮收起右栏 */}
@@ -1277,7 +1314,7 @@ export default function App(): JSX.Element {
             title={rightCollapsed ? '展开右栏' : '收起右栏'}
             className="absolute left-1/2 top-8 -translate-x-1/2 rounded bg-panel-3 px-1 py-1 text-[10px] text-ink-dim hover:text-ink"
           >
-            {rightCollapsed ? '❮' : '❯'}
+            {rightCollapsed ? <Icon name="chevronLeft" size={12} /> : <Icon name="chevronRight" size={12} />}
           </button>
         </div>
 
@@ -1288,14 +1325,19 @@ export default function App(): JSX.Element {
         >
         {/* 右栏：AI 对话副驾驶（脑暴/审阅已并入中栏创作向导） */}
         <aside className="flex min-h-0 w-full min-w-0 flex-col border-l border-panel-3 bg-panel-2">
-          <div data-tour="right-tabs" className="flex h-9 shrink-0 items-center gap-1 border-b border-panel-3 px-3 text-xs">
-            <span className="text-ink">对话</span>
-            {/* Skill 挂载：注入系统提示（作用范围=对话；向导各步按任务类型自动推荐挂载） */}
+          <div data-tour="right-tabs" className="flex h-9 shrink-0 items-center gap-2 border-b border-panel-3 px-3 text-xs">
+            <span className="inline-flex items-center gap-1.5 font-bold text-ink">
+              <Icon name="message" size={13} className="text-accent" />
+              对话
+            </span>
+            {/* Skill 挂载（§5.9 头部降噪）：圆角下拉 + 当前挂载状态点，一眼看出这轮对话带不带风格 */}
             <select
               value={skillName}
               onChange={(e) => mountSkill(e.target.value)}
-              title={skills.find((s) => s.name === skillName)?.description ?? '挂载写作风格 Skill'}
-              className="ml-auto max-w-[120px] rounded bg-panel-3 px-1.5 py-0.5 text-ink-dim outline-none"
+              title={skills.find((s) => s.name === skillName)?.description ?? '挂载写作风格 Skill：注入系统提示，作用范围=对话'}
+              className={`ml-auto h-[26px] max-w-[150px] shrink min-w-0 truncate rounded-full border bg-panel-2 px-2.5 text-[11.5px] outline-none ${
+                skillName ? 'border-accent/60 font-semibold text-accent' : 'border-panel-3 text-ink-dim'
+              }`}
             >
               <option value="">无 Skill</option>
               {skills

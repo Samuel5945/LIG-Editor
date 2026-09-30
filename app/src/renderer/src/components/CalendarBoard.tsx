@@ -27,13 +27,8 @@ interface CalendarBoardProps {
   onToast: (msg: string) => void
 }
 
-/** 状态 → 色点（对齐 App.STATUS_LABEL 语义：脑暴/撰写/审阅/可发布） */
-const STATUS_DOT: Record<ProjectStatus, string> = {
-  ideating: 'bg-slate-400',
-  drafting: 'bg-sky-400',
-  reviewing: 'bg-amber-400',
-  ready: 'bg-emerald-400'
-}
+import { StatusDot } from '../ui/primitives'
+import { dotOfStatus } from '../ui/status'
 
 const WEEK_DAYS = ['一', '二', '三', '四', '五', '六', '日']
 /** 单格最多直接展示的卡片数，超出折叠为 +N */
@@ -166,7 +161,7 @@ export default function CalendarBoard({
         p.name === current ? 'bg-sky-500/15 ring-1 ring-sky-500/40' : 'bg-panel-3'
       } ${dragging === p.name ? 'opacity-40' : ''}`}
     >
-      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${STATUS_DOT[p.status] ?? 'bg-slate-400'}`} />
+      <StatusDot status={dotOfStatus(p.status)} title={p.status} />
       <span className="truncate text-ink">{p.name}</span>
       <button
         onClick={(e) => {
@@ -201,7 +196,7 @@ export default function CalendarBoard({
         p.name === current ? 'border-sky-500/40 bg-sky-500/15' : 'border-panel-3 bg-panel'
       } ${dragging === p.name ? 'opacity-40' : ''}`}
     >
-      <span className={`h-2 w-2 shrink-0 rounded-full ${STATUS_DOT[p.status] ?? 'bg-slate-400'}`} />
+      <StatusDot status={dotOfStatus(p.status)} title={p.status} />
       <span className="line-clamp-2 min-w-0 flex-1 text-ink">{p.name}</span>
     </div>
   )
