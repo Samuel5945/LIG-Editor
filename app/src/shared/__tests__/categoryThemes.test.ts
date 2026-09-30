@@ -543,3 +543,31 @@ describe('sanitizeThemePatchDetailed（工具层如实回报的底层）', () =>
     expect(sanitizeThemePatch({ text_color: '#222222', nope: 1 })).toEqual({ bodyText: '#222222' })
   })
 })
+
+describe('别名表的驼峰口语与长度单位（14:xx 实跑复盘：paragraphSpacing/cornerRadius/letterSpacing 数字被误判不认识）', () => {
+  it('驼峰口语键也命中（此前只登记蛇形，paragraph_spacing 能认、paragraphSpacing 不能认）', () => {
+    expect(normalizeThemeKeys({ paragraphSpacing: 24 }).patch).toEqual({ pGap: 24 })
+    expect(normalizeThemeKeys({ cornerRadius: 12 }).patch).toEqual({ bodyRadius: 12 })
+    expect(normalizeThemeKeys({ paraSpacing: 20 }).patch).toEqual({ pGap: 20 })
+    expect(normalizeThemeKeys({ letterSpace: '0.05em' }).patch).toEqual({ letterSpacing: '0.05em' })
+    expect(normalizeThemeKeys({ line_spacing: 2.2 }).patch).toEqual({ lineHeight: 2.2 })
+    expect(normalizeThemeKeys({ radius: 8 }).patch).toEqual({ bodyRadius: 8 })
+    expect(normalizeThemeKeys({ image_radius: 6, pictureRadius: 7 }).patch).toEqual({ imgRadius: 6 })
+  })
+
+  it('长度类字段给裸数字时按 px 补齐（letterSpacing / bodyPadding）', () => {
+    expect(sanitizeThemePatch({ letterSpacing: 0.5, bodyPadding: 20 })).toEqual({
+      letterSpacing: '0.5px',
+      bodyPadding: '20px'
+    })
+    // 已带单位的字符串原样保留，不重复加 px
+    expect(sanitizeThemePatch({ letterSpacing: '0.04em', bodyPadding: '18px 20px' })).toEqual({
+      letterSpacing: '0.04em',
+      bodyPadding: '18px 20px'
+    })
+  })
+
+  it('字体栈给数字仍算非法（不能凭空补 px 成字体名）', () => {
+    expect(sanitizeThemePatch({ fontFamily: 12 })).toEqual({})
+  })
+})

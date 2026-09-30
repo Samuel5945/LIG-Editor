@@ -5,6 +5,7 @@ import { isHexColor } from '@shared/cards'
 import {
   clampThemeNumbers,
   metaPatchToThemeKeys,
+  normalizeThemeKeys,
   sanitizeThemePatchDetailed,
   THEME_OVERRIDE_KEYS
 } from '@shared/categoryThemes'
@@ -444,7 +445,7 @@ export const TOOLS: ToolDef[] = [
         bodyBg: { type: ['string', 'null'], description: '文章背景卡十六进制（#rrggbb，建议浅色系）；none 去卡片；null 跟随主题' },
         fontFamily: { type: ['string', 'null'], description: '正文字体栈（如 "Microsoft YaHei", sans-serif）；null 跟随主题' },
         lineHeight: { type: ['number', 'null'], description: '正文行高（1.5-3，非法值回落）；null 跟随主题' },
-        letterSpacing: { type: ['string', 'null'], description: '字距（如 0.02em）；null 跟随主题' },
+        letterSpacing: { type: ['string', 'number', 'null'], description: '字距（如 0.02em 或 0.5px；给裸数字按 px 处理）；null 跟随主题' },
         pGap: { type: ['number', 'null'], description: '段落间距 px（0-48）；null 跟随主题' },
         bodyText: { type: ['string', 'null'], description: '正文文字色十六进制；null 跟随主题' },
         headingColor: { type: ['string', 'null'], description: '标题文字色十六进制；显式设置后不随强调色重链；null 跟随主题' },
@@ -460,7 +461,7 @@ export const TOOLS: ToolDef[] = [
         strongColor: { type: ['string', 'null'], description: '加粗强调色十六进制；显式设置后不随强调色重链；null 跟随主题' },
         imgRadius: { type: ['number', 'null'], description: '图片圆角 px（0-40）；null 跟随主题' },
         bodyRadius: { type: ['number', 'null'], description: '正文容器圆角 px（0-40）；null 跟随主题' },
-        bodyPadding: { type: ['string', 'null'], description: '正文容器内边距（如 20px 22px）；null 跟随主题' },
+        bodyPadding: { type: ['string', 'number', 'null'], description: '正文容器内边距（如 20px 22px；给裸数字按 px 处理）；null 跟随主题' },
         tableStyle: { type: ['string', 'null'], enum: ['bordered', 'striped', 'plain', null], description: '表格风格；null 跟随主题' },
         tableHeaderBg: { type: ['string', 'null'], description: '表头背景色十六进制；null 跟随主题' },
         tableBorder: { type: ['string', 'null'], description: '表格边框色十六进制；null 跟随主题' },
@@ -481,19 +482,20 @@ export const TOOLS: ToolDef[] = [
       }
       const project = projectArg(a)
       const meta = store.readMeta(project)
-      // 数值越界先夹取，并把「改了什么」写进返回值：作者要 1.4 而口径下限 1.5 时，
-      // 静默抬成 1.5 的表现就是「设了没反应」，报回来模型才会照实说而不是声称已按 1.4 设好
       // 数值越界的夹取说明照实报（作者要 1.4、口径下限 1.5，静默抬成 1.5 就是「设了没反应」）
       const { notes } = clampThemeNumbers(bag)
       // 写入一律过同一套校验：不合法的值不落脏盘、也不装成功。
       // 实测过 set_theme 传 h2Border: 123 → 旧实现把 123 原样写进 meta 并返回 ok，作者看到的就是「设了没变化」
       const { values: ok, unknown: unmapped, invalid } = sanitizeThemePatchDetailed(bag)
       const bag2 = meta as unknown as Record<string, unknown>
-      for (const k of THEME_OVERRIDE_KEYS) {
-        if (!(k in bag) || bag[k] === undefined) continue
-        // null = 显式恢复默认；合法值用校验后的结果（夹取、去空格、枚举守卫）；非法值保持盘上原值不动
-        if (bag[k] === null) bag2[k] = undefined
-        else if (k in ok) bag2[k] = ok[k]
+      // 写入必须以「归一后的键名」为准，不能拿原始键判：
+      // 上一版按 `k in bag` 过滤，别名值（paragraphSpacing→pGap、cornerRadius→bodyRadius）虽然已在 ok 里备好，
+      // 却因 bag 没有 pGap 这个键而一个字都没写、还返回干净的 ok——别名等于白做，17:36 实测抓到
+      const norm = normalizeThemeKeys(bag)
+      for (const [k, rawVal] of Object.entries(norm.patch)) {
+        // null = 显式恢复默认；合法值用校验后的结果（夹取、去空格、补 px、枚举守卫）；非法值保持盘上原值不动
+        if (rawVal === null) bag2[k] = undefined
+        else if (k in ok) bag2[k] = (ok as Record<string, unknown>)[k]
       }
       store.writeMeta(project, meta)
       notifyChange(project, 'project.json')
@@ -501,7 +503,7 @@ export const TOOLS: ToolDef[] = [
       const ignoredKeys = unmapped.filter((k) => k !== 'project' && k !== 'dir' && k !== 'name')
       // null 是「显式恢复默认」，走上面的清除分支，不能混进「值不合法未写入」——
       // 那样会把成功报成失败，和把失败报成成功一样误导作者
-      const droppedKeys = invalid.filter((k) => k in bag && bag[k] !== null)
+      const droppedKeys = invalid.filter((k) => k in norm.patch && norm.patch[k] !== null)
       const reports = [...notes]
       if (ignoredKeys.length) reports.push(`不认识的参数已忽略：${ignoredKeys.join('、')}（可用键见本工具说明）`)
       if (droppedKeys.length)

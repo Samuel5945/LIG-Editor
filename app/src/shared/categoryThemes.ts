@@ -365,10 +365,30 @@ export const THEME_KEY_ALIASES: Record<string, ThemeOverrideKey> = {
   body_bg: 'bodyBg',
   bg: 'bodyBg',
   background: 'bodyBg',
-  accent_color: 'accent'
+  accent_color: 'accent',
+  // 本次实跑新增的口语叫法（段距/圆角/字距/行距；para_spacing / image_radius 表内已有）
+  paragraph_gap: 'pGap',
+  space_after: 'pGap',
+  line_spacing: 'lineHeight',
+  corner_radius: 'bodyRadius',
+  radius: 'bodyRadius',
+  roundness: 'bodyRadius',
+  picture_radius: 'imgRadius',
+  letter_space: 'letterSpacing',
+  text_spacing: 'letterSpacing'
 }
 
-/** 键名归一：蛇形/别名先改成白名单键，映射不了的返回在 unknown 里（调用方必须如实报，不得静默） */
+/** 别名表的驼峰索引：模型直接写 paragraphSpacing / cornerRadius 这类驼峰口语时也要命中
+ *  （此前只登记蛇形键，实测 paragraphSpacing 被判「不认识」而 paragraph_spacing 能命中，就是漏了这一半） */
+const THEME_ALIAS_BY_CAMEL: Record<string, ThemeOverrideKey> = Object.fromEntries(
+  Object.entries(THEME_KEY_ALIASES).map(([k, v]) => [camelCase(k), v])
+)
+
+/** 蛇形/带连字符的键名转驼峰 */
+function camelCase(k: string): string {
+  return k.replace(/[-_]([a-zA-Z0-9])/g, (_m, c: string) => c.toUpperCase())
+}
+
 export function normalizeThemeKeys(raw: Record<string, unknown>): {
   patch: Record<string, unknown>
   unknown: string[]
@@ -377,9 +397,11 @@ export function normalizeThemeKeys(raw: Record<string, unknown>): {
   const unknown: string[] = []
   const legal = new Set<string>(THEME_OVERRIDE_KEYS)
   for (const [k, v] of Object.entries(raw)) {
-    const camel = k.replace(/[-_]([a-zA-Z0-9])/g, (_m, c: string) => c.toUpperCase())
+    const camel = camelCase(k)
+    // 顺序：原样命中白名单 → 驼化后命中 → 别名（原样 / 驼化 / 别名表的驼化索引）
     // 显式写法优先于别名推断（模型同时给了 fontSize 与 bodyFontSize 时取后者）
-    const key = legal.has(k) ? k : legal.has(camel) ? camel : THEME_KEY_ALIASES[k] ?? THEME_KEY_ALIASES[camel]
+    const key =
+      legal.has(k) ? k : legal.has(camel) ? camel : (THEME_KEY_ALIASES[k] ?? THEME_KEY_ALIASES[camel] ?? THEME_ALIAS_BY_CAMEL[camel])
     if (!key) {
       unknown.push(k)
       continue
@@ -562,6 +584,12 @@ export function sanitizeThemePatchDetailed(raw: Record<string, unknown>): {
     const v = patch[k]
     if (typeof v === 'string' && (list as readonly string[]).includes(v)) out[k] = v
   }
+  // 长度类字段：模型常写成裸数字（letterSpacing: 0.5 / bodyPadding: 20），CSS 需要带单位 → 按 px 补
+  const len = (k: string): void => {
+    const v = patch[k]
+    if (typeof v === 'number' && isFinite(v)) out[k] = `${v}px`
+    else if (typeof v === 'string' && v.trim()) out[k] = v.trim()
+  }
   const str = (k: string): void => {
     const v = patch[k]
     if (typeof v === 'string' && v.trim()) out[k] = v.trim()
@@ -582,7 +610,7 @@ export function sanitizeThemePatchDetailed(raw: Record<string, unknown>): {
   // B 期扩展 20 字段
   str('fontFamily')
   num('lineHeight')
-  str('letterSpacing')
+  len('letterSpacing')
   num('pGap')
   hex('bodyText')
   hex('headingColor')
@@ -598,7 +626,7 @@ export function sanitizeThemePatchDetailed(raw: Record<string, unknown>): {
   hex('strongColor')
   num('imgRadius')
   num('bodyRadius')
-  str('bodyPadding')
+  len('bodyPadding')
   en('tableStyle', TABLE_STYLES)
   hex('tableHeaderBg')
   hex('tableBorder')

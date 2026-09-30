@@ -20,6 +20,7 @@ import { isHexColor } from '@shared/cards'
 import { DEFAULT_THEME, contrastText, isDarkColor, resolveEditorTheme, type ArticleTheme } from '@shared/categoryThemes'
 import { SEQ_PREFIX } from '@shared/exportHtml'
 import type { H1Style, H2Style, H2Num, H3Mark } from '@shared/types'
+import type { ThemeOverrides } from '@shared/themeFields'
 import { FigureImage, type FigureImageStorage } from './FigureImage'
 import { FigSuggest, type FigSuggestStorage } from './FigSuggest'
 import { FigureGallery } from './FigureGallery'
@@ -270,32 +271,12 @@ interface ArticleEditorProps {
   onEditFigureSource?: (figureSource: string, desc: string) => void
   /** 工具栏快速换强调色：null = 恢复默认蓝 */
   onAccentChange?: (color: string | null) => void
-  /** 项目显式排版覆盖（meta 同名字段）：字号/排列 + 标题版式四项 + 背景卡，undefined = 跟随主题 */
-  typography?: {
-    bodyFontSize?: number
-    headingFontSize?: number
-    bodyAlign?: 'indent' | 'flush' | 'center'
-    headingAlign?: 'center' | 'left'
-    h1Style?: H1Style
-    h2Style?: H2Style
-    /** 'none' = 显式关掉主题自带序号（与 undefined「跟随主题」语义不同） */
-    h2Num?: H2Num | 'none'
-    h3Mark?: H3Mark
-    /** hex 覆盖主题背景卡；'none' 显式去卡片（透明白底）；undefined 跟随主题 */
-    bodyBg?: string
-  }
-  /** 工具栏排版设置：patch 值 null = 恢复默认（跟随主题） */
-  onTypographyChange?: (patch: {
-    bodyFontSize?: number | null
-    headingFontSize?: number | null
-    bodyAlign?: 'indent' | 'flush' | 'center' | null
-    headingAlign?: 'center' | 'left' | null
-    h1Style?: H1Style | null
-    h2Style?: H2Style | null
-    h2Num?: H2Num | 'none' | null
-    h3Mark?: H3Mark | null
-    bodyBg?: string | null
-  }) => void
+  /** 工程 meta 上的显式排版覆盖（34 项全量口径，undefined = 跟随主题） */
+  typography?: ThemeOverrides
+  /** 排版写入：值覆盖、null = 恢复跟随主题 */
+  onTypographyChange?: (patch: ThemeOverrides) => void
+  /** 打开「全量排版」面板（34 项控件，面板本体挂在 App 弹层里） */
+  onOpenTypography?: () => void
 }
 
 /**
@@ -304,7 +285,7 @@ interface ArticleEditorProps {
  * - lastEmitted 防止 onChange → props.markdown 回流时循环 setContent
  */
 const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(function ArticleEditor(
-  { markdown, project, projectDir, accent, theme, uiDark, typography, onChange, onAiModify, onAiReview, onFigAction, onEditFigureSource, onAccentChange, onTypographyChange },
+  { markdown, project, projectDir, accent, theme, uiDark, typography, onChange, onAiModify, onAiReview, onFigAction, onEditFigureSource, onAccentChange, onTypographyChange, onOpenTypography },
   ref
 ): ReactElement {
   const lastEmitted = useRef(markdown)
@@ -626,7 +607,7 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
                           setToolPop(null)
                         }}
                         className={`h-5 w-5 rounded-full border border-slate-600 ${
-                          effBg?.toLowerCase() === p.color ? 'ring-2 ring-white' : ''
+                          String(effBg ?? '').toLowerCase() === p.color ? 'ring-2 ring-white' : ''
                         }`}
                         style={{ background: p.color }}
                       />
@@ -719,6 +700,14 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
                   </div>
                 )}
               </div>
+              <button
+                type="button"
+                title="全量排版：字体节奏 / 配色 / 标题 / 引用 / 分隔线 / 加粗 / 卡片图片 / 表格（34 项，覆盖主题并导出同步）"
+                onClick={() => onOpenTypography?.()}
+                className={typeBtn}
+              >
+                🎛
+              </button>
               <div className="relative">
                 <button type="button" title="标题排版：字号 / 排列 / 装饰版式 / 序号 / 前缀（覆盖主题，导出同步）" onClick={() => togglePop('heading')} className={typeBtn}>
                   标题 {headingSize} <span className="text-[8px] text-slate-500">▾</span>

@@ -14,6 +14,8 @@ import ChatPanel from './components/ChatPanel'
 import CreationWizard, { type BrainstormSeed } from './components/wizard/CreationWizard'
 import ModifyDialog from './components/ModifyDialog'
 import PolishDialog from './components/PolishDialog'
+import TypographyPanel from './components/TypographyPanel'
+import type { ThemeOverrides } from '@shared/themeFields'
 import FigureDialog, { type FigureRequest } from './components/FigureDialog'
 import ExportPanel from './components/wizard/ExportPanel'
 import ThemeImportDialog from './components/ThemeImportDialog'
@@ -114,6 +116,8 @@ export default function App(): JSX.Element {
   const [brainstormSeed, setBrainstormSeed] = useState<BrainstormSeed | null>(null)
   // 全文优化弹窗：{} 排版优化，{ review } 按审阅报告修订
   const [polish, setPolish] = useState<{ review?: string } | null>(null)
+  // 「全量排版」面板（34 项控件）；面板本体在这里挂，编辑器工具条只给入口按钮
+  const [showTypography, setShowTypography] = useState(false)
   // 三配图管线弹窗（M6）
   const [figRequest, setFigRequest] = useState<FigureRequest | null>(null)
   // 文章转贴图：展开风格选择 / 转换进行中
@@ -638,6 +642,16 @@ export default function App(): JSX.Element {
     []
   )
 
+  /** 把当前工程生效的整套排版存成自定义主题（同名分类目录自动创建，主题库即时刷新）。
+   *  分类级调性此前只有「导入公众号文章」和「对话生成」两条路，作者手工调好的排版没法沉淀成分类主题 */
+  const handleSaveThemePreset = useCallback(
+    async (name: string) => {
+      await window.api.invoke('customTheme:save', name, articleTheme)
+      setCustomThemes(await window.api.invoke('customTheme:list'))
+      setToast(`已把当前排版存为分类主题「${name}」`)
+    },
+    [articleTheme]
+  )
   /** 源码图「改源码重渲染」→ 代码绘图弹窗编辑模式；完成后只刷图不插节点 */
   const handleEditFigureSource = useCallback((figureSource: string, desc: string) => {
     setFigRequest({
@@ -1129,6 +1143,7 @@ export default function App(): JSX.Element {
                         )}
                       </div>
                       <div className="min-h-0 flex-1 overflow-auto">
+
                         <ArticleEditor
                           key={current}
                           ref={editorRef}
@@ -1137,7 +1152,8 @@ export default function App(): JSX.Element {
                           projectDir={currentDir}
                           accent={articleTheme.accent}
                           theme={articleTheme}
-                          typography={meta ?? undefined}
+                          typography={(meta ?? {}) as ThemeOverrides}
+                          onOpenTypography={() => setShowTypography(true)}
                           uiDark={theme === 'dark'}
                           onChange={setArticle}
                           onAiModify={handleAiModify}
@@ -1359,6 +1375,17 @@ export default function App(): JSX.Element {
       )}
 
       {/* 全文优化弹窗（排版优化 / 按审阅报告修订） */}
+      <TypographyPanel
+        open={showTypography}
+        onClose={() => setShowTypography(false)}
+        theme={articleTheme}
+        overrides={(meta ?? {}) as ThemeOverrides}
+        project={current}
+        category={meta?.category}
+        onApply={handleApplyTypography}
+        onSavePreset={handleSaveThemePreset}
+      />
+
       {polish && current && (
         <PolishDialog
           article={article}

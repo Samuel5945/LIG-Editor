@@ -77,7 +77,7 @@ schema properties 与 handler 扩至 §3 全部字段；语义与现有一致：
 
 ## 7. 范围外（后续）
 
-编辑器排版设置面板不加新字段控件（新字段本期由对话/AI 调整）；自定义主题管理页增强；AI 主题效果缩略预览。
+~~编辑器排版设置面板不加新字段控件（新字段本期由对话/AI 调整）~~ —— **本条已于同日被作者推翻并实现**，见 §13 全量排版面板。仍留后的：自定义主题管理页增强；AI 主题效果缩略预览。
 
 ## 8. 测试
 
@@ -138,3 +138,13 @@ schema properties 与 handler 扩至 §3 全部字段；语义与现有一致：
 - 工程定位新增 `name` ↔ `project` 别名（14:09 实测 `get_project` 传 name 报缺参），并让被消费的 `name`/`dir` 不再被算进「不认识的参数」。
 
 活实例实测（16:16 构建，走 bridge，`test` 工程现场按原字节还原）：四色值落盘 ✓；`quote_bg`/`divider_color`/`h2_border_color` 等自造键经别名映射后 `appliedFields` 由 6 升到 9，只有产品真没有的 `hover_shadow` 进 `unknownKeys` ✓；`"2.4"`/`"28px"` 字符串数值救回 ✓；`9` → 夹到 3 并带说明 ✓；枚举外值 `bubble` 报 `droppedKeys` 且不动盘 ✓；`null` 清除干净且不再误报 ✓。
+
+## 13. 全量排版面板（同日第三轮，作者定的方向 1）
+
+作者实跑后的判断是「能改的地方还是很少，都被编辑器限制了」——量化后成立：白名单 34 个覆盖字段，编辑器工具条却只有 6 个控件（强调色 / 正文字号 / 标题字号 / 正文排列 / 标题排列 / 背景卡），剩下 28 项作者既看不见也改不动，只能靠对话；分类级调性也没有 GUI 编辑入口（只有导入文章与对话生成两条路）。
+
+落地方式是把「字段元数据」升成单一来源：新增 `shared/themeFields.ts`，34 个键逐个定义 分组 / 控件类型（color | enum | number | text）/ 枚举候选与中文标签 / 哨兵（bodyBg 去卡片、h2Num 关序号）/ step 与单位；中文名仍取 `THEME_FIELD_LABELS`，数值限位仍取 `THEME_NUM_RANGES`（本表不重复写数字）。`TypographyPanel` 完全按这张表渲染；工具条加 🎛 入口，面板本体挂 App 弹层（避免在工具条里塞 34 行 JSX）；每行显示当前生效值与「已覆盖 / 跟随主题」，单项 ↺ 写 null，底部「↺ 全部跟随主题」批量清除；「存为分类主题」把当前生效整套 `articleTheme` 经 `customTheme:save` 入库并即时刷新主题库（同名分类自动创建），补齐「作者手工调好的排版没法沉淀成分类主题」这一段。
+
+`themeFields.test.ts` 6 例把这张表钉成契约——**面板能选出来的值，能力核必然认**：34 键逐个有 spec 且不重复、分组均已登记、number 字段都能从 `THEME_NUM_RANGES` 取到限位（反之范围表里的键全为 number 型）、10 个枚举字段的候选逐个被 `sanitizeThemePatch` 原样接受且枚举外值必被拒收、color 字段接受 `#rgb`/`#rrggbb` 拒收裸色名、text 字段允许带单位字符串而空串拒收。以后加字段忘了配 spec，或 spec 与校验口径分叉，都会在这里红。
+
+同轮另修一处自己上一轮造成的静默假成功：`set_theme` 的写入循环此前按原始键名判（`k in bag`），于是别名映射出来的 `pGap` / `bodyRadius` 虽然已在归一结果里，却因 bag 没有该键而被跳过、还返回干净的 ok。改为**以归一后的键为准**写入（17:42 构建实测：一次调用里 `paragraphSpacing` / `cornerRadius` / `letterSpacing(裸数字)` / `quote_bg` / `dividerColor` 全部落盘；`paragraphSpacing: null` 走别名也能干净清除）。别名表同时补了驼峰索引——此前只登记蛇形键，所以 `paragraph_spacing` 认、`paragraphSpacing` 不认。
