@@ -24,3 +24,18 @@ export const PROJECT_STATUS_TEXT: Record<ProjectStatus, string> = {
 export function dotOfStatus(status: ProjectStatus | string | undefined): DotStatus {
   return PROJECT_DOT[status as ProjectStatus] ?? 'draft'
 }
+
+/**
+ * 选题泳道 → 圆点语义（§5.4：看板列头与工程行同套色）。
+ * 待立项=草稿黄，已立项/已排期=进行中蓝，已成稿=绿。
+ */
+export const IDEA_STAGE_DOT: Record<string, DotStatus> = {
+  idle: 'draft',
+  projected: 'doing',
+  scheduled: 'doing',
+  ready: 'done'
+}
+
+export function dotOfIdeaStage(stage: string | undefined): DotStatus {
+  return IDEA_STAGE_DOT[stage ?? ''] ?? 'draft'
+}

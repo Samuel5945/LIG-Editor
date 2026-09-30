@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useState, type ReactElement } from 'react'
 import type { IdeaCard, IdeaEntry, IdeaStage, IdeaStageInfo, ProjectSummary } from '@shared/types'
 import { IDEA_STAGES } from '@shared/ideaStage'
+import { Icon } from '../ui/Icon'
+import { StatusDot } from '../ui/primitives'
+import { dotOfIdeaStage } from '../ui/status'
 
 interface IdeaBoardProps {
   /** 外部入库后自增，变化即刷新（与左栏选题库共用同一版本号） */
@@ -103,28 +106,33 @@ export default function IdeaBoard({
                 key={meta.id}
                 className="flex min-w-0 flex-1 basis-0 flex-col rounded-md border border-panel-3 bg-panel-2"
               >
-                <div className="flex shrink-0 items-center gap-1.5 border-b border-panel-3 px-2.5 py-1.5">
-                  <span className="text-xs font-bold text-ink">{meta.label}</span>
-                  <span className="rounded bg-panel-3 px-1.5 text-[10px] text-ink-dim">{items.length}</span>
-                  <span className="truncate text-[10px] text-ink-dim" title={meta.hint}>
-                    {meta.hint}
-                  </span>
+                {/* 列头：状态色点 + 名称 + 计数（与工程行、封面墙同语义，§5.4）。
+                    说明文字不占列头宽度——窄列下会被截成「还…」，改成整列头 title 悬停给出 */}
+                <div className="flex shrink-0 items-center gap-1.5 border-b border-panel-3 px-2.5 py-2" title={meta.hint}>
+                  <StatusDot status={dotOfIdeaStage(meta.id)} title={meta.hint} />
+                  <span className="min-w-0 shrink truncate text-xs font-bold text-ink">{meta.label}</span>
+                  <span className="shrink-0 rounded-full bg-panel-3 px-1.5 py-0.5 text-[10px] text-ink-dim">{items.length}</span>
                 </div>
                 <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto p-2">
                   {items.length === 0 && <p className="px-1 py-6 text-center text-[11px] text-ink-dim">（空）</p>}
                   {items.map((idea) => {
                     const info = stages[idea.index]
                     return (
-                      <div key={idea.index} className="rounded-md border border-panel-3 bg-panel p-2">
+                      <div
+                        key={idea.index}
+                        className="group/idea rounded-xl border border-panel-3 bg-panel-2 p-2.5 shadow-[0_1px_6px_rgba(0,0,0,.18)] transition-[transform,border-color] duration-150 hover:-translate-y-px hover:border-accent"
+                      >
                         <div className="flex items-start gap-1.5">
+                          <p className="line-clamp-2 min-w-0 flex-1 text-xs font-bold leading-snug text-ink">{idea.title}</p>
+                          {/* 评分徽标统一胶囊样式（与选题卡同款，§5.3/§5.4） */}
                           <span
-                            className={`shrink-0 rounded px-1 py-0.5 text-[10px] font-bold ${
-                              idea.score >= 8 ? 'bg-green-950 text-green-400' : 'bg-panel-3 text-ink-dim'
+                            className={`shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${
+                              idea.score >= 8 ? 'bg-accent/15 text-accent' : 'bg-panel-3 text-ink-dim'
                             }`}
+                            title={`脑暴评分 ${idea.score}`}
                           >
-                            {idea.score}
+                            {idea.score} 分
                           </span>
-                          <p className="line-clamp-2 min-w-0 flex-1 text-xs font-bold text-ink">{idea.title}</p>
                         </div>
                         {idea.angle && (
                           <p className="mt-1 line-clamp-2 text-[11px] text-ink-dim">角度：{idea.angle}</p>
@@ -143,20 +151,22 @@ export default function IdeaBoard({
                             )}
                           </div>
                         )}
-                        <div className="mt-1.5 flex flex-wrap gap-1.5">
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5 opacity-0 transition-opacity duration-150 group-hover/idea:opacity-100 group-focus-within/idea:opacity-100">
                           {info?.project ? (
                             <button
                               onClick={() => onOpen(info.project as string)}
-                              className="rounded bg-accent px-2 py-0.5 text-[11px] text-white hover:opacity-90"
+                              className="inline-flex items-center gap-1 rounded-md bg-accent px-2 py-0.5 text-[11px] font-semibold text-white hover:brightness-110"
                             >
+                              <Icon name="external" size={11} />
                               打开工程
                             </button>
                           ) : (
                             <button
                               onClick={onGoSchedule}
                               title="到日历把这条选题拖到某天，一步完成立项 + 排期"
-                              className="rounded border border-panel-3 px-2 py-0.5 text-[11px] text-ink-dim hover:border-accent hover:text-accent"
+                              className="inline-flex items-center gap-1 rounded-md border border-panel-3 px-2 py-0.5 text-[11px] text-ink-dim hover:border-accent hover:text-accent"
                             >
+                              <Icon name="calendar" size={11} />
                               去日历排期
                             </button>
                           )}

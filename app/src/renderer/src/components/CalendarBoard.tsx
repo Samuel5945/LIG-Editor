@@ -158,11 +158,11 @@ export default function CalendarBoard({
       }}
       onClick={() => onOpen(p.name)}
       title={`${p.name}（${p.plannedAt ?? '未排期'}）— 点击打开，拖拽调排期`}
-      className={`group flex cursor-grab items-center gap-1 rounded px-1 py-0.5 text-[10px] leading-tight hover:bg-sky-500/10 ${
-        p.name === current ? 'bg-sky-500/15 ring-1 ring-sky-500/40' : 'bg-panel-3'
+      className={`group flex cursor-grab items-center gap-1 rounded-r px-1 py-0.5 text-[11px] leading-tight hover:bg-accent/10 ${
+        p.name === current ? 'bg-accent/15 ring-1 ring-accent/50' : 'bg-panel-3'
       } ${dragging === p.name ? 'opacity-40' : ''}`}
+      style={{ borderLeft: `4px solid rgb(var(--st-${dotOfStatus(p.status)}))` }}
     >
-      <StatusDot status={dotOfStatus(p.status)} title={p.status} />
       <span className="truncate text-ink">{p.name}</span>
       <button
         onClick={(e) => {
@@ -170,7 +170,7 @@ export default function CalendarBoard({
           void move(p.name, null)
         }}
         title="取消排期"
-        className="ml-auto hidden shrink-0 px-0.5 text-ink-dim hover:text-red-400 group-hover:block"
+        className="ml-auto hidden shrink-0 px-0.5 text-ink-dim hover:text-st-bad group-hover:block"
       >
         ×
       </button>
@@ -193,8 +193,8 @@ export default function CalendarBoard({
       }}
       onClick={() => onOpen(p.name)}
       title={`${p.name} — 点击打开，拖到日期格排期`}
-      className={`flex min-h-9 cursor-grab items-center gap-2 rounded-md border px-2 py-1.5 text-xs leading-snug hover:border-sky-500/40 hover:bg-sky-500/10 active:cursor-grabbing ${
-        p.name === current ? 'border-sky-500/40 bg-sky-500/15' : 'border-panel-3 bg-panel'
+      className={`flex min-h-9 cursor-grab items-center gap-2 rounded-md border px-2 py-1.5 text-xs leading-snug hover:border-accent/50 hover:bg-accent/10 active:cursor-grabbing ${
+        p.name === current ? 'border-accent/50 bg-accent/15' : 'border-panel-3 bg-panel'
       } ${dragging === p.name ? 'opacity-40' : ''}`}
     >
       <StatusDot status={dotOfStatus(p.status)} title={p.status} />
@@ -225,14 +225,15 @@ export default function CalendarBoard({
       }`}
     >
       <div className="flex items-center gap-2">
+        <span className="line-clamp-2 min-w-0 flex-1 font-bold leading-snug text-ink">{it.title}</span>
         <span
-          className={`shrink-0 rounded px-1.5 py-0.5 font-bold ${
-            it.score >= 8 ? 'bg-green-950 text-green-400' : 'bg-panel-3 text-ink-dim'
+          className={`shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${
+            it.score >= 8 ? 'bg-accent/15 text-accent' : 'bg-panel-3 text-ink-dim'
           }`}
+          title={`脑暴评分 ${it.score}`}
         >
-          {it.score}
+          {it.score} 分
         </span>
-        <span className="line-clamp-2 min-w-0 flex-1 font-bold text-ink">{it.title}</span>
       </div>
       {it.angle && <p className="mt-1 line-clamp-2 text-ink-dim">角度：{it.angle}</p>}
     </div>
@@ -318,12 +319,12 @@ export default function CalendarBoard({
                   onDrop={dropOn(key)}
                   className={`flex min-h-0 flex-col gap-0.5 overflow-hidden p-1 ${
                     hot
-                      ? isIdeaDrag
-                        ? 'bg-accent/15 ring-2 ring-inset ring-accent/60'
-                        : 'bg-sky-500/15 ring-2 ring-inset ring-sky-500/60'
-                      : inMonth
-                        ? 'bg-panel'
-                        : 'bg-panel-2'
+                      ? 'bg-accent/15 ring-2 ring-inset ring-accent/60'
+                      : key === today
+                        ? 'bg-panel ring-1 ring-inset ring-accent'
+                        : inMonth
+                          ? 'bg-panel'
+                          : 'bg-panel-2'
                   }`}
                 >
                   <span
@@ -348,7 +349,7 @@ export default function CalendarBoard({
         {/* 右栏：未排期工程 / 选题库，都可拖入月历（选题 = 立项 + 排期） */}
         <aside
           className={`flex w-72 shrink-0 flex-col border-l ${
-            asideHot ? 'border-l-sky-500/60 bg-sky-500/15' : 'border-l-panel-3 bg-panel-2'
+            asideHot ? 'border-l-accent bg-accent/10' : 'border-l-panel-3 bg-panel-2'
           }`}
           onDragOver={(e) => {
             e.preventDefault()
