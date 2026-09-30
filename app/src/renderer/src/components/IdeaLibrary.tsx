@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type ReactElement } from 'react'
+import { confirmAction } from '../confirm'
 import type { IdeaCard, IdeaEntry } from '@shared/types'
 
 interface IdeaLibraryProps {
@@ -28,7 +29,7 @@ export default function IdeaLibrary({ version, onMakeOutline, onToast }: IdeaLib
 
   const remove = useCallback(
     async (entry: IdeaEntry) => {
-      if (!window.confirm(`删除选题「${entry.title}」？`)) return
+      if (!(await confirmAction(`删除选题「${entry.title}」？`, { okLabel: '删除' }))) return
       await window.api.invoke('ideas:remove', entry.index)
       onToast('已删除')
       void refresh()

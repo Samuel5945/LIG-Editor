@@ -1,4 +1,4 @@
-import type { ChatMessage, WebSearchResult } from './types'
+import type { ArticleTheme, ChatMessage, WebSearchResult } from './types'
 import { PROJECT_CATEGORIES, UNCATEGORIZED } from './categories'
 
 /**
@@ -274,8 +274,12 @@ ${source.slice(0, 4000)}
   ]
 }
 
-/** 排版优化：不改内容，只整理排版（段落/小标题/重点加粗/分隔） */
-export function polishLayoutMessages(article: string, skill: string | null): ChatMessage[] {
+/** 排版优化：不改内容，只整理排版（段落/小标题/重点加粗/分隔）；视觉层可打包同一次输出 */
+export function polishLayoutMessages(
+  article: string,
+  skill: string | null,
+  theme?: ArticleTheme | null
+): ChatMessage[] {
   return [
     { role: 'system', content: systemPrompt(skill) },
     {
@@ -288,12 +292,26 @@ export function polishLayoutMessages(article: string, skill: string | null): Cha
 - 保留所有 <!-- fig-suggest: ... --> 占位行与图片语法，位置可微调到更合适的段落间
 
 ${SUBSET_RULES}
+${
+  theme
+    ? `
+【视觉层可选】当前排版调性参数如下（正文与作者都看不见它，只为让你判断是否需要微调）：
+${JSON.stringify(theme)}
+仅当你判断某个视觉参数确实更适合这篇内容时，才在全文**末尾**追加一个 <theme> 围栏，里面是单个 JSON 对象，只写需要改的键：
+<theme>
+{ "lineHeight": 2.1, "quoteStyle": "card", "pGap": 24 }
+</theme>
+可用键（值需自洽：hex 颜色如 #0f766e；lineHeight 1.5-3；pGap/imgRadius/bodyRadius 0-48/0-40/0-40；字号 10-40）：
+accent、bodyFontSize、headingFontSize、bodyAlign(indent|flush|center)、headingAlign(center|left)、h1Style(bar|pill|underline)、h2Style(leftbar|block|underline|plain)、h2Num、h3Mark(diamond|dot|none)、bodyBg(十六进制或 none)、fontFamily、lineHeight、letterSpacing(如 0.02em)、pGap、bodyText、headingColor、quoteStyle(leftbar|card|quotes|dashcard)、quoteBorder、hrStyle(line|dot|long)、strongStyle(color|highlight|plain)、strongBg、strongColor、imgRadius、bodyRadius、bodyPadding(如 '20px 22px')、tableStyle(bordered|striped|plain)、tableHeaderBg、tableBorder、tableHeaderText、h2Bg
+内容不需要动视觉层时，不要输出 <theme> 围栏——宁缺勿滥。`
+    : ''
+}
 
 <文章>
 ${article}
 </文章>
 
-直接输出排版后的全文（以 # 文章标题开头），不要任何解释或围栏。`
+直接输出排版后的全文（以 # 文章标题开头），除上述 <theme> 围栏外不要任何解释、结语或代码围栏。`
     }
   ]
 }

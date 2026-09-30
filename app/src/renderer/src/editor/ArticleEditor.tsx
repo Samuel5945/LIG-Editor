@@ -1066,13 +1066,16 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
               vars['--article-h2-display'] = 'table'
               vars['--article-h2-margin'] = t.headingAlign === 'center' ? '40px auto 16px' : '40px 0 16px'
             } else if (h2 === 'underline') {
-              vars['--article-h2-border'] = `2px solid ${accent}`
+              vars['--article-h2-border'] = `2px solid ${t.h2Border && isHexColor(t.h2Border) ? t.h2Border.trim() : accent}`
               vars['--article-h2-left'] = 'none'
               vars['--article-h2-pad'] = '0 0 8px'
             } else if (h2 === 'plain') {
               vars['--article-h2-left'] = 'none'
               vars['--article-h2-pl'] = '0'
             }
+            // leftbar 的竖条走 CSS 默认（accent），只有显式指定条色时才写变量
+            if (h2 === 'leftbar' && t.h2Border && isHexColor(t.h2Border))
+              vars['--article-h2-left'] = `4px solid ${t.h2Border.trim()}`
             // H2 文字排列：plain/underline 跟随标题排列（block 自带居中、leftbar 竖条保持左）
             if (t.headingAlign === 'center' && (h2 === 'plain' || h2 === 'underline')) {
               vars['--article-h2-text-align'] = 'center'
@@ -1098,30 +1101,36 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
             // 引用：card 圆角卡片 / quotes 引号（leftbar 用 CSS 默认左条）
             const quote = t.quoteStyle ?? 'leftbar'
             // 引用文字色按背景实际亮度：深底 → 浅字；浅色卡片 → 深字（不用灰字）
-            vars['--article-quote-color'] = c.darkBg ? '#cbd5e1' : '#333'
+            vars['--article-quote-color'] =
+              t.quoteText && isHexColor(t.quoteText) ? t.quoteText.trim() : c.darkBg ? '#cbd5e1' : '#333'
             if (quote === 'card') {
               vars['--article-quote-left'] = 'none'
               vars['--article-quote-radius'] = '12px'
               vars['--article-quote-pad'] = '14px 16px'
-              vars['--article-quote-bg'] = `color-mix(in srgb, ${accent} 12%, transparent)`
+              vars['--article-quote-bg'] = t.quoteBg && isHexColor(t.quoteBg) ? t.quoteBg.trim() : `color-mix(in srgb, ${accent} 12%, transparent)`
             } else if (quote === 'dashcard') {
               // 虚线边框提示卡：彩色 dashed 描边 + 透明底（导出端同形态）
               vars['--article-quote-left'] = 'none'
               vars['--article-quote-radius'] = '12px'
               vars['--article-quote-pad'] = '14px 16px'
               vars['--article-quote-border'] = `1px dashed ${t.quoteBorder && isHexColor(t.quoteBorder) ? t.quoteBorder : accent}`
-              vars['--article-quote-bg'] = 'transparent'
+              vars['--article-quote-bg'] = t.quoteBg && isHexColor(t.quoteBg) ? t.quoteBg.trim() : 'transparent'
             } else if (quote === 'quotes') {
               vars['--article-quote-mark'] = '❝'
             }
+            // leftbar / quotes 的浅底同样允许整体换成作者指定的引用底色
+            if ((quote === 'leftbar' || quote === 'quotes') && t.quoteBg && isHexColor(t.quoteBg))
+              vars['--article-quote-bg'] = t.quoteBg.trim()
             // 分隔线：dot 圆点列 / long 通栏细线（line 用 CSS 默认短横）
             const hr = t.hrStyle ?? 'line'
             if (hr === 'dot') {
-              vars['--article-hr-border'] = `4px dotted ${accent}`
+              vars['--article-hr-border'] = `4px dotted ${t.hrColor && isHexColor(t.hrColor) ? t.hrColor.trim() : accent}`
               vars['--article-hr-w'] = '72px'
             } else if (hr === 'long') {
               vars['--article-hr-w'] = '100%'
             }
+            if (hr !== 'dot' && t.hrColor && isHexColor(t.hrColor))
+              vars['--article-hr-border'] = `${hr === 'long' ? 1 : 2}px solid ${t.hrColor.trim()}`
             // 加粗：highlight 底色高亮 / plain 纯加粗（color 用 CSS 默认着色）
             const strong = t.strongStyle ?? 'color'
             if (strong === 'highlight') {

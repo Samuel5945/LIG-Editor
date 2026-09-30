@@ -118,6 +118,17 @@ body {
   user-select: text;
 }
 
+/* 表单控件永远可编辑可选中：body 的 user-select:none 会继承进 input/textarea，
+   没挂 .selectable 的输入框（对话输入区、各处重命名框）就落在 none 上——
+   实测计算样式确认为 none，点击落点/拖拽选字这类「选择动作」正是被禁的那一半。
+   直接命中元素的规则优先于继承值，比逐个补 .selectable 更省事也不会漏。 */
+input,
+textarea,
+select,
+[contenteditable='true'] {
+  user-select: text;
+}
+
 /* 无边框窗口：顶栏拖拽区 + 交互元素豁免 */
 .app-drag {
   -webkit-app-region: drag;

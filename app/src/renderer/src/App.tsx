@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
-import type { AppPaths, ArticleTheme, H1Style, H2Style, H2Num, H3Mark, IdeaCard, ProjectData, ProjectMeta, ProjectSummary, SkillInfo, UpdateCheckResult } from '@shared/types'
+import { confirmAction } from './confirm'
+import type { AppPaths, ArticleTheme, IdeaCard, ProjectData, ProjectMeta, ProjectSummary, SkillInfo, UpdateCheckResult } from '@shared/types'
 import { PROJECT_CATEGORIES, UNCATEGORIZED } from '@shared/categories'
-import { resolveArticleTheme } from '@shared/categoryThemes'
+import { resolveArticleTheme, sanitizeThemePatch, type ThemeOverrideKey } from '@shared/categoryThemes'
 import { CARD_FORMAT_LABEL, parseCardItems, type CardFormat } from '@shared/cards'
 import { chatOnce } from './copilot/llm'
 import { cardsMessages, categoryMessages } from './copilot/prompts'
@@ -281,7 +282,7 @@ export default function App(): JSX.Element {
   const deleteProjects = useCallback(
     async (names: string[]) => {
       if (names.length === 0) return
-      if (!window.confirm(`删除选中的 ${names.length} 个工程？\n整个文件夹（正文/素材/会话）将被移除，不可恢复。`)) return
+      if (!(await confirmAction(`删除选中的 ${names.length} 个工程？\n整个文件夹（正文/素材/会话）将被移除，不可恢复。`, { okLabel: '删除' }))) return
       let ok = 0
       for (const name of names) {
         try {
@@ -309,7 +310,7 @@ export default function App(): JSX.Element {
   /** 删除工程（确认后整目录移除；删当前工程先关闭） */
   const deleteProject = useCallback(
     async (name: string) => {
-      if (!window.confirm(`删除工程「${name}」？\n整个文件夹（正文/素材/会话）将被移除，不可恢复。`)) return
+      if (!(await confirmAction(`删除工程「${name}」？\n整个文件夹（正文/素材/会话）将被移除，不可恢复。`, { okLabel: '删除' }))) return
       try {
         if (currentRef.current === name) {
           await window.api.invoke('project:close')
@@ -618,30 +619,19 @@ export default function App(): JSX.Element {
     setMeta(m)
   }, [])
 
-  /** 排版设置落 meta：字号/排列 + 标题版式 + 背景卡（bodyBg，'none'=去卡片）；null = 删除覆盖恢复主题默认 */
+  /** 排版覆盖落 meta：30 键全量口径（与 set_theme / readMeta 同一白名单）。
+   *  值先过 sanitizeThemePatch——未知键剔除、hex 校验、数值夹取、枚举守卫，非法值等同「不动」；
+   *  null 是作者显式表态，删掉覆盖恢复主题默认；未出现的键一律不碰 */
   const handleApplyTypography = useCallback(
-    async (patch: {
-      bodyFontSize?: number | null
-      headingFontSize?: number | null
-      bodyAlign?: 'indent' | 'flush' | 'center' | null
-      headingAlign?: 'center' | 'left' | null
-      h1Style?: H1Style | null
-      h2Style?: H2Style | null
-      h2Num?: H2Num | 'none' | null
-      h3Mark?: H3Mark | null
-      bodyBg?: string | null
-    }) => {
+    async (patch: Partial<Record<ThemeOverrideKey, string | number | null>>) => {
       if (!currentRef.current) throw new Error('先打开工程')
       const m = await window.api.invoke('project:readMeta', currentRef.current)
-      if ('bodyFontSize' in patch) m.bodyFontSize = patch.bodyFontSize ?? undefined
-      if ('headingFontSize' in patch) m.headingFontSize = patch.headingFontSize ?? undefined
-      if ('bodyAlign' in patch) m.bodyAlign = patch.bodyAlign ?? undefined
-      if ('headingAlign' in patch) m.headingAlign = patch.headingAlign ?? undefined
-      if ('h1Style' in patch) m.h1Style = patch.h1Style ?? undefined
-      if ('h2Style' in patch) m.h2Style = patch.h2Style ?? undefined
-      if ('h2Num' in patch) m.h2Num = patch.h2Num ?? undefined
-      if ('h3Mark' in patch) m.h3Mark = patch.h3Mark ?? undefined
-      if ('bodyBg' in patch) m.bodyBg = patch.bodyBg ?? undefined
+      const bag = m as unknown as Record<string, unknown>
+      const clean = sanitizeThemePatch(patch as Record<string, unknown>) as Record<string, unknown>
+      for (const k of Object.keys(patch)) {
+        if (patch[k as ThemeOverrideKey] === null) bag[k] = undefined
+        else if (clean[k] !== undefined) bag[k] = clean[k]
+      }
       await window.api.invoke('project:writeMeta', currentRef.current, m)
       setMeta(m)
     },
@@ -1281,7 +1271,7 @@ export default function App(): JSX.Element {
           style={rightCollapsed ? undefined : { width: rightW }}
         >
         {/* 右栏：AI 对话副驾驶（脑暴/审阅已并入中栏创作向导） */}
-        <aside className="flex w-full min-w-0 flex-col border-l border-panel-3 bg-panel-2">
+        <aside className="flex min-h-0 w-full min-w-0 flex-col border-l border-panel-3 bg-panel-2">
           <div data-tour="right-tabs" className="flex h-9 shrink-0 items-center gap-1 border-b border-panel-3 px-3 text-xs">
             <span className="text-ink">对话</span>
             {/* Skill 挂载：注入系统提示（作用范围=对话；向导各步按任务类型自动推荐挂载） */}
@@ -1310,6 +1300,9 @@ export default function App(): JSX.Element {
               skill={skillContent}
               onToast={setToast}
               onSkillsChanged={refreshSkills}
+              onCustomThemesChanged={() => {
+                void window.api.invoke('customTheme:list').then(setCustomThemes)
+              }}
               onApplyAccent={async (color) => {
                 // 贴图面板在向导贴图步常驻挂载：等 ref 就绪再应用
                 setCenterTab('create')
@@ -1371,10 +1364,19 @@ export default function App(): JSX.Element {
           article={article}
           skill={skillContent}
           review={polish.review}
-          onConfirm={(result) => {
+          theme={articleTheme}
+          onConfirm={(result, themePatch) => {
             setArticle(result)
             setPolish(null)
-            setToast(polish.review ? '审阅修订已应用' : '新排版已应用')
+            if (!themePatch) {
+              setToast(polish.review ? '审阅修订已应用' : '新排版已应用')
+              return
+            }
+            // 打包应用：正文进编辑器（唯一事实源，自动保存接管），视觉参数落 meta 后调性即时重算
+            void handleApplyTypography(themePatch).then(
+              () => setToast('新排版与视觉参数已应用'),
+              (err) => setToast(`排版已应用，视觉参数失败：${err instanceof Error ? err.message : err}`)
+            )
           }}
           onClose={() => setPolish(null)}
         />

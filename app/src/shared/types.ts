@@ -63,6 +63,14 @@ export interface ArticleTheme {
   quoteStyle?: QuoteStyle
   /** dashcard 引用的边框色（虚线提示卡的彩色描边） */
   quoteBorder?: string
+  /** 引用区底色（不设=按 accent 派生浅底；模型常写作 quote_bg / quote_background） */
+  quoteBg?: string
+  /** 引用文字色（不设=按昼夜与背景亮度自适应；常写作 quote_text_color） */
+  quoteText?: string
+  /** 分隔线颜色（不设=中性灰；常写作 divider_color / hr_color） */
+  hrColor?: string
+  /** H2 左条/下划线颜色（不设=跟随 accent；常写作 h2_border_color） */
+  h2Border?: string
   /** 分隔线：line 居中短横 / dot 圆点列 / long 通栏细线 */
   hrStyle?: HrStyle
   /** 加粗强调：color 着色 / highlight 底色高亮 / plain 纯黑加粗 */
@@ -155,6 +163,14 @@ export interface ProjectMeta {
   quoteStyle?: QuoteStyle
   /** 虚线引用卡边框色覆盖（十六进制） */
   quoteBorder?: string
+  /** 引用区底色覆盖（十六进制）；不设=按 accent 派生浅底 */
+  quoteBg?: string
+  /** 引用文字色覆盖（十六进制）；不设=按昼夜自适应 */
+  quoteText?: string
+  /** 分隔线颜色覆盖（十六进制）；不设=中性灰 */
+  hrColor?: string
+  /** H2 左条/下划线色覆盖（十六进制）；不设=跟随 accent */
+  h2Border?: string
   /** 分隔线形态覆盖：line 居中短横 / dot 圆点列 / long 通栏细线 */
   hrStyle?: HrStyle
   /** 加粗强调覆盖：color 着色 / highlight 底色高亮 / plain 纯黑加粗 */
@@ -516,6 +532,10 @@ export interface UpdateCheckResult {
 export interface IpcApi {
   'app:getPaths': () => AppPaths
   'app:ping': () => string
+  /** 破坏性操作的确认：主进程弹**父窗口模态**的原生问答框。
+   *  替代渲染层 window.confirm——后者不带父窗口，Windows 上关掉后焦点不回 BrowserWindow，
+   *  表现是之后页面里点了没反应（切到别的窗口再切回来才恢复），删除会话就是这么撞出来的 */
+  'dialog:confirm': (message: string, title?: string, okLabel?: string) => Promise<boolean>
   /** 拖拽/关联打开的 .md：workspace 内命中已有工程则打开，外部 md 导入为新工程 */
   'md:openFile': (absPath: string) => OpenMdResult
   /** 渲染层挂载后拉取启动期积压的 .md 路径（此后改走 md:open-request 推送） */

@@ -314,7 +314,7 @@ export default function TitleCoverPanel({
   const titles = [...(meta.titles ?? [])].sort((a, b) => b.score - a.score)
 
   return (
-    <div className="selectable flex-1 overflow-auto p-4 text-xs">
+    <div className="selectable min-h-0 flex-1 overflow-auto p-4 text-xs">
       {/* ---- 标题候选 ---- */}
       <div className="mb-2 flex items-center gap-2">
         <h3 className="text-sm font-bold text-ink">标题候选</h3>

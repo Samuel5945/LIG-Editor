@@ -1,4 +1,4 @@
-import { ipcMain, BrowserWindow, shell, app } from 'electron'
+import { ipcMain, BrowserWindow, shell, app, dialog } from 'electron'
 import { existsSync } from 'fs'
 import { join, resolve } from 'path'
 import type { IpcApi, IpcEvents, IpcEventChannel, McpAccessCard } from '@shared/types'
@@ -87,6 +87,27 @@ export function registerIpc(): void {
     else w.maximize()
   })
   handle('win:close', () => targetWin()?.close())
+
+  /** 破坏性操作确认：带父窗口的原生问答框。
+   *  渲染层 window.confirm 在 Windows 上关掉后焦点不回到 BrowserWindow，
+   *  之后页面里点了没反应（切出窗口再切回才恢复）——删除会话实测命中，故统一走这里 */
+  handle('dialog:confirm', async (message, title, okLabel) => {
+    const w = targetWin()
+    if (!w) return false
+    // message 是加粗主句，换行后的说明放 detail，免得原生框里挤成一段
+    const [head, ...rest] = message.split('\n')
+    const { response } = await dialog.showMessageBox(w, {
+      type: 'warning',
+      title: title ?? '需要确认',
+      message: head,
+      detail: rest.join('\n').trim() || undefined,
+      buttons: [okLabel ?? '确定', '取消'],
+      defaultId: 0,
+      cancelId: 1,
+      noLink: true
+    })
+    return response === 0
+  })
 
   // ---- 工程管理（M2）----
   handle('project:list', () => store.listProjects())

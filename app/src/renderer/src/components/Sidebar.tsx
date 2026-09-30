@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react'
+import { confirmAction } from '../confirm'
 import type { AppPaths, IdeaCard, ProjectAssets, ProjectSummary, SkillInfo } from '@shared/types'
 import { UNCATEGORIZED } from '@shared/categories'
 import { groupProjectsByCategory } from '@shared/workTree'
+import { shouldSubmitOnEnter } from '@shared/imeEnter'
 import HoverScrollName from './HoverScrollName'
 import IdeaLibrary from './IdeaLibrary'
 
@@ -363,7 +365,7 @@ export default function Sidebar(props: SidebarProps): ReactElement {
 
   const removeSkill = useCallback(
     async (name: string) => {
-      if (!window.confirm(`删除 Skill「${name}」？整个目录将被移除，不可恢复。`)) return
+      if (!(await confirmAction(`删除 Skill「${name}」？\n整个目录将被移除，不可恢复。`, { okLabel: '删除' }))) return
       await window.api.invoke('skill:remove', name)
       onSkillsChanged()
       onToast('已删除')
@@ -438,7 +440,7 @@ export default function Sidebar(props: SidebarProps): ReactElement {
                 value={renameVal}
                 onChange={(e) => setRenameVal(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') void submitRename(p.name)
+                  if (shouldSubmitOnEnter(e, { allowShift: true })) void submitRename(p.name)
                   if (e.key === 'Escape') {
                     setRenamingFor(null)
                     setRenameVal('')
@@ -630,7 +632,7 @@ export default function Sidebar(props: SidebarProps): ReactElement {
                   value={newCatName}
                   onChange={(e) => setNewCatName(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter' && newCatName.trim()) {
+                    if (shouldSubmitOnEnter(e, { allowShift: true }) && newCatName.trim()) {
                       onApplyCategory(p.name, newCatName.trim())
                       setNewCatFor(null)
                       setNewCatName('')
@@ -844,7 +846,7 @@ export default function Sidebar(props: SidebarProps): ReactElement {
                         value={newName}
                         onChange={(e) => setNewName(e.target.value)}
                         onKeyDown={(e) => {
-                          if (e.key === 'Enter') createIn(g.category)
+                          if (shouldSubmitOnEnter(e, { allowShift: true })) createIn(g.category)
                           if (e.key === 'Escape') {
                             setCreatingFor(null)
                             setNewName('')
@@ -891,7 +893,7 @@ export default function Sidebar(props: SidebarProps): ReactElement {
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') createIn(filterCat === 'all' ? undefined : filterCat)
+                if (shouldSubmitOnEnter(e, { allowShift: true })) createIn(filterCat === 'all' ? undefined : filterCat)
                 if (e.key === 'Escape') {
                   setCreatingFor(null)
                   setNewName('')

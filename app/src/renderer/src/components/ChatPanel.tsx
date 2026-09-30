@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react'
+import { confirmAction } from '../confirm'
 import type {
   ChatMessage,
   ChatSessionMeta,
@@ -11,6 +12,7 @@ import type {
   WebSearchResult
 } from '@shared/types'
 import { buildToolSchemas, inventoryFor, parseTextToolCalls } from '@shared/llmText'
+import { expandWrapperCalls, normalizeToolArgs } from '@shared/toolArgs'
 import { extractInlineContent, parseSkillDirective } from '@shared/skillInstall'
 import { cardsPlainText, parseAccentDirective } from '@shared/cards'
 import { parseArticleUpdate } from '@shared/articleUpdate'
@@ -18,6 +20,7 @@ import { chatOnceWithTools, type ChatRoundResult } from '../copilot/llm'
 import { chatContext, freeChatSystemPrompt, webContext } from '../copilot/prompts'
 import { extractFileText } from '../copilot/material'
 import { parseAccentIntent } from '@shared/accentIntent'
+import { shouldSubmitOnEnter } from '@shared/imeEnter'
 
 /** 从消息 content（可能是多模态数组）提取纯文本（渲染/标题/解析用） */
 function contentText(content: string | ContentPart[]): string {
@@ -49,6 +52,7 @@ const TOOL_LABELS: Record<string, string> = {
   save_review: '写入审阅报告',
   set_titles: '写入标题候选',
   set_theme: '调整排版参数',
+  save_theme_preset: '保存分类主题',
   render_figure: '渲染图表',
   generate_image: 'AI 生图',
   import_image: '导入图片',
@@ -56,6 +60,7 @@ const TOOL_LABELS: Record<string, string> = {
   schedule_set: '设置排期',
   export_html: '导出 HTML',
   export_docx: '导出 Word',
+  export_pdf: '导出 PDF',
   push_draft: '推送公众号草稿',
   push_cards: '推送贴图草稿'
 }
@@ -85,10 +90,13 @@ async function currentModelKey(): Promise<string> {
 }
 
 /** 工具清单（发给 API 的原生 tools 参数用；文本协议模式下同样靠它生成提示里的名单） */
+const schemaByName = new Map<string, unknown>()
+
 async function getToolRegistry(): Promise<ChatToolSchema[]> {
   if (cachedChatTools) return cachedChatTools
   try {
     cachedChatTools = buildToolSchemas(await window.api.invoke('agent:listTools'))
+    for (const t of cachedChatTools) schemaByName.set(t.function.name, t.function.parameters)
   } catch {
     // 取不到清单（主进程异常等）就当没有工具，本轮纯文本
   }
@@ -149,7 +157,7 @@ function summarizeToolResult(r: { ok: boolean; result?: unknown; error?: string 
 /** 工具守则：注入系统提示（当前工程 + 补丁优先 + 一次一个工具 + 围栏降级协议）。
  *  inventory 由调用方按通路决定——原生 tools 能下发的模型不再重复列清单 */
 function toolsGuardrail(project: string | null, inventory: string): string {
-  return `\n\n<工具守则>\n${project ? `当前工程：「${project}」，涉及它的操作默认对它执行，但每个调用仍要显式带上 project=「${project}」。` : '当前未打开工程：需要工程参数时先 list_projects 查询，或先 create_project 立项再用它返回的工程名；写入类工具（write_article / patch_article / set_titles 等）一律要显式带 project，省略即失败。'}\n改正文优先用 patch_article（patches 传数组：[{"old":"原文唯一片段","new":"替换后文本"}]，old 须与正文逐字一致且全文唯一）；新写的整篇文章落成正文用 write_article（必须同时带 project 与 content），写前先读原文；已有正文的局部改动只用 patch_article，整篇重写或大幅调整走 article-update 围栏由作者在确认卡片里应用。\\n工程名照抄 list_projects / create_project 返回的 name 即可，标点变体（半角冒号、引号换成「」等）系统会自动归一匹配；名字里带奇怪标点时改传 dir（工程绝对路径）最稳。\n一次只调用一个工具，等结果返回再决定下一步；结论要基于工具结果而非猜测。${inventory}\n用户想把你脑暴/撰写的内容落成工程：create_project（起简洁工程名）→ write_article 写入全文，完成后明确告知用户已落到哪个工程；只想存选题灵感时用 save_ideas。\n工具结果未确认成功前，不得声称已完成写入；工具失败时按返回的原因改正参数再试一次，仍失败就如实说明哪一步没做成、需要用户补什么，不得说「已完成」。\n若无法原生调用工具，改用文本协议发起（每次一个）：\n\`\`\`tool-call\n{"name": "工具名", "arguments": { 参数 }}\n\`\`\`\n或 <tool_call><function=工具名><parameter=参数名>值（可多行）</parameter></function></tool_call>。\n</工具守则>`
+  return `\n\n<工具守则>\n${project ? `当前工程：「${project}」，涉及它的操作默认对它执行，但每个调用仍要显式带上 project=「${project}」。` : '当前未打开工程：需要工程参数时先 list_projects 查询，或先 create_project 立项再用它返回的工程名；写入类工具（write_article / patch_article / set_titles 等）一律要显式带 project，省略即失败。'}\n改正文优先用 patch_article（patches 传数组：[{"old":"原文唯一片段","new":"替换后文本"}]，old 须与正文逐字一致且全文唯一）；新写的整篇文章落成正文用 write_article（必须同时带 project 与 content），写前先读原文；已有正文的局部改动只用 patch_article，整篇重写或大幅调整走 article-update 围栏由作者在确认卡片里应用。\\n工程名照抄 list_projects / create_project 返回的 name 即可，标点变体（半角冒号、引号换成「」等）系统会自动归一匹配；名字里带奇怪标点时改传 dir（工程绝对路径）最稳。\n排版类请求分两层，两层常要连用：文本结构（分段、小标题、加粗、引用）用 patch_article，视觉参数（行距、字距、字体、段间距、引用形态、分隔线形态、加粗形态、圆角、内边距、表格样式、各类配色——set_theme 的 30 个字段全覆盖）用 set_theme；作者说「排版太挤」「不够醒目」「换个气质」时先看视觉层能不能解决，不要只动文字。\n作者要为某个分类设计整套排版主题 → 输出完整主题 JSON 调 save_theme_preset（accent 必填十六进制，其余字段按白名单口径给），保存即生效，该分类下的工程自动套用。\n工具返回里带 hint / ignoredKeys / unknownKeys 时（数值被夹取、键名不认识被忽略、只写入部分字段），必须把这些原样转述给用户，禁止把部分生效说成整套完成；用户给的值被改动过时，明确说出「你要的是 X，实际按 Y 生效」。\n一次只调用一个工具，等结果返回再决定下一步；结论要基于工具结果而非猜测。${inventory}\n用户想把你脑暴/撰写的内容落成工程：create_project（起简洁工程名）→ write_article 写入全文，完成后明确告知用户已落到哪个工程；只想存选题灵感时用 save_ideas。\n工具结果未确认成功前，不得声称已完成写入；工具失败时按返回的原因改正参数再试一次，仍失败就如实说明哪一步没做成、需要用户补什么，不得说「已完成」。\n若无法原生调用工具，改用文本协议发起（每次一个）：\n\`\`\`tool-call\n{"name": "工具名", "arguments": { 参数 }}\n\`\`\`\n或 <tool_call><function=工具名><parameter=参数名>值（可多行）</parameter></function></tool_call>。\n</工具守则>`
 }
 
 /** 经主进程执行单个工具，返回给模型的文本结果（成功给内容/失败给原因） */
@@ -162,7 +170,7 @@ async function runToolCall(tc: ToolCallInfo): Promise<string> {
 function ToolCardView({ card }: { card: ToolCardState }): ReactElement {
   const [open, setOpen] = useState(false)
   return (
-    <div className="max-w-[90%] rounded border border-panel-3 bg-panel-2 px-2 py-1 text-[11px]">
+    <div className="max-w-[90%] break-words rounded border border-panel-3 bg-panel-2 px-2 py-1 text-[11px]">
       <button onClick={() => setOpen((v) => !v)} className="flex w-full items-center gap-1.5 text-left">
         <span>{card.status === 'running' ? '⏳' : card.status === 'done' ? '✅' : '✗'}</span>
         <span className="shrink-0 text-ink">{TOOL_LABELS[card.name] ?? card.name}</span>
@@ -187,6 +195,8 @@ interface ChatPanelProps {
   onToast: (msg: string) => void
   /** 对话安装 Skill 成功后通知 App 重拉挂载列表 */
   onSkillsChanged: () => void
+  /** AI 生成整套主题入库（save_theme_preset 成功）后通知 App 重拉自定义主题列表，主题库即时生效 */
+  onCustomThemesChanged?: () => void
   /** 对话换强调色确认后经 App 转发 CardsPanel.setAccent（仅贴图形态可用） */
   onApplyAccent?: (color: string | null) => Promise<void>
   /** 对话换文章强调色确认后经 App 写 meta.accent（仅文章形态可用） */
@@ -223,6 +233,7 @@ export default function ChatPanel({
   skill,
   onToast,
   onSkillsChanged,
+  onCustomThemesChanged,
   onApplyAccent,
   onApplyArticleAccent,
   onApplyArticle,
@@ -307,7 +318,7 @@ export default function ChatPanel({
   /** 删除当前会话：已落盘的删文件，未落盘的（临时对话）直接清空重开 */
   const deleteSession = useCallback(async () => {
     if (sessionId) {
-      if (!window.confirm('删除当前会话？删除后不可恢复')) return
+      if (!(await confirmAction('删除当前会话？\n会话文件将被移除，不可恢复。', { okLabel: '删除' }))) return
       try {
         await window.api.invoke('chat:delete', chatBucket, sessionId)
         onToast('会话已删除')
@@ -652,9 +663,13 @@ export default function ChatPanel({
             ? { calls: [] as ToolCallInfo[], cleaned: res.text }
             : parseTextToolCalls(res.text)
           if (res.toolCalls?.length && !nativeProven(modelKey)) markNativeProven(modelKey)
-          const roundCalls: ToolCallInfo[] = res.toolCalls?.length
-            ? res.toolCalls
-            : textCalls.calls.map((c, k) => ({ id: `text_${round}_${k}`, name: c.name, arguments: c.arguments }))
+          // 入参统一归一后再入历史与执行（原生与文本协议两条路同一口径）：
+          // 模型爱写 line_height / 把数组写成 JSON 字符串，不归一的表现是工具报成功而 meta 没写
+          const roundCalls: ToolCallInfo[] = expandWrapperCalls(
+            res.toolCalls?.length
+              ? res.toolCalls
+              : textCalls.calls.map((c, k) => ({ id: `text_${round}_${k}`, name: c.name, arguments: c.arguments }))
+          ).map((tc) => ({ ...tc, arguments: normalizeToolArgs(tc.arguments, schemaByName.get(tc.name)) }))
           lastText = textCalls.cleaned
           if (!roundCalls.length) break
           // 模型要调工具：assistant(tool_calls) 入 API 历史，逐个按确认分层执行
@@ -681,6 +696,9 @@ export default function ChatPanel({
             const summary = await runToolCall(tc)
             const ok = !summary.startsWith('失败：')
             finishToolCard(cardIdx, ok, summary)
+            // AI 生成的整套主题入库：立刻让 App 重拉自定义主题列表，
+            // 作者不用重开应用就能在该分类的调性下拉里看到它（新分类目录也会随 workspace:changed 出现）
+            if (ok && tc.name === 'save_theme_preset') onCustomThemesChanged?.()
             history.push({ role: 'tool', tool_call_id: tc.id, content: summary })
             if (!PUSH_TOOLS.includes(tc.name)) outcomes.set(tc.name, ok)
             // 连续两次工具失败：停止重试，让模型向用户询问缺失信息而不是死循环
@@ -741,7 +759,7 @@ export default function ChatPanel({
         abortRef.current = null
       }
     },
-    [input, streaming, messages, skill, webOn, onToast, persist, resolveCard, buildContext, attachImages, attachDocs, format, onApplyAccent, onApplyArticleAccent]
+    [input, streaming, messages, skill, webOn, onToast, persist, resolveCard, buildContext, attachImages, attachDocs, format, onApplyAccent, onApplyArticleAccent, onCustomThemesChanged]
   )
 
   const abort = useCallback(() => abortRef.current?.(), [])
@@ -787,8 +805,9 @@ export default function ChatPanel({
         </button>
       </div>
 
-      {/* 消息区 */}
-      <div ref={listRef} className="selectable flex-1 overflow-auto p-3 text-xs">
+      {/* 消息区：min-h-0 是必须的——flex 项默认 min-height:auto 不肯缩到内容以下，
+          长会话会把下方输入区顶出右栏（外层 overflow-hidden 直接裁掉），表现就是「切换会话后对话框点不动」 */}
+      <div ref={listRef} className="selectable min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-3 text-xs">
         {messages.length === 0 && (
           <div>
             <p className="mb-2 text-ink-dim">
@@ -842,7 +861,7 @@ export default function ChatPanel({
           return (
             <div key={i} className={`mb-2 flex flex-col ${m.role === 'user' ? 'items-end' : 'items-start'}`}>
               <div
-                className={`max-w-[90%] whitespace-pre-wrap rounded-lg px-2.5 py-1.5 leading-5 ${
+                className={`max-w-[90%] whitespace-pre-wrap break-words rounded-lg px-2.5 py-1.5 leading-5 ${
                   m.role === 'user' ? 'bg-accent/20 text-ink' : 'bg-panel-3 text-ink'
                 }`}
               >
@@ -862,7 +881,7 @@ export default function ChatPanel({
               {articleParsed?.update !== undefined && (
                 <div className="mt-1 max-w-[90%] rounded-lg border border-panel-3 bg-panel-2 px-2.5 py-2">
                   <p className="font-medium text-ink">📝 修改正文（{articleParsed.update.length} 字）</p>
-                  <p className="mt-0.5 line-clamp-3 whitespace-pre-wrap text-ink-dim">
+                  <p className="mt-0.5 line-clamp-3 whitespace-pre-wrap break-words text-ink-dim">
                     {articleParsed.update.slice(0, 120)}…
                   </p>
                   {format !== 'article' || !onApplyArticle ? (
@@ -1034,8 +1053,8 @@ export default function ChatPanel({
         </div>
       )}
 
-      {/* 输入区 */}
-      <div className="border-t border-panel-3 p-2">
+      {/* 输入区（shrink-0：附件预览条再高也不许被压，消息区该让的是自己那一份高度） */}
+      <div className="shrink-0 border-t border-panel-3 p-2">
         {/* 附件预览条 */}
         {(attachImages.length > 0 || attachDocs.length > 0) && (
           <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
@@ -1063,10 +1082,11 @@ export default function ChatPanel({
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault()
-              send()
-            }
+            // 组合中的 Enter 是「确认候选词上屏」，不是提交：早先按 e.key==='Enter' 直接发送，
+            // 中文打一句按回车确认候选，半截拼音就被当成消息发出去并清空输入框（表现为「对话框偶尔打不了字」）
+            if (!shouldSubmitOnEnter(e)) return
+            e.preventDefault()
+            void send()
           }}
           placeholder="自由对话，Enter 发送（可附带图片/文档）"
           className="w-full resize-none rounded bg-panel-3 p-2 text-xs text-ink outline-none placeholder:text-ink-dim"

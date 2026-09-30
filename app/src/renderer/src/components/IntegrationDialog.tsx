@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState, type ReactElement } from 'react'
+import { confirmAction } from '../confirm'
 import type { McpAccessCard, SkillInfo } from '@shared/types'
+import { shouldSubmitOnEnter } from '@shared/imeEnter'
 import type { WechatAccount, WechatConfig } from '@shared/wechatIpc'
 
 /**
@@ -137,7 +139,7 @@ export default function IntegrationDialog({
 
   const deleteSkill = useCallback(
     async (s: SkillInfo) => {
-      if (!window.confirm(`删除 Skill「${s.name}」？\n整个目录将被移除，不可恢复。`)) return
+      if (!(await confirmAction(`删除 Skill「${s.name}」？\n整个目录将被移除，不可恢复。`, { okLabel: '删除' }))) return
       try {
         await window.api.invoke('skill:remove', s.name)
         await refreshSkills()
@@ -372,7 +374,7 @@ export default function IntegrationDialog({
                   value={importPath}
                   onChange={(e) => setImportPath(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter') doImport()
+                    if (shouldSubmitOnEnter(e, { allowShift: true })) doImport()
                   }}
                   placeholder="粘贴 SKILL.md 文件或其所在文件夹的绝对路径"
                   className="min-w-0 flex-1 rounded bg-slate-800 px-2 py-1.5 text-slate-200 outline-none placeholder:text-slate-500"

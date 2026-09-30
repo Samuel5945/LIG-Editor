@@ -1,5 +1,6 @@
 import { useMemo, useState, type ReactElement } from 'react'
 import { parseThemeFromHtml, type ParsedTheme } from '@shared/themeParse'
+import { shouldSubmitOnEnter } from '@shared/imeEnter'
 import { mdToDoc } from '@shared/markdown'
 import { docToExportHtml } from '@shared/exportHtml'
 import type { ArticleTheme } from '@shared/types'
@@ -115,7 +116,7 @@ export default function ThemeImportDialog({ onClose, onSaved, onToast }: Props):
               <input
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && void fetchUrl()}
+                onKeyDown={(e) => shouldSubmitOnEnter(e, { allowShift: true }) && void fetchUrl()}
                 placeholder="公众号文章链接（可选）"
                 className={inputCls}
               />

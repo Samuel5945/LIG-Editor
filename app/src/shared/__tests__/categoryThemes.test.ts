@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { resolveArticleTheme, DEFAULT_THEME } from '../categoryThemes'
+import {
+  clampThemeNumbers,
+  metaPatchToThemeKeys,
+  normalizeThemeKeys,
+  resolveArticleTheme,
+  sanitizeThemePatch,
+  sanitizeThemePatchDetailed,
+  THEME_NUM_RANGES,
+  THEME_OVERRIDE_KEYS,
+  DEFAULT_THEME
+} from '../categoryThemes'
 import type { ArticleTheme } from '../types'
 
 /** 带独立标题色/加粗色的自定义主题（模拟导入排版产物） */
@@ -145,5 +155,391 @@ describe('resolveArticleTheme（背景卡覆盖）', () => {
   it('无卡片主题覆盖 hex → 有卡片（深浅字色由渲染层兜底自适应）', () => {
     const t = resolveArticleTheme({ category: '情感回忆', bodyBg: '#fff0f0' })
     expect(t.bodyBg).toBe('#fff0f0')
+  })
+})
+
+// ---- B 期视觉层放开（20 新字段）：spec 2026-09-30-ai-typography-design §8.1 ----
+
+/** 20 个新字段都给了主题原值，「回落主题默认」才测得出来（DEFAULT_THEME 里这些键是 undefined） */
+const visualBase: ArticleTheme = {
+  ...DEFAULT_THEME,
+  fontFamily: 'serif-base',
+  lineHeight: 1.8,
+  letterSpacing: '0.05em',
+  pGap: 20,
+  bodyText: '#111111',
+  headingColor: '#222222',
+  quoteStyle: 'leftbar',
+  quoteBorder: '#333333',
+  quoteBg: '#eeeeee',
+  quoteText: '#444444',
+  hrColor: '#555555',
+  h2Border: '#666666',
+  hrStyle: 'line',
+  strongStyle: 'color',
+  strongBg: '#444444',
+  strongColor: '#555555',
+  imgRadius: 8,
+  bodyRadius: 12,
+  bodyPadding: '16px',
+  tableStyle: 'plain',
+  tableHeaderBg: '#666666',
+  tableBorder: '#777777',
+  tableHeaderText: '#888888',
+  h2Bg: '#999999'
+}
+
+type VisualMeta = Parameters<typeof resolveArticleTheme>[0]
+
+const withBase = (meta: VisualMeta): ArticleTheme =>
+  resolveArticleTheme({ category: 'B期', ...meta } as VisualMeta, { B期: visualBase })
+
+describe('resolveArticleTheme（B 期 20 视觉字段：合法覆盖）', () => {
+  it('逐字段覆盖生效并出现在最终主题里', () => {
+    const t = withBase({
+      fontFamily: '"LXGW WenKai", serif',
+      lineHeight: 2.4,
+      letterSpacing: '0.08em',
+      pGap: 32,
+      bodyText: '#2b2b2b',
+      headingColor: '#0f766e',
+      quoteStyle: 'card',
+      quoteBorder: '#14b8a6',
+      quoteBg: '#fdf2f8',
+      quoteText: '#831843',
+      hrColor: '#7c3aed',
+      h2Border: '#0ea5e9',
+      hrStyle: 'dot',
+      strongStyle: 'highlight',
+      strongBg: '#fde68a',
+      strongColor: '#b45309',
+      imgRadius: 20,
+      bodyRadius: 18,
+      bodyPadding: '22px 24px',
+      tableStyle: 'striped',
+      tableHeaderBg: '#0ea5e9',
+      tableBorder: '#e5e7eb',
+      tableHeaderText: '#ffffff',
+      h2Bg: '#f0fdf4'
+    })
+    expect(t).toMatchObject({
+      fontFamily: '"LXGW WenKai", serif',
+      lineHeight: 2.4,
+      letterSpacing: '0.08em',
+      pGap: 32,
+      bodyText: '#2b2b2b',
+      headingColor: '#0f766e',
+      quoteStyle: 'card',
+      quoteBorder: '#14b8a6',
+      quoteBg: '#fdf2f8',
+      quoteText: '#831843',
+      hrColor: '#7c3aed',
+      h2Border: '#0ea5e9',
+      hrStyle: 'dot',
+      strongStyle: 'highlight',
+      strongBg: '#fde68a',
+      strongColor: '#b45309',
+      imgRadius: 20,
+      bodyRadius: 18,
+      bodyPadding: '22px 24px',
+      tableStyle: 'striped',
+      tableHeaderBg: '#0ea5e9',
+      tableBorder: '#e5e7eb',
+      tableHeaderText: '#ffffff',
+      h2Bg: '#f0fdf4'
+    })
+  })
+
+  it('未覆盖的字段跟随主题，一个都不被清掉', () => {
+    const t = withBase({ lineHeight: 2.2 })
+    expect(t.lineHeight).toBe(2.2)
+    expect(t.pGap).toBe(20)
+    expect(t.imgRadius).toBe(8)
+    expect(t.tableStyle).toBe('plain')
+    expect(t.h2Bg).toBe('#999999')
+    expect(t.fontFamily).toBe('serif-base')
+  })
+
+  it('0 是合法覆盖值，不被真值短路当成「未覆盖」（段间距 0 / 图片方角）', () => {
+    const t = withBase({ pGap: 0, imgRadius: 0, bodyRadius: 0 })
+    expect(t.pGap).toBe(0)
+    expect(t.imgRadius).toBe(0)
+    expect(t.bodyRadius).toBe(0)
+  })
+})
+
+describe('resolveArticleTheme（B 期视觉字段：越界夹取与非法回落）', () => {
+  it('数值越界夹到区间端点', () => {
+    expect(withBase({ lineHeight: 9 }).lineHeight).toBe(3)
+    expect(withBase({ lineHeight: 0.5 }).lineHeight).toBe(1.5)
+    expect(withBase({ pGap: 400 }).pGap).toBe(48)
+    expect(withBase({ imgRadius: 99 }).imgRadius).toBe(40)
+    expect(withBase({ bodyRadius: -5 }).bodyRadius).toBe(0)
+  })
+
+  it('非法 hex / 枚举外值 / 空串 → 回落主题原值（不写坏覆盖）', () => {
+    expect(withBase({ bodyText: 'deepgrey' }).bodyText).toBe('#111111')
+    expect(withBase({ quoteBorder: '#12345' }).quoteBorder).toBe('#333333')
+    expect(withBase({ h2Bg: 'red' }).h2Bg).toBe('#999999')
+    expect(withBase({ quoteStyle: 'bubble' as ArticleTheme['quoteStyle'] }).quoteStyle).toBe('leftbar')
+    expect(withBase({ hrStyle: 'wavy' as ArticleTheme['hrStyle'] }).hrStyle).toBe('line')
+    expect(withBase({ strongStyle: 'glow' as ArticleTheme['strongStyle'] }).strongStyle).toBe('color')
+    expect(withBase({ tableStyle: 'gradient' as ArticleTheme['tableStyle'] }).tableStyle).toBe('plain')
+    expect(withBase({ quoteBg: 'pink' }).quoteBg).toBe('#eeeeee')
+    expect(withBase({ quoteText: '#12345' }).quoteText).toBe('#444444')
+    expect(withBase({ hrColor: '  ' }).hrColor).toBe('#555555')
+    expect(withBase({ h2Border: 123 as unknown as string }).h2Border).toBe('#666666')
+    expect(withBase({ fontFamily: '   ' }).fontFamily).toBe('serif-base')
+    expect(withBase({ letterSpacing: '' }).letterSpacing).toBe('0.05em')
+    expect(withBase({ bodyPadding: '  ' }).bodyPadding).toBe('16px')
+  })
+
+  it('NaN 不当覆盖（夹取前先 isFinite）', () => {
+    expect(withBase({ lineHeight: Number.NaN }).lineHeight).toBe(1.8)
+    expect(withBase({ pGap: Number.NaN }).pGap).toBe(20)
+  })
+})
+
+describe('resolveArticleTheme（accent 重链与显式覆盖的优先级）', () => {
+  it('显式 accent 且未覆盖 headingColor/strongColor → 两色跟随新 accent 重链', () => {
+    const t = withBase({ accent: '#e63946' })
+    expect(t.headingColor).toBe('#e63946')
+    expect(t.strongColor).toBe('#e63946')
+  })
+
+  it('meta 显式覆盖 headingColor → 压过 accent 重链（作者点名要的颜色优先）', () => {
+    const t = withBase({ accent: '#e63946', headingColor: '#0ea5e9' })
+    expect(t.headingColor).toBe('#0ea5e9')
+    expect(t.strongColor).toBe('#e63946')
+  })
+
+  it('meta 显式覆盖 strongColor → 同样压过重链；标题色仍跟随 accent', () => {
+    const t = withBase({ accent: '#e63946', strongColor: '#111111' })
+    expect(t.strongColor).toBe('#111111')
+    expect(t.headingColor).toBe('#e63946')
+  })
+
+  it('非法 accent 不参与重链（回落主题 accent，两色保持主题原值）', () => {
+    const t = withBase({ accent: 'crimson' })
+    expect(t.accent).toBe(visualBase.accent)
+    expect(t.headingColor).toBe('#222222')
+    expect(t.strongColor).toBe('#555555')
+  })
+
+  it('bodyText/h2Bg 不参与 accent 重链（阅读色与块背景由作者独立掌控）', () => {
+    const t = withBase({ accent: '#e63946' })
+    expect(t.bodyText).toBe('#111111')
+    expect(t.h2Bg).toBe('#999999')
+  })
+})
+
+describe('sanitizeThemePatch（set_theme / save_theme_preset / 排版对话框共用校验面）', () => {
+  it('未知键剔除，合法键保留（模型多写的字段不会进 meta）', () => {
+    const p = sanitizeThemePatch({ lineHeight: 2.2, fontSizePx: 18, nonsense: 'x', bodyBg: '#fff' }) as Record<
+      string,
+      unknown
+    >
+    expect(p).toEqual({ lineHeight: 2.2, bodyBg: '#fff' })
+  })
+
+  it('数值夹取、hex 校验、枚举守卫与白名单同口径', () => {
+    const p = sanitizeThemePatch({ lineHeight: 12, pGap: -8, bodyText: 'nope', quoteStyle: 'card' }) as Record<
+      string,
+      unknown
+    >
+    expect(p.lineHeight).toBe(3)
+    expect(p.pGap).toBe(0)
+    expect(p.bodyText).toBeUndefined()
+    expect(p.quoteStyle).toBe('card')
+  })
+
+  it("bodyBg 与 h2Num 的 'none' 哨兵原样保留（哨兵语义不能被校验吃掉）", () => {
+    const p = sanitizeThemePatch({ bodyBg: 'none', h2Num: 'none' }) as Record<string, unknown>
+    expect(p.bodyBg).toBe('none')
+    expect(p.h2Num).toBe('none')
+  })
+
+  it('0 不会被丢（真值判定老坑）', () => {
+    expect(sanitizeThemePatch({ pGap: 0 })).toEqual({ pGap: 0 })
+    expect(sanitizeThemePatch({ imgRadius: 0 })).toEqual({ imgRadius: 0 })
+  })
+
+  it('空串/真非数值不写入，但字符串数值要救得回来（模型爱写 "2.2" / "16px"）', () => {
+    expect(sanitizeThemePatch({ fontFamily: '   ', lineHeight: 'tight', accent: 123 })).toEqual({})
+    expect(sanitizeThemePatch({ lineHeight: '2.2', bodyFontSize: '16px' })).toEqual({
+      lineHeight: 2.2,
+      bodyFontSize: 16
+    })
+  })
+
+  it('白名单 34 键逐键可写（新增字段忘了登记或取值不合法，会在这条红）', () => {
+    const validProbe: Record<string, unknown> = {
+      accent: '#0f766e',
+      bodyFontSize: 17,
+      headingFontSize: 21,
+      bodyAlign: 'indent',
+      headingAlign: 'left',
+      h1Style: 'pill',
+      h2Style: 'block',
+      h2Num: '1.',
+      h3Mark: 'dot',
+      bodyBg: 'none',
+      fontFamily: 'Serif, serif',
+      lineHeight: 2.2,
+      letterSpacing: '0.03em',
+      pGap: 24,
+      bodyText: '#222222',
+      headingColor: '#333333',
+      quoteStyle: 'card',
+      quoteBorder: '#444444',
+      quoteBg: '#fdf2f8',
+      quoteText: '#831843',
+      hrColor: '#7c3aed',
+      h2Border: '#0ea5e9',
+      hrStyle: 'dot',
+      strongStyle: 'highlight',
+      strongBg: '#555555',
+      strongColor: '#666666',
+      imgRadius: 12,
+      bodyRadius: 14,
+      bodyPadding: '20px 22px',
+      tableStyle: 'striped',
+      tableHeaderBg: '#777777',
+      tableBorder: '#888888',
+      tableHeaderText: '#999999',
+      h2Bg: '#aaaaaa'
+    }
+    expect(Object.keys(sanitizeThemePatch(validProbe)).sort()).toEqual([...THEME_OVERRIDE_KEYS].sort())
+  })
+})
+
+describe('clampThemeNumbers（越界夹取要如实报回，不静默改值）', () => {
+  it('低于下限 → 抬到下限并给一句可转述的中文', () => {
+    const r = clampThemeNumbers({ lineHeight: 1.4 })
+    expect(r.values.lineHeight).toBe(1.5)
+    expect(r.notes).toEqual(['行高只支持 1.5-3，你给的 1.4 已抬到 1.5'])
+  })
+
+  it('高于上限 → 压到上限', () => {
+    const r = clampThemeNumbers({ lineHeight: 9, pGap: 400 })
+    expect(r.values).toEqual({ lineHeight: 3, pGap: 48 })
+    expect(r.notes).toEqual(['行高只支持 1.5-3，你给的 9 已压到 3', '段间距只支持 0-48，你给的 400 已压到 48'])
+  })
+
+  it('区间内不改值也不吱声', () => {
+    const r = clampThemeNumbers({ lineHeight: 2.4, pGap: 0, imgRadius: 0 })
+    expect(r.values).toEqual({ lineHeight: 2.4, pGap: 0, imgRadius: 0 })
+    expect(r.notes).toEqual([])
+  })
+
+  it('null（恢复默认）与读不出数值的写法不参与夹取', () => {
+    const r = clampThemeNumbers({ lineHeight: null, pGap: '宽松', imgRadius: Number.NaN })
+    expect(r.values).toEqual({})
+    expect(r.notes).toEqual([])
+  })
+
+  it('字符串数值照样夹取（"1.2" 与 "400px" 都得管住）', () => {
+    const r = clampThemeNumbers({ lineHeight: '1.2', pGap: '400px' })
+    expect(r.values).toEqual({ lineHeight: 1.5, pGap: 48 })
+    expect(r.notes).toEqual([
+      '行高只支持 1.5-3，你给的 1.2 已抬到 1.5',
+      '段间距只支持 0-48，你给的 400 已压到 48'
+    ])
+  })
+
+  it('区间表只含数值型覆盖键，且都在 30 键白名单内', () => {
+    const keys = Object.keys(THEME_NUM_RANGES)
+    expect(keys.every((k) => (THEME_OVERRIDE_KEYS as readonly string[]).includes(k))).toBe(true)
+    expect(keys).toEqual(['bodyFontSize', 'headingFontSize', 'lineHeight', 'pGap', 'imgRadius', 'bodyRadius'])
+  })
+
+  it('与 sanitizeThemePatch 同一口径（两条路夹出同一个值）', () => {
+    const raw = { lineHeight: 1.2, pGap: 99, imgRadius: 60 }
+    expect(clampThemeNumbers(raw).values).toEqual(sanitizeThemePatch(raw))
+  })
+})
+
+describe('normalizeThemeKeys（模型自造键名先映射，映射不了的必须报出来）', () => {
+  it('实测那套自造键名：能映射的全映射，映射不了的进 unknown', () => {
+    const r = normalizeThemeKeys({
+      accent: '#7c3aed',
+      text_color: '#1f2933',
+      font_family: 'PingFang SC, sans-serif',
+      font_size: '16px',
+      line_height: '1.85',
+      paragraph_spacing: '1.4em',
+      h2_color: '#0a84ff',
+      quote_bg: '#f0f6ff',
+      divider_gradient: '#7c3aed'
+    })
+    expect(r.patch).toEqual({
+      accent: '#7c3aed',
+      bodyText: '#1f2933',
+      fontFamily: 'PingFang SC, sans-serif',
+      bodyFontSize: '16px',
+      lineHeight: '1.85',
+      pGap: '1.4em',
+      headingColor: '#0a84ff',
+      quoteBg: '#f0f6ff'
+    })
+    // 主题里没有「引用底色 / 渐变分隔线」这两个形态，只能如实说没做，不能装成功
+    // quote_bg / quote_text_color 已有对应字段；divider_gradient 这种「产品里没有的形态」必须报出来
+    expect(r.unknown).toEqual(['divider_gradient'])
+  })
+
+  it('显式白名单键优先于别名（同时给 fontSize 与 bodyFontSize 时不互相覆盖）', () => {
+    const r = normalizeThemeKeys({ bodyFontSize: 17, fontSize: 15 })
+    expect(r.patch).toEqual({ bodyFontSize: 17 })
+  })
+
+  it('未知键不会被静默丢弃，蛇形通用键也能落到驼峰', () => {
+    expect(normalizeThemeKeys({ img_radius: 12 }).patch).toEqual({ imgRadius: 12 })
+    expect(normalizeThemeKeys({ nonsense: 1 }).unknown).toEqual(['nonsense'])
+  })
+})
+
+describe('metaPatchToThemeKeys（存主题库前换回主题口径，否则编辑器读不到）', () => {
+  it('meta 的 bodyFontSize 映射成主题的 fontSize', () => {
+    const t = metaPatchToThemeKeys({ bodyFontSize: 17, lineHeight: 2.2, accent: '#7c3aed' })
+    expect(t).toEqual({ fontSize: 17, lineHeight: 2.2, accent: '#7c3aed' })
+  })
+
+  it('主题已有 fontSize 时不被 meta 口径覆盖', () => {
+    expect(metaPatchToThemeKeys({ bodyFontSize: 17, fontSize: 15 } as never).fontSize).toBe(15)
+  })
+
+  it('其余键原样带走', () => {
+    expect(metaPatchToThemeKeys({ quoteStyle: 'card', h2Bg: '#eee' })).toEqual({ quoteStyle: 'card', h2Bg: '#eee' })
+  })
+})
+
+describe('sanitizeThemePatchDetailed（工具层如实回报的底层）', () => {
+  it('别名叫来的值同样过校验：字符串数值夹取、坏色值进 invalid、映射不到的进 unknown', () => {
+    const r = sanitizeThemePatchDetailed({
+      accent: '#7c3aed',
+      line_height: '1.85',
+      text_color: 'grey',
+      quote_bg: '#f0f6ff',
+      shadow_color: '#000'
+    })
+    expect(r.values).toEqual({ accent: '#7c3aed', lineHeight: 1.85, quoteBg: '#f0f6ff' })
+    // invalid 报的是归一后的规范键名——模型照着重发时才用得上正确的键
+    expect(r.invalid).toEqual(['bodyText'])
+    expect(r.unknown).toEqual(['shadow_color'])
+  })
+
+  it('非字符串色值不炸（模型写 123 / 对象时判非法，而不是把导出渲染整个搞崩）', () => {
+    expect(sanitizeThemePatch({ h2Border: 123, quoteBg: {}, hrColor: null, quoteText: [] })).toEqual({})
+    expect(resolveArticleTheme({ category: 'B期', h2Border: 123 as never }, { B期: visualBase }).h2Border).toBe('#666666')
+  })
+
+  it('只认出一个 accent 时如实返回其余未知键（就是那次「整套主题其实只有 1 个字段」的形状）', () => {
+    const r = sanitizeThemePatchDetailed({ accent: '#0066ff', secondary_color: '#5f6b7a', h3_style: 'plain-bold' })
+    expect(Object.keys(r.values)).toEqual(['accent'])
+    expect(r.unknown).toEqual(['secondary_color', 'h3_style'])
+  })
+
+  it('sanitizeThemePatch 语义不变：仍只返回合法覆盖键值', () => {
+    expect(sanitizeThemePatch({ text_color: '#222222', nope: 1 })).toEqual({ bodyText: '#222222' })
   })
 })

@@ -7,6 +7,7 @@ import {
   useState,
   type ReactElement
 } from 'react'
+import { confirmAction } from '../confirm'
 import {
   CARD_FORMAT_LABEL,
   cardsPlainText,
@@ -342,9 +343,9 @@ const CardsPanel = forwardRef<CardsPanelHandle, CardsPanelProps>(function CardsP
   )
 
   const deleteCard = useCallback(
-    (i: number) => {
+    async (i: number) => {
       const cards = deckRef.current?.cards ?? []
-      if (!window.confirm(`删除第 ${i + 1} 张卡片？`)) return
+      if (!(await confirmAction(`删除第 ${i + 1} 张卡片？\n该张成图与文案会一并移除。`, { okLabel: '删除' }))) return
       void restructure(cards.filter((_, j) => j !== i))
     },
     [restructure]
@@ -488,7 +489,7 @@ const CardsPanel = forwardRef<CardsPanelHandle, CardsPanelProps>(function CardsP
   const toArticle = useCallback(async () => {
     const d = deckRef.current
     if (!d?.cards.length) return
-    if (!window.confirm('将卡片文案扩写成公众号文章，并把工程切换为文章形态（正文会被覆盖，卡片数据保留可随时切回），继续？')) return
+    if (!(await confirmAction('将卡片文案扩写成公众号文章？\n工程会切换为文章形态，正文被覆盖（卡片数据保留，可随时切回）。', { okLabel: '继续' }))) return
     setBusy('正在扩写成文章…')
     try {
       const { promise, abort } = chatOnce(cardsToArticleMessages(cardsPlainText(d.cards), skill), (full) =>

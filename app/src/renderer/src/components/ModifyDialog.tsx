@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState, type ReactElement } from 'react'
 import { diffLines } from '@shared/lineDiff'
+import { shouldSubmitOnEnter } from '@shared/imeEnter'
 import { chatOnce } from '../copilot/llm'
 import { modifyMessages } from '../copilot/prompts'
 
@@ -80,7 +81,7 @@ export default function ModifyDialog({
               value={instruction}
               onChange={(e) => setInstruction(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') run()
+                if (shouldSubmitOnEnter(e, { allowShift: true })) run()
               }}
               placeholder="修改指令，如：更口语化 / 压缩到一半篇幅 / 加个类比"
               className="min-w-0 flex-1 rounded bg-panel-3 px-2 py-1.5 text-ink outline-none placeholder:text-ink-dim"

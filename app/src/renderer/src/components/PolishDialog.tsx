@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react'
 import { diffLines, diffChars, type DiffLine } from '@shared/lineDiff'
+import { describeThemePatch, parseLayoutOutput } from '@shared/layoutOutput'
+import type { ArticleTheme, ProjectMeta } from '@shared/types'
 import { chatOnce } from '../copilot/llm'
 import { polishLayoutMessages, applyReviewMessages } from '../copilot/prompts'
 
@@ -9,17 +11,29 @@ interface PolishDialogProps {
   skill: string | null
   /** 传入审阅报告则为「按审阅修订」模式，否则为排版优化 */
   review?: string
-  onConfirm: (result: string) => void
+  /** 当前生效的排版调性（视觉层基线）：传入才允许模型打包给出视觉参数补丁 */
+  theme?: ArticleTheme | null
+  /** 确认应用：排版全文 + 可选视觉参数覆盖（仅排版优化模式会给第二参） */
+  onConfirm: (result: string, themePatch?: Partial<ProjectMeta>) => void
   onClose: () => void
 }
 
 /** 全文优化弹窗：排版优化流式重写→行级 diff；按审阅报告出补丁本地精准覆盖→逐条字符级对比卡片 → 确认覆盖全文 */
-export default function PolishDialog({ article, skill, review, onConfirm, onClose }: PolishDialogProps): ReactElement {
+export default function PolishDialog({
+  article,
+  skill,
+  review,
+  theme,
+  onConfirm,
+  onClose
+}: PolishDialogProps): ReactElement {
   const isReview = !!review?.trim()
   const [result, setResult] = useState('')
   const [running, setRunning] = useState(false)
   const [done, setDone] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // 排版优化打包输出的视觉参数（<theme> 围栏解析而来；undefined = 模型认为视觉层不用动）
+  const [themePatch, setThemePatch] = useState<Partial<ProjectMeta> | undefined>(undefined)
   // 修订模式：补丁应用统计与命中明细（失配项列出供人工处理；items 用于逐条对比展示）
   const [patchInfo, setPatchInfo] = useState<{ applied: number; failed: string[]; items: { old: string; new: string }[] } | null>(null)
   const abortRef = useRef<(() => void) | null>(null)
@@ -30,11 +44,12 @@ export default function PolishDialog({ article, skill, review, onConfirm, onClos
     setResult('')
     setDone(false)
     setPatchInfo(null)
+    setThemePatch(undefined)
     setStreamLen(0)
     setRunning(true)
     const messages = isReview
       ? applyReviewMessages(article, review!, skill)
-      : polishLayoutMessages(article, skill)
+      : polishLayoutMessages(article, skill, theme)
     const { promise, abort } = chatOnce(messages, (full) => {
       setStreamLen(full.length)
       if (!isReview) setResult(full)
@@ -64,7 +79,10 @@ export default function PolishDialog({ article, skill, review, onConfirm, onClos
           setPatchInfo({ applied, failed, items })
           setResult(text)
         } else {
-          setResult(full.trim() + '\n')
+          // 全文 + 可选视觉参数一次打包：围栏剥掉后正文照旧走 diff，视觉参数进确认区预览
+          const parsed = parseLayoutOutput(full)
+          setResult(parsed.article + '\n')
+          setThemePatch(parsed.themePatch)
         }
         setDone(true)
       })
@@ -73,7 +91,7 @@ export default function PolishDialog({ article, skill, review, onConfirm, onClos
         setRunning(false)
         abortRef.current = null
       })
-  }, [article, skill, review, isReview])
+  }, [article, skill, review, theme, isReview])
 
   // 打开即自动开跑
   const startedRef = useRef(false)
@@ -187,6 +205,22 @@ export default function PolishDialog({ article, skill, review, onConfirm, onClos
               </div>
             </>
           )}
+          {done && themePatch && (
+            <div className="mt-3 rounded border border-accent/50 bg-panel p-2.5">
+              <p className="text-ink">🎨 视觉参数（模型判断本篇适合调整，随排版一起应用）</p>
+              <div className="mt-1 grid grid-cols-2 gap-x-4 gap-y-0.5 text-[11px]">
+                {describeThemePatch(themePatch).map((f) => (
+                  <div key={f.label} className="flex min-w-0 items-baseline gap-1">
+                    <span className="shrink-0 text-ink-dim">{f.label}</span>
+                    <span className="truncate text-ink">{f.value}</span>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-1 text-[10px] leading-4 text-ink-dim">
+                只改列出的这几项，其余排版沿用当前调性；不想动视觉层就点右下「只应用排版」。
+              </p>
+            </div>
+          )}
         </div>
 
         <div className="flex items-center justify-end gap-2 border-t border-panel-3 px-4 py-2.5">
@@ -198,12 +232,21 @@ export default function PolishDialog({ article, skill, review, onConfirm, onClos
           <button onClick={cancel} className="rounded px-3 py-1.5 text-xs text-ink-dim hover:bg-panel-3">
             取消
           </button>
+          {done && themePatch && (
+            <button
+              onClick={() => onConfirm(result)}
+              disabled={!result}
+              className="rounded px-3 py-1.5 text-xs text-ink-dim hover:bg-panel-3 disabled:opacity-40"
+            >
+              只应用排版
+            </button>
+          )}
           <button
-            onClick={() => onConfirm(result)}
+            onClick={() => onConfirm(result, themePatch)}
             disabled={!done || !result}
             className="rounded bg-accent px-3 py-1.5 text-xs text-white hover:opacity-90 disabled:opacity-40"
           >
-            {isReview ? '应用修订' : '应用新排版'}
+            {isReview ? '应用修订' : themePatch ? '应用排版 + 视觉' : '应用新排版'}
           </button>
         </div>
       </div>

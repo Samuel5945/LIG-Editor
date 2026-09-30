@@ -113,8 +113,10 @@ const esc = (s: string): string =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
 /** 十六进制颜色校验（#rgb / #rrggbb） */
-export function isHexColor(s: string): boolean {
-  return /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(s.trim())
+/** 是否为十六进制色值（3 位或 6 位）。入参按 unknown 收：meta/主题 JSON 是不可信外部数据，
+ *  模型把色值写成数字/对象时这里必须判 false 而不是抛异常（曾因 123.trim() 让整篇导出崩掉） */
+export function isHexColor(s: unknown): boolean {
+  return typeof s === 'string' && /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(s.trim())
 }
 
 /** #rrggbb → rgba(r,g,b,alpha)；#rgb 自动扩展；非法输入返回 null */

@@ -450,3 +450,44 @@ describe('小节序号：符号序号（①②）也替换为主题格式', () =
     expect(out).toContain('>01 ✨ 核心功能<')
   })
 })
+
+describe('引用底色 / 引用字色 / 分隔线颜色 / H2 条色覆盖（补全的四个视觉字段）', () => {
+  const MD = '# 标题\n\n> 引用一句话\n\n---\n\n## 小节标题\n\n正文一句\n'
+  const withTheme = (t: Partial<typeof DEFAULT_THEME>) =>
+    docToExportHtml(mdToDoc(MD), (src) => src, { ...DEFAULT_THEME, ...t })
+
+  it('quoteStyle 各形态都吃 quoteBg，quoteText 覆盖引用文字色', () => {
+    for (const quoteStyle of ['leftbar', 'card', 'quotes', 'dashcard'] as const) {
+      const html = withTheme({ quoteStyle, quoteBg: '#fdf2f8', quoteText: '#831843' })
+      expect(html, quoteStyle).toContain('background:#fdf2f8')
+      expect(html, quoteStyle).toContain('color:#831843')
+    }
+  })
+
+  it('不给 quoteBg 时保持原派生（card 用强调色淡底，不被覆盖逻辑改坏）', () => {
+    const html = withTheme({ quoteStyle: 'card' })
+    expect(html).not.toContain('#fdf2f8')
+    expect(html).toMatch(/blockquote style=[^>]*background:rgba|background:rgb|background:#/)
+  })
+
+  it('hrColor 覆盖三种分隔线形态的线色', () => {
+    for (const hrStyle of ['line', 'dot', 'long'] as const) {
+      const html = withTheme({ hrStyle, hrColor: '#7c3aed' })
+      expect(html, hrStyle).toContain('#7c3aed')
+      expect(html, hrStyle).toContain(hrStyle === 'dot' ? 'dotted #7c3aed' : 'solid #7c3aed')
+    }
+  })
+
+  it('h2Border 覆盖左竖条与下划线，block 色块不受影响', () => {
+    expect(withTheme({ h2Style: 'leftbar', h2Border: '#0ea5e9' })).toContain('border-left:4px solid #0ea5e9')
+    expect(withTheme({ h2Style: 'underline', h2Border: '#0ea5e9' })).toContain('border-bottom:2px solid #0ea5e9')
+    const block = withTheme({ h2Style: 'block', h2Border: '#0ea5e9', h2Bg: '#111111' })
+    expect(block).not.toContain('border-left:4px solid #0ea5e9')
+  })
+
+  it('非法色值不生效（回落派生色），不往导出里塞脏值', () => {
+    const html = withTheme({ quoteStyle: 'card', quoteBg: '粉色', hrColor: 'nope', h2Border: '' })
+    expect(html).not.toContain('粉色')
+    expect(html).not.toContain('nope')
+  })
+})

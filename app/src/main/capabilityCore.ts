@@ -1,7 +1,13 @@
 import { basename, isAbsolute, join } from 'path'
 import { existsSync, readFileSync } from 'fs'
-import type { ArticleTheme, H1Style, H2Style, H2Num, H3Mark, IdeaCard, TitleCandidate } from '@shared/types'
-import { sanitizeThemePatch } from '@shared/categoryThemes'
+import type { ArticleTheme, IdeaCard, TitleCandidate } from '@shared/types'
+import { isHexColor } from '@shared/cards'
+import {
+  clampThemeNumbers,
+  metaPatchToThemeKeys,
+  sanitizeThemePatchDetailed,
+  THEME_OVERRIDE_KEYS
+} from '@shared/categoryThemes'
 import { ALL_CATEGORIES } from '@shared/categories'
 import {
   brainstormMessages,
@@ -70,7 +76,10 @@ function projectArg(a: Record<string, unknown>): string {
       `dir 没匹配到工程：${dir}。请原样传 list_projects / create_project 返回的 dir，或改传 project 工程名`
     )
   }
-  const raw = str(a, 'project')
+  // 模型常把工程名写成 name（get_project / set_project_category 报「缺少参数 project」就是这么来的）：
+  // 只有没传 project 时才拿 name 顶上；name 作为业务字段的工具（save_theme_preset 等）不走这里，不受影响
+  const raw = str(a, 'project', false) || str(a, 'name', false)
+  if (!raw) throw new Error('缺少参数 project：需传工程名（workspace 下的目录名），也可传 dir（工程绝对路径）；可先用 list_projects 查询')
   const { hit, candidates } = store.matchProjectName(raw)
   if (hit) return hit
   const hint = candidates.length ? `最接近的工程：${candidates.join(' / ')}` : '先用 list_projects 查准确名字'
@@ -418,7 +427,7 @@ export const TOOLS: ToolDef[] = [
   {
     name: 'set_theme',
     description:
-      '设置工程排版覆盖（写入 project.json，编辑器/导出/推送同源生效，与顶栏控件一致）。字段独立可传：accent 强调色 / bodyFontSize 正文字号 / headingFontSize 标题字号（H1=+6 H2=+0 H3=-3）/ bodyAlign 正文排列（indent 首行缩进 / flush 顶格两端对齐 / center 居中）/ headingAlign 标题排列（center 居中 / left 左）/ 标题版式四项 h1Style（bar 短横 / pill 胶囊色块字底 / underline 下划线）、h2Style（leftbar 左竖条 / block 色块标签 / underline 下划线 / plain 纯文字）、h2Num（H2 自动序号：01 / 1. / 1、 / 一、 / 壹、 / ① 圈号；none 显式关闭）、h3Mark（diamond 菱形 / dot 圆点 / none 无）/ bodyBg 文章背景卡（浅色系十六进制 #rrggbb；none 去卡片纯白底；夜间由公众号逻辑自动变深）。传 null = 恢复默认（跟随分类主题）',
+      '设置工程排版覆盖（写入 project.json，编辑器/导出/推送同源生效，与顶栏控件一致）。字段独立可传：accent 强调色 / bodyFontSize 正文字号 / headingFontSize 标题字号（H1=+6 H2=+0 H3=-3）/ bodyAlign 正文排列（indent 首行缩进 / flush 顶格两端对齐 / center 居中）/ headingAlign 标题排列（center 居中 / left 左）/ 标题版式四项 h1Style（bar 短横 / pill 胶囊色块字底 / underline 下划线）、h2Style（leftbar 左竖条 / block 色块标签 / underline 下划线 / plain 纯文字）、h2Num（H2 自动序号：01 / 1. / 1、 / 一、 / 壹、 / ① 圈号；none 显式关闭）、h3Mark（diamond 菱形 / dot 圆点 / none 无）/ bodyBg 文章背景卡（浅色系十六进制 #rrggbb；none 去卡片纯白底；夜间由公众号逻辑自动变深）。引用底色 quoteBg / 引用文字色 quoteText / 分隔线颜色 hrColor / H2 条色 h2Border（均十六进制，不设则按强调色或中性灰派生）。传 null = 恢复默认（跟随分类主题）。数值字段越界会被夹到区间内（行高 1.5-3 / 段距 0-48 / 圆角 0-40 / 字号 10-40），夹取结果写在返回的 hint 里，必须照实转述给用户，不要说成已按原值设置',
     inputSchema: {
       type: 'object',
       properties: {
@@ -441,6 +450,10 @@ export const TOOLS: ToolDef[] = [
         headingColor: { type: ['string', 'null'], description: '标题文字色十六进制；显式设置后不随强调色重链；null 跟随主题' },
         quoteStyle: { type: ['string', 'null'], enum: ['leftbar', 'card', 'quotes', 'dashcard', null], description: '引用形态；null 跟随主题' },
         quoteBorder: { type: ['string', 'null'], description: '虚线引用卡边框色十六进制；null 跟随主题' },
+        quoteBg: { type: ['string', 'null'], description: '引用区底色十六进制（不设=按强调色派生浅底）；null 跟随主题' },
+        quoteText: { type: ['string', 'null'], description: '引用文字色十六进制（不设=按背景亮度自适应）；null 跟随主题' },
+        hrColor: { type: ['string', 'null'], description: '分隔线颜色十六进制（不设=中性灰）；null 跟随主题' },
+        h2Border: { type: ['string', 'null'], description: 'H2 左竖条/下划线颜色十六进制（不设=跟随强调色）；null 跟随主题' },
         hrStyle: { type: ['string', 'null'], enum: ['line', 'dot', 'long', null], description: '分隔线形态；null 跟随主题' },
         strongStyle: { type: ['string', 'null'], enum: ['color', 'highlight', 'plain', null], description: '加粗强调方式；null 跟随主题' },
         strongBg: { type: ['string', 'null'], description: '高亮加粗底色十六进制；null 跟随主题' },
@@ -457,79 +470,89 @@ export const TOOLS: ToolDef[] = [
       required: ['project']
     },
     handler: (a) => {
+      // 参数被包一层的写法（{"theme":{...}} / overrides / patch / params）先摊平：
+      // 不摊平就是「工具返回成功、一个字段都没写」的静默假成功（实测命中过一轮 theme 包法）
+      const bag = a as Record<string, unknown>
+      for (const wrapKey of ['theme', 'overrides', 'patch', 'params']) {
+        const inner = bag[wrapKey]
+        if (!inner || typeof inner !== 'object' || Array.isArray(inner)) continue
+        for (const [k, v] of Object.entries(inner as Record<string, unknown>)) if (!(k in bag)) bag[k] = v
+        delete bag[wrapKey]
+      }
       const project = projectArg(a)
       const meta = store.readMeta(project)
-      // 有值覆盖 / null 恢复默认（写 undefined，JSON 序列化自动省略）/ 未传不动
-      if (a.accent !== undefined) meta.accent = a.accent === null ? undefined : (a.accent as string)
-      if (a.bodyFontSize !== undefined)
-        meta.bodyFontSize = a.bodyFontSize === null ? undefined : (a.bodyFontSize as number)
-      if (a.headingFontSize !== undefined)
-        meta.headingFontSize = a.headingFontSize === null ? undefined : (a.headingFontSize as number)
-      if (a.bodyAlign !== undefined)
-        meta.bodyAlign = a.bodyAlign === null ? undefined : (a.bodyAlign as 'indent' | 'flush' | 'center')
-      if (a.headingAlign !== undefined)
-        meta.headingAlign = a.headingAlign === null ? undefined : (a.headingAlign as 'center' | 'left')
-      if (a.h1Style !== undefined) meta.h1Style = a.h1Style === null ? undefined : (a.h1Style as H1Style)
-      if (a.h2Style !== undefined) meta.h2Style = a.h2Style === null ? undefined : (a.h2Style as H2Style)
-      if (a.h2Num !== undefined) meta.h2Num = a.h2Num === null ? undefined : (a.h2Num as H2Num | 'none')
-      if (a.h3Mark !== undefined) meta.h3Mark = a.h3Mark === null ? undefined : (a.h3Mark as H3Mark)
-      if (a.bodyBg !== undefined) meta.bodyBg = a.bodyBg === null ? undefined : (a.bodyBg as string)
-      // B 期视觉覆盖扩展 20 字段：有值覆盖 / null 恢复默认 / 未传不动（非法值由 resolve 层兜底回落）
-      const STR_KEYS = ['fontFamily', 'letterSpacing', 'bodyPadding'] as const
-      for (const k of STR_KEYS) {
-        const v = a[k]
-        if (v !== undefined) (meta as unknown as Record<string, unknown>)[k] = v === null ? undefined : v
-      }
-      const NUM_KEYS = ['lineHeight', 'pGap', 'imgRadius', 'bodyRadius'] as const
-      for (const k of NUM_KEYS) {
-        const v = a[k]
-        if (v !== undefined) (meta as unknown as Record<string, unknown>)[k] = v === null ? undefined : (v as number)
-      }
-      const HEX_KEYS = [
-        'bodyText',
-        'headingColor',
-        'quoteBorder',
-        'strongBg',
-        'strongColor',
-        'tableHeaderBg',
-        'tableBorder',
-        'tableHeaderText',
-        'h2Bg'
-      ] as const
-      for (const k of HEX_KEYS) {
-        const v = a[k]
-        if (v !== undefined) (meta as unknown as Record<string, unknown>)[k] = v === null ? undefined : v
-      }
-      const ENUM_KEYS = ['quoteStyle', 'hrStyle', 'strongStyle', 'tableStyle'] as const
-      for (const k of ENUM_KEYS) {
-        const v = a[k]
-        if (v !== undefined) (meta as unknown as Record<string, unknown>)[k] = v === null ? undefined : v
+      // 数值越界先夹取，并把「改了什么」写进返回值：作者要 1.4 而口径下限 1.5 时，
+      // 静默抬成 1.5 的表现就是「设了没反应」，报回来模型才会照实说而不是声称已按 1.4 设好
+      // 数值越界的夹取说明照实报（作者要 1.4、口径下限 1.5，静默抬成 1.5 就是「设了没反应」）
+      const { notes } = clampThemeNumbers(bag)
+      // 写入一律过同一套校验：不合法的值不落脏盘、也不装成功。
+      // 实测过 set_theme 传 h2Border: 123 → 旧实现把 123 原样写进 meta 并返回 ok，作者看到的就是「设了没变化」
+      const { values: ok, unknown: unmapped, invalid } = sanitizeThemePatchDetailed(bag)
+      const bag2 = meta as unknown as Record<string, unknown>
+      for (const k of THEME_OVERRIDE_KEYS) {
+        if (!(k in bag) || bag[k] === undefined) continue
+        // null = 显式恢复默认；合法值用校验后的结果（夹取、去空格、枚举守卫）；非法值保持盘上原值不动
+        if (bag[k] === null) bag2[k] = undefined
+        else if (k in ok) bag2[k] = ok[k]
       }
       store.writeMeta(project, meta)
       notifyChange(project, 'project.json')
-      return { ok: true }
+      // name / dir 已被 projectArg 当作工程定位消费掉，不能再算「不认识的参数」
+      const ignoredKeys = unmapped.filter((k) => k !== 'project' && k !== 'dir' && k !== 'name')
+      // null 是「显式恢复默认」，走上面的清除分支，不能混进「值不合法未写入」——
+      // 那样会把成功报成失败，和把失败报成成功一样误导作者
+      const droppedKeys = invalid.filter((k) => k in bag && bag[k] !== null)
+      const reports = [...notes]
+      if (ignoredKeys.length) reports.push(`不认识的参数已忽略：${ignoredKeys.join('、')}（可用键见本工具说明）`)
+      if (droppedKeys.length)
+        reports.push(`以下字段值不合法，未写入：${droppedKeys.join('、')}（色值要 #rrggbb、数值不带单位、枚举取说明里的形态）`)
+      return reports.length ? { ok: true, hint: reports.join('；'), ignoredKeys, droppedKeys } : { ok: true }
     }
   },
   {
     name: 'save_theme_preset',
     description:
-      '为分类设计并保存整套排版主题（写入自定义主题库，同名分类目录自动创建，保存即生效——该分类下打开工程即套用）。theme 为完整 ArticleTheme 主题对象：accent 必填（十六进制强调色）；常用字段 fontFamily 字体栈 / lineHeight 行高 1.5-3 / letterSpacing 字距 / fontSize 正文字号 / headingFontSize 标题字号 / bodyBg 正文背景卡（浅色系） / bodyRadius 圆角 / bodyPadding 内边距 / pGap 段间距 / h1Style·h2Style·h2Num·h3Mark 标题版式 / quoteStyle·quoteBorder 引用 / hrStyle 分隔线 / strongStyle·strongBg·strongColor 加粗 / tableStyle·tableHeaderBg·tableBorder·tableHeaderText 表格 / imgRadius 图片圆角 / bodyText·headingColor·h2Bg 色系。非法或缺失字段自动回落默认调性',
+      '为分类设计并保存整套排版主题（写入自定义主题库，同名分类目录自动创建，保存即生效——该分类下打开工程即套用）。theme 为完整 ArticleTheme 主题对象：accent 必填（十六进制强调色）；常用字段 fontFamily 字体栈 / lineHeight 行高 1.5-3 / letterSpacing 字距 / fontSize 正文字号 / headingFontSize 标题字号 / bodyBg 正文背景卡（浅色系） / bodyRadius 圆角 / bodyPadding 内边距 / pGap 段间距 / h1Style·h2Style·h2Num·h3Mark 标题版式 / quoteStyle·quoteBorder·quoteBg·quoteText 引用 / hrStyle·hrColor 分隔线 / h2Border H2 条色 / hrStyle 分隔线 / strongStyle·strongBg·strongColor 加粗 / tableStyle·tableHeaderBg·tableBorder·tableHeaderText 表格 / imgRadius 图片圆角 / bodyText·headingColor·h2Bg 色系。非法或缺失字段自动回落默认调性',
     inputSchema: {
       type: 'object',
       properties: {
         name: { type: 'string', description: '主题名（=分类名，将作为目录名自动创建）' },
-        theme: { type: 'object', description: '完整 ArticleTheme 主题对象（accent 必填）' }
+        theme: {
+          type: 'object',
+          description:
+            '完整排版主题对象，**键名必须严格用下面这些**（accent 必填）：accent / fontFamily / lineHeight(1.5-3) / letterSpacing / fontSize(10-40) / headingFontSize(10-40) / bodyAlign / headingAlign / h1Style / h2Style / h2Num / h3Mark / bodyBg / pGap(0-48) / bodyText / headingColor / quoteStyle / quoteBorder / hrStyle / strongStyle / strongBg / strongColor / imgRadius(0-40) / bodyRadius(0-40) / bodyPadding / tableStyle / tableHeaderBg / tableBorder / tableHeaderText / h2Bg / quoteBg / quoteText / hrColor / h2Border。不要自造键名（如 text_color / font_family / paragraph_spacing），系统会拒收并在结果里列出',
+          additionalProperties: false
+        }
       },
       required: ['name', 'theme']
     },
     handler: (a) => {
-      const name = str(a, 'name')
-      const patch = sanitizeThemePatch((a.theme ?? {}) as Record<string, unknown>) as Partial<ArticleTheme>
-      if (!patch.accent) throw new Error('theme.accent 必填（十六进制强调色），缺失则整套主题无法成立')
+      // 模型常把「给哪个分类」当参数名（category=科技数码），两者互为别名——
+      // 只认 name 时实测连续两轮报「缺少参数 name」，第三轮才蒙对
+      const name = str(a, 'name', false) || str(a, 'category', false)
+      if (!name)
+        throw new Error('缺少参数 name（主题名，同时作为分类目录名），形状：{"name":"主题名","theme":{"accent":"#7c3aed", ...}}')
+      // 主题名也接受 category 写法（模型常把「给哪个分类」当成参数名），两者都缺才报错
+      const themeRaw = (a.theme ?? {}) as Record<string, unknown>
+      const { values, unknown, invalid } = sanitizeThemePatchDetailed(themeRaw)
+      const patch = metaPatchToThemeKeys(values)
+      if (!patch.accent)
+        throw new Error(
+          'theme.accent 必填（十六进制强调色），缺失则整套主题无法成立；theme 的键名须与工具说明一致'
+        )
+      if (!Object.keys(patch).length) throw new Error('theme 里没有一个可识别的键，请严格按工具说明的键名重发')
       saveCustomTheme(name, patch as ArticleTheme)
-      // 对话内生成主题：广播让工程树/设置即时感知新分类目录
+      // 广播让工程树/设置即时感知新分类目录
       broadcast('workspace:changed', null)
-      return { ok: true, name, hint: `主题「${name}」已入库；打开该分类下的工程即可套用` }
+      // 未识别的键必须照实报：否则模型拿着只落了 1 个字段的主题去描述整套排版（实测发生过）
+      const applied = Object.keys(patch).length
+      const dropped: string[] = []
+      if (unknown.length) dropped.push(`键名不认识：${unknown.join('、')}`)
+      if (invalid.length) dropped.push(`值不合法被丢弃：${invalid.join('、')}`)
+      const hint = dropped.length
+        ? `主题「${name}」已入库，但只写入 ${applied} 个字段；${dropped.join('；')}——需要的效果请改用工具说明里的键名与取值重发一次，未写入的部分不得向用户声称已生效`
+        : `主题「${name}」已入库（共 ${applied} 个字段）；打开该分类下的工程即可套用`
+      return { ok: true, name, appliedFields: applied, unknownKeys: unknown, droppedKeys: invalid, hint }
     }
   },
   {

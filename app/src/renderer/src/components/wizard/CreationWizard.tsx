@@ -1,4 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from 'react'
+import { confirmAction } from '../../confirm'
 import type { ContentPart, IdeaCard, ProjectMeta, WebSearchResult } from '@shared/types'
 import { CARD_FORMAT_LABEL, parseCardItems, type CardFormat } from '@shared/cards'
 import { sanitizeProjectName } from '@shared/projectName'
@@ -412,7 +413,7 @@ export default function CreationWizard({
     const cur = articleRef.current.trim()
     // 新建工程的默认正文只有一行标题，不算「有内容」
     const hasContent = cur && cur.split('\n').filter((l) => l.trim()).length > 1
-    if (hasContent && !window.confirm(`「${project}」已有正文，生成将覆盖，确定继续？`)) return
+    if (hasContent && !(await confirmAction(`「${project}」已有正文，生成将覆盖，确定继续？`, { okLabel: '覆盖生成' }))) return
     await writeArticle(project)
   }, [project, writeArticle])
 

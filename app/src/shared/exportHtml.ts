@@ -101,8 +101,10 @@ function buildStyles(theme?: ArticleTheme, uiDark?: boolean): Styles {
     t.bodyBg && isDarkColor(headTv) === dark ? (dark ? '#eef2f7' : '#1a1a1a') : headTv
   const subColor = headingColor
   // 引用/图注/提示不再用灰字：浅底深字、深底亮字，与正文同系靠背景块区分层次
-  const quoteColor = dark ? '#cbd5e1' : '#333'
-  const quoteBg = dark ? 'rgba(255,255,255,0.07)' : '#f7f7f7'
+  const quoteColor =
+    t.quoteText && isHexColor(t.quoteText) ? t.quoteText.trim() : dark ? '#cbd5e1' : '#333'
+  const quoteBg =
+    t.quoteBg && isHexColor(t.quoteBg) ? t.quoteBg.trim() : dark ? 'rgba(255,255,255,0.07)' : '#f7f7f7'
   const captionColor = dark ? '#b6c4d4' : '#555'
   const pGap = t.pGap ?? 16
   const imgR = t.imgRadius ?? 4
@@ -177,6 +179,8 @@ function buildStyles(theme?: ArticleTheme, uiDark?: boolean): Styles {
   }
 
   // H2 装饰：leftbar 左竖条 / block 色块标签 / underline 下划线 / plain 纯文字
+  // H2 条色（竖条/下划线）可独立指定，缺省跟随强调色
+  const h2Bar = t.h2Border && isHexColor(t.h2Border) ? t.h2Border.trim() : c
   const h2Style = t.h2Style ?? 'leftbar'
   if (h2Style === 'block') {
     const h2Bg = t.h2Bg && isHexColor(t.h2Bg) ? t.h2Bg : c
@@ -185,12 +189,12 @@ function buildStyles(theme?: ArticleTheme, uiDark?: boolean): Styles {
     s.h2 = `font-size:${headingBase}px;font-weight:bold;color:${contrastText(h2Bg)};line-height:1.375;margin:${h2Margin};display:table;background:${h2Bg};border-radius:6px;padding:3px 14px;`
   } else if (h2Style === 'underline') {
     const align = t.headingAlign === 'center' ? 'text-align:center;' : ''
-    s.h2 = `font-size:${headingBase}px;font-weight:bold;color:${subColor};line-height:1.375;margin:40px 0 16px;border-bottom:2px solid ${c};padding-bottom:8px;${align}`
+    s.h2 = `font-size:${headingBase}px;font-weight:bold;color:${subColor};line-height:1.375;margin:40px 0 16px;border-bottom:2px solid ${h2Bar};padding-bottom:8px;${align}`
   } else if (h2Style === 'plain') {
     const align = t.headingAlign === 'center' ? 'text-align:center;' : ''
     s.h2 = `font-size:${headingBase}px;font-weight:bold;color:${subColor};line-height:1.375;margin:40px 0 16px;${align}`
   } else {
-    s.h2 = `font-size:${headingBase}px;font-weight:bold;color:${subColor};line-height:1.375;margin:40px 0 16px;border-left:4px solid ${c};padding-left:12px;`
+    s.h2 = `font-size:${headingBase}px;font-weight:bold;color:${subColor};line-height:1.375;margin:40px 0 16px;border-left:4px solid ${h2Bar};padding-left:12px;`
   }
 
   // H3 前缀：diamond 菱形 / dot 圆点 / none 无
@@ -206,13 +210,16 @@ function buildStyles(theme?: ArticleTheme, uiDark?: boolean): Styles {
 
   // 引用：leftbar 左条浅底 / card 圆角卡片 / quotes 引号 + 左条
   const quoteStyle = t.quoteStyle ?? 'leftbar'
-  const quoteTint = tint(c, 0.1)
+  const quoteTint = t.quoteBg && isHexColor(t.quoteBg) ? t.quoteBg.trim() : tint(c, 0.1)
   if (quoteStyle === 'card') {
     s.blockquote = `margin:20px 0;padding:14px 16px;border-radius:12px;background:${quoteTint};color:${quoteColor};font-size:15px;line-height:${lh};`
   } else if (quoteStyle === 'dashcard') {
     // 虚线边框提示卡（导入设计稿常见范式）：白底 + 彩色 dashed 描边；边框色缺省用强调色淡描边
     const qBorder = t.quoteBorder && isHexColor(t.quoteBorder) ? t.quoteBorder.trim() : tint(c, 0.55)
-    s.blockquote = `margin:20px 0;padding:14px 16px;border:1px dashed ${qBorder};border-radius:12px;background:${dark ? 'rgba(255,255,255,0.05)' : '#ffffff'};color:${quoteColor};font-size:15px;line-height:${lh};`
+    // 虚线卡默认白底/微亮底，作者指定引用底色时以指定为准
+    const dashcardBg =
+      t.quoteBg && isHexColor(t.quoteBg) ? t.quoteBg.trim() : dark ? 'rgba(255,255,255,0.05)' : '#ffffff'
+    s.blockquote = `margin:20px 0;padding:14px 16px;border:1px dashed ${qBorder};border-radius:12px;background:${dashcardBg};color:${quoteColor};font-size:15px;line-height:${lh};`
   } else if (quoteStyle === 'quotes') {
     s.blockquote = `margin:20px 0;padding:12px 16px 12px 20px;border-left:4px solid ${c};border-top-right-radius:8px;border-bottom-right-radius:8px;background:${quoteTint};color:${quoteColor};font-size:15px;line-height:${lh};`
     s.quoteMark = `font-size:28px;line-height:1;color:${c};margin:0 0 2px;`
@@ -223,11 +230,11 @@ function buildStyles(theme?: ArticleTheme, uiDark?: boolean): Styles {
   // 分隔线：line 居中短横 / dot 圆点列 / long 通栏细线
   const hrStyle = t.hrStyle ?? 'line'
   if (hrStyle === 'long') {
-    s.hr = `margin:44px 0;border:0 none;border-top:1px solid ${dark ? 'rgba(255,255,255,0.15)' : '#e5e5e5'};width:100%;`
+    s.hr = `margin:44px 0;border:0 none;border-top:1px solid ${t.hrColor && isHexColor(t.hrColor) ? t.hrColor.trim() : dark ? 'rgba(255,255,255,0.15)' : '#e5e5e5'};width:100%;`
   } else if (hrStyle === 'dot') {
-    s.hr = `margin:40px auto;border:0 none;border-top:4px dotted ${c};width:72px;`
+    s.hr = `margin:40px auto;border:0 none;border-top:4px dotted ${t.hrColor && isHexColor(t.hrColor) ? t.hrColor.trim() : c};width:72px;`
   } else {
-    s.hr = `margin:40px auto;border:0 none;border-top:2px solid ${dark ? 'rgba(255,255,255,0.2)' : '#e8e8e8'};width:64px;`
+    s.hr = `margin:40px auto;border:0 none;border-top:2px solid ${t.hrColor && isHexColor(t.hrColor) ? t.hrColor.trim() : dark ? 'rgba(255,255,255,0.2)' : '#e8e8e8'};width:64px;`
   }
 
   return s

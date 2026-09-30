@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactElement } from 'react'
 import type { CategoryPreset, CategoryPresetPatch, PlatformId, SkillInfo } from '@shared/types'
 import { PLATFORM_LABELS } from '@shared/platformHtml'
+import { shouldSubmitOnEnter } from '@shared/imeEnter'
 import type { WechatConfig } from '@shared/wechatIpc'
 
 /**
@@ -157,7 +158,7 @@ export default function CategoryManageDialog({
                           value={renameValue}
                           onChange={(e) => setRenameValue(e.target.value)}
                           onKeyDown={(e) => {
-                            if (e.key === 'Enter') doRename(c)
+                            if (shouldSubmitOnEnter(e, { allowShift: true })) doRename(c)
                             if (e.key === 'Escape') setRenaming(null)
                           }}
                           placeholder="新分类名"

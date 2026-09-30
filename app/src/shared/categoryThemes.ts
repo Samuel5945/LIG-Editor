@@ -294,17 +294,269 @@ function clampNum(v: number, min: number, max: number): number {
   return Math.min(Math.max(v, min), max)
 }
 
+/**
+ * 排版键名别名：模型与导入来源最爱用的写法 → 白名单键。
+ * 为什么必须有：实测模型给 save_theme_preset 传的是一整套自造键名（text_color / font_family /
+ * paragraph_spacing / h2_color…），白名单不认就静默剔除，工具却返回成功——
+ * 于是模型照着「只写进去 1 个字段」的主题描述出「浅紫圆角引用卡片、紫色渐变分隔线」。
+ * 能映射的先映射，映射不了的必须报出来，不能装成功。
+ */
+export const THEME_KEY_ALIASES: Record<string, ThemeOverrideKey> = {
+  fontSize: 'bodyFontSize',
+  font_size: 'bodyFontSize',
+  body_font_size: 'bodyFontSize',
+  text_color: 'bodyText',
+  textColor: 'bodyText',
+  body_color: 'bodyText',
+  font_family: 'fontFamily',
+  fontFamily: 'fontFamily',
+  line_height: 'lineHeight',
+  lineHeight: 'lineHeight',
+  letter_spacing: 'letterSpacing',
+  paragraph_spacing: 'pGap',
+  para_spacing: 'pGap',
+  p_gap: 'pGap',
+  heading_color: 'headingColor',
+  headingColor: 'headingColor',
+  h2_color: 'headingColor',
+  h1_color: 'headingColor',
+  quote_style: 'quoteStyle',
+  quote_style_type: 'quoteStyle',
+  quote_border: 'quoteBorder',
+  quote_border_color: 'quoteBorder',
+  quote_bg: 'quoteBg',
+  quote_background: 'quoteBg',
+  quote_color: 'quoteText',
+  quote_text_color: 'quoteText',
+  quote_text: 'quoteText',
+  divider_color: 'hrColor',
+  hr_color: 'hrColor',
+  h2_border_color: 'h2Border',
+  h2_accent_color: 'h2Border',
+  hr_style: 'hrStyle',
+  divider_style: 'hrStyle',
+  strong_style: 'strongStyle',
+  bold_style: 'strongStyle',
+  strong_bg: 'strongBg',
+  highlight_bg: 'strongBg',
+  strong_color: 'strongColor',
+  bold_color: 'strongColor',
+  img_radius: 'imgRadius',
+  image_radius: 'imgRadius',
+  body_radius: 'bodyRadius',
+  card_radius: 'bodyRadius',
+  body_padding: 'bodyPadding',
+  padding: 'bodyPadding',
+  table_style: 'tableStyle',
+  table_header_bg: 'tableHeaderBg',
+  header_bg: 'tableHeaderBg',
+  table_border: 'tableBorder',
+  table_border_color: 'tableBorder',
+  table_header_text: 'tableHeaderText',
+  header_text: 'tableHeaderText',
+  h2_bg: 'h2Bg',
+  h2_bg_color: 'h2Bg',
+  h1_style: 'h1Style',
+  h2_style: 'h2Style',
+  h2_num: 'h2Num',
+  h3_mark: 'h3Mark',
+  body_align: 'bodyAlign',
+  heading_align: 'headingAlign',
+  body_bg: 'bodyBg',
+  bg: 'bodyBg',
+  background: 'bodyBg',
+  accent_color: 'accent'
+}
+
+/** 键名归一：蛇形/别名先改成白名单键，映射不了的返回在 unknown 里（调用方必须如实报，不得静默） */
+export function normalizeThemeKeys(raw: Record<string, unknown>): {
+  patch: Record<string, unknown>
+  unknown: string[]
+} {
+  const patch: Record<string, unknown> = {}
+  const unknown: string[] = []
+  const legal = new Set<string>(THEME_OVERRIDE_KEYS)
+  for (const [k, v] of Object.entries(raw)) {
+    const camel = k.replace(/[-_]([a-zA-Z0-9])/g, (_m, c: string) => c.toUpperCase())
+    // 显式写法优先于别名推断（模型同时给了 fontSize 与 bodyFontSize 时取后者）
+    const key = legal.has(k) ? k : legal.has(camel) ? camel : THEME_KEY_ALIASES[k] ?? THEME_KEY_ALIASES[camel]
+    if (!key) {
+      unknown.push(k)
+      continue
+    }
+    if (!(key in patch)) patch[key] = v
+  }
+  return { patch, unknown }
+}
+
+/**
+ * meta 覆盖口径 → 主题库口径。
+ * 两者字号键名不同（ProjectMeta.bodyFontSize vs ArticleTheme.fontSize），
+ * 直接把 meta 口径的对象存进主题库，编辑器与导出按主题口径读就什么都读不到——
+ * 表现是「主题入库成功但毫无变化」，所以存主题前必须过这一道。
+ */
+export function metaPatchToThemeKeys(patch: Partial<ProjectMeta>): Partial<ArticleTheme> {
+  const out: Record<string, unknown> = { ...patch }
+  if ('bodyFontSize' in out) {
+    if (out.fontSize === undefined) out.fontSize = out.bodyFontSize
+    delete out.bodyFontSize
+  }
+  return out as Partial<ArticleTheme>
+}
+
+/** meta 级排版覆盖白名单（30 键）：set_theme 工具、sanitizeThemePatch、readMeta 透传、
+ *  App handleApplyTypography 四处共用同一口径。
+ *  新增视觉字段必须同步这几处（PRD §14 已点名 readMeta 白名单是回归高发点）——
+ *  漏一处的表现是「写进 meta 却读不出来」或「下次 writeMeta 把它覆掉」。 */
+export const THEME_OVERRIDE_KEYS = [
+  'accent',
+  'bodyFontSize',
+  'headingFontSize',
+  'bodyAlign',
+  'headingAlign',
+  'h1Style',
+  'h2Style',
+  'h2Num',
+  'h3Mark',
+  'bodyBg',
+  'fontFamily',
+  'lineHeight',
+  'letterSpacing',
+  'pGap',
+  'bodyText',
+  'headingColor',
+  'quoteStyle',
+  'quoteBorder',
+  'quoteBg',
+  'quoteText',
+  'hrColor',
+  'h2Border',
+  'hrStyle',
+  'strongStyle',
+  'strongBg',
+  'strongColor',
+  'imgRadius',
+  'bodyRadius',
+  'bodyPadding',
+  'tableStyle',
+  'tableHeaderBg',
+  'tableBorder',
+  'tableHeaderText',
+  'h2Bg'
+] as const
+
+export type ThemeOverrideKey = (typeof THEME_OVERRIDE_KEYS)[number]
+
+/** 排版覆盖字段中文名（对话框视觉参数预览、工具返回值提示共用一套口径） */
+export const THEME_FIELD_LABELS: Record<ThemeOverrideKey, string> = {
+  accent: '强调色',
+  bodyFontSize: '正文字号',
+  headingFontSize: '标题字号',
+  bodyAlign: '段落排列',
+  headingAlign: '标题排列',
+  h1Style: '一级标题版式',
+  h2Style: '二级标题版式',
+  h2Num: '二级标题序号',
+  h3Mark: '三级标题标记',
+  bodyBg: '正文背景卡',
+  fontFamily: '字体栈',
+  lineHeight: '行高',
+  letterSpacing: '字距',
+  pGap: '段间距',
+  bodyText: '正文字色',
+  headingColor: '标题字色',
+  quoteStyle: '引用形态',
+  quoteBorder: '引用描边色',
+  quoteBg: '引用底色',
+  quoteText: '引用文字色',
+  hrColor: '分隔线颜色',
+  h2Border: '二级标题条色',
+  hrStyle: '分隔线形态',
+  strongStyle: '加粗形态',
+  strongBg: '加粗底色',
+  strongColor: '加粗字色',
+  imgRadius: '图片圆角',
+  bodyRadius: '正文卡片圆角',
+  bodyPadding: '正文内边距',
+  tableStyle: '表格样式',
+  tableHeaderBg: '表头底色',
+  tableBorder: '表格边线色',
+  tableHeaderText: '表头字色',
+  h2Bg: '二级标题底色'
+}
+
+/** 数值型覆盖的合法区间（口径单源：sanitizeThemePatch 夹取与 set_theme 的「越界如实报回」都读这里） */
+export const THEME_NUM_RANGES: Partial<Record<ThemeOverrideKey, [number, number]>> = {
+  bodyFontSize: [10, 40],
+  headingFontSize: [10, 40],
+  lineHeight: [1.5, 3],
+  pGap: [0, 48],
+  imgRadius: [0, 40],
+  bodyRadius: [0, 40]
+}
+
+/** 读数值型排版参数：数字直取，纯数字或带 px 的字符串（模型常写 "16px" / "2.4"）也读出来；读不出返回 undefined */
+export function themeNumber(v: unknown): number | undefined {
+  if (typeof v === 'number') return isFinite(v) ? v : undefined
+  if (typeof v === 'string' && /^\d+(\.\d+)?(px)?$/i.test(v.trim())) {
+    const n = Number(v.trim().toLowerCase().replace(/px$/, ''))
+    return isFinite(n) ? n : undefined
+  }
+  return undefined
+}
+
+/**
+ * 数值覆盖越界处理：夹到区间端点，并给出一句能直接转述给作者的中文说明。
+ * 为什么要报：作者说「行距调到 1.4」而口径下限是 1.5，静默抬成 1.5 的表现就是「设了没反应」，
+ * 只有把「1.4 已抬到 1.5」写进工具返回值，模型才会照实说，而不是声称已按 1.4 设好。
+ */
+export function clampThemeNumbers(raw: Record<string, unknown>): {
+  values: Record<string, number>
+  notes: string[]
+} {
+  const values: Record<string, number> = {}
+  const notes: string[] = []
+  for (const [k, range] of Object.entries(THEME_NUM_RANGES) as [ThemeOverrideKey, [number, number]][]) {
+    const v = themeNumber(raw[k])
+    if (v === undefined) continue
+    const [min, max] = range
+    const fixed = clampNum(v, min, max)
+    values[k] = fixed
+    if (fixed !== v)
+      notes.push(
+        `${THEME_FIELD_LABELS[k]}只支持 ${min}-${max}，你给的 ${v} 已${v < min ? '抬到' : '压到'} ${fixed}`
+      )
+  }
+  return { values, notes }
+}
+
 /** 把任意对象收敛为合法的排版覆盖键值对：剔未知键 / hex 校验 / 数值夹取 / 枚举守卫。
  *  set_theme 工具与 save_theme_preset 共用；null/undefined 值由调用方先行处理清除语义 */
 export function sanitizeThemePatch(patch: Record<string, unknown>): Partial<ProjectMeta> {
+  return sanitizeThemePatchDetailed(patch).values
+}
+
+/** 同上，但额外返回被剔掉的键名：工具层必须把「这些字段不认识，没写进去」照实回报，
+ *  否则模型会拿一个只落了 1 个字段的主题去描述整套排版 */
+export function sanitizeThemePatchDetailed(raw: Record<string, unknown>): {
+  values: Partial<ProjectMeta>
+  /** 完全映射不到白名单的键名 */
+  unknown: string[]
+  /** 键名认得、值却不合法而被丢弃的字段（枚举外值 / 读不出数值 / 空串 / 坏色值） */
+  invalid: string[]
+} {
+  const { patch, unknown } = normalizeThemeKeys(raw ?? {})
   const out: Record<string, unknown> = {}
   const hex = (k: string): void => {
     const v = patch[k]
     if (typeof v === 'string' && isHexColor(v)) out[k] = v.trim()
   }
-  const num = (k: string, min: number, max: number): void => {
-    const v = patch[k]
-    if (typeof v === 'number' && isFinite(v)) out[k] = clampNum(v, min, max)
+  const num = (k: ThemeOverrideKey): void => {
+    const range = THEME_NUM_RANGES[k]
+    if (!range) return
+    // 数值常被写成字符串（"16px" / "2.4"）：能安全读出来的先读出来
+    const n = themeNumber(patch[k])
+    if (n !== undefined) out[k] = clampNum(n, range[0], range[1])
   }
   const en = <T extends string>(k: string, list: readonly T[]): void => {
     const v = patch[k]
@@ -316,8 +568,8 @@ export function sanitizeThemePatch(patch: Record<string, unknown>): Partial<Proj
   }
   // 原有 10 字段
   hex('accent')
-  num('bodyFontSize', 10, 40)
-  num('headingFontSize', 10, 40)
+  num('bodyFontSize')
+  num('headingFontSize')
   en('bodyAlign', ['indent', 'flush', 'center'])
   en('headingAlign', ['center', 'left'])
   en('h1Style', ['bar', 'pill', 'underline'])
@@ -329,26 +581,32 @@ export function sanitizeThemePatch(patch: Record<string, unknown>): Partial<Proj
   if (patch.bodyBg === 'none' || (typeof patch.bodyBg === 'string' && isHexColor(patch.bodyBg))) out.bodyBg = patch.bodyBg
   // B 期扩展 20 字段
   str('fontFamily')
-  num('lineHeight', 1.5, 3)
+  num('lineHeight')
   str('letterSpacing')
-  num('pGap', 0, 48)
+  num('pGap')
   hex('bodyText')
   hex('headingColor')
   en('quoteStyle', QUOTE_STYLES)
   hex('quoteBorder')
+  hex('quoteBg')
+  hex('quoteText')
+  hex('hrColor')
+  hex('h2Border')
   en('hrStyle', HR_STYLES)
   en('strongStyle', STRONG_STYLES)
   hex('strongBg')
   hex('strongColor')
-  num('imgRadius', 0, 40)
-  num('bodyRadius', 0, 40)
+  num('imgRadius')
+  num('bodyRadius')
   str('bodyPadding')
   en('tableStyle', TABLE_STYLES)
   hex('tableHeaderBg')
   hex('tableBorder')
   hex('tableHeaderText')
   hex('h2Bg')
-  return out as Partial<ProjectMeta>
+  // 键名对上了但值被校验丢弃的，同样要能报出去（不然「设了没反应」又变成静默的）
+  const invalid = Object.keys(patch).filter((k) => !(k in out))
+  return { values: out as Partial<ProjectMeta>, unknown, invalid }
 }
 
 export function resolveArticleTheme(
@@ -373,6 +631,10 @@ export function resolveArticleTheme(
     | 'headingColor'
     | 'quoteStyle'
     | 'quoteBorder'
+    | 'quoteBg'
+    | 'quoteText'
+    | 'hrColor'
+    | 'h2Border'
     | 'hrStyle'
     | 'strongStyle'
     | 'strongBg'
@@ -391,11 +653,14 @@ export function resolveArticleTheme(
   const cat = meta?.category
   const base = (cat && (custom?.[cat] ?? CATEGORY_THEMES[cat])) || DEFAULT_THEME
   const accent = meta?.accent && isHexColor(meta.accent) ? meta.accent.trim() : base.accent
-  // 项目显式覆盖 → 覆盖主题；未设置 → 跟随主题（主题缺字段回退默认 16/20）
+  // 数值覆盖一律用 `!== undefined` 判定，不用真值判定：0 是合法覆盖值
+  // （pGap 0=段间不留空、imgRadius 0=方角图片），按真值短路会被当成「未覆盖」悄悄回落主题默认
   const fontSize =
-    meta?.bodyFontSize && isFinite(meta.bodyFontSize) ? meta.bodyFontSize : base.fontSize ?? DEFAULT_THEME.fontSize
+    meta?.bodyFontSize !== undefined && isFinite(meta.bodyFontSize)
+      ? meta.bodyFontSize
+      : base.fontSize ?? DEFAULT_THEME.fontSize
   const headingFontSize =
-    meta?.headingFontSize && isFinite(meta.headingFontSize)
+    meta?.headingFontSize !== undefined && isFinite(meta.headingFontSize)
       ? meta.headingFontSize
       : base.headingFontSize ?? DEFAULT_THEME.headingFontSize
   const bodyAlign = meta?.bodyAlign ?? base.bodyAlign
@@ -416,19 +681,25 @@ export function resolveArticleTheme(
     : base.bodyBg
   // ---- B 期视觉覆盖扩展：逐字段校验合并（hex 校验 / 数值夹取 / 枚举守卫 / 字符串非空） ----
   const fontFamily = meta?.fontFamily?.trim() || base.fontFamily
-  const lineHeight = meta?.lineHeight && isFinite(meta.lineHeight) ? clampNum(meta.lineHeight, 1.5, 3) : base.lineHeight
+  const lineHeight =
+    meta?.lineHeight !== undefined && isFinite(meta.lineHeight) ? clampNum(meta.lineHeight, 1.5, 3) : base.lineHeight
   const letterSpacing = meta?.letterSpacing?.trim() || base.letterSpacing
-  const pGap = meta?.pGap && isFinite(meta.pGap) ? clampNum(meta.pGap, 0, 48) : base.pGap
+  const pGap = meta?.pGap !== undefined && isFinite(meta.pGap) ? clampNum(meta.pGap, 0, 48) : base.pGap
   const bodyText = meta?.bodyText && isHexColor(meta.bodyText) ? meta.bodyText.trim() : base.bodyText
   const quoteStyle = meta?.quoteStyle && QUOTE_STYLES.includes(meta.quoteStyle) ? meta.quoteStyle : base.quoteStyle
   const quoteBorder = meta?.quoteBorder && isHexColor(meta.quoteBorder) ? meta.quoteBorder.trim() : base.quoteBorder
+  const quoteBg = meta?.quoteBg && isHexColor(meta.quoteBg) ? meta.quoteBg.trim() : base.quoteBg
+  const quoteText = meta?.quoteText && isHexColor(meta.quoteText) ? meta.quoteText.trim() : base.quoteText
+  const hrColor = meta?.hrColor && isHexColor(meta.hrColor) ? meta.hrColor.trim() : base.hrColor
+  const h2Border = meta?.h2Border && isHexColor(meta.h2Border) ? meta.h2Border.trim() : base.h2Border
   const hrStyle = meta?.hrStyle && HR_STYLES.includes(meta.hrStyle) ? meta.hrStyle : base.hrStyle
   const strongStyle =
     meta?.strongStyle && STRONG_STYLES.includes(meta.strongStyle) ? meta.strongStyle : base.strongStyle
   const strongBg = meta?.strongBg && isHexColor(meta.strongBg) ? meta.strongBg.trim() : base.strongBg
-  const imgRadius = meta?.imgRadius && isFinite(meta.imgRadius) ? clampNum(meta.imgRadius, 0, 40) : base.imgRadius
+  const imgRadius =
+    meta?.imgRadius !== undefined && isFinite(meta.imgRadius) ? clampNum(meta.imgRadius, 0, 40) : base.imgRadius
   const bodyRadius =
-    meta?.bodyRadius && isFinite(meta.bodyRadius) ? clampNum(meta.bodyRadius, 0, 40) : base.bodyRadius
+    meta?.bodyRadius !== undefined && isFinite(meta.bodyRadius) ? clampNum(meta.bodyRadius, 0, 40) : base.bodyRadius
   const bodyPadding = meta?.bodyPadding?.trim() || base.bodyPadding
   const tableStyle =
     meta?.tableStyle && TABLE_STYLES.includes(meta.tableStyle) ? meta.tableStyle : base.tableStyle
@@ -455,6 +726,7 @@ export function resolveArticleTheme(
   const overrides = {
     fontSize, headingFontSize, bodyAlign, headingAlign, h1Style, h2Style, h2Num, h3Mark, bodyBg,
     fontFamily, lineHeight, letterSpacing, pGap, bodyText, headingColor, quoteStyle, quoteBorder,
+    quoteBg, quoteText, hrColor, h2Border,
     hrStyle, strongStyle, strongBg, strongColor, imgRadius, bodyRadius, bodyPadding,
     tableStyle, tableHeaderBg, tableBorder, tableHeaderText, h2Bg
   }

@@ -311,8 +311,11 @@ C:\Users\PC\Desktop\tuwen-editor\workspace\<分类>\<项目名>\
 ### 7.6 排版与主题
 
 - 每个分类绑定一套排版主题：内置 6 套分类调性 + `未分类` 默认，另可从**已发布的公众号文章 HTML 反向解析**出自定义主题（`themeParse.ts`，存 `customThemes.json`，主题名即创建一个分类）
-- 主题可逐项微调：标题装饰（胶囊/下划线等）、小节序号（01 / 一、/ ① 圈号等 6 种）、引用与分隔线形态、加粗是否高亮、背景卡色
-- 解析优先级：`customThemes[分类]` > `CATEGORY_THEMES[分类]` > `DEFAULT_THEME`，再被工程级八项覆盖（§4）
+- 主题可逐项微调：标题装饰（胶囊/下划线等）、小节序号（01 / 一、/ ① 圈号等 6 种）、引用与分隔线形态、加粗是否高亮、背景卡色；**工程级覆盖白名单已放开到全量视觉字段 34 项**（v0.8.0 后，2026-09-30 规格 B 期）：新增字体栈、行高、字距、段距、正文/标题字色、引用描边、加粗底色与字色、图片与正文圆角、正文内边距、表格三色系与表头字色、h2 底色，以及引用底色 quoteBg / 引用文字色 quoteText / 分隔线颜色 hrColor / H2 条色 h2Border（2026-09-30 按模型实跑诉求补齐，四个字段编辑器 CSS 变量与导出内联样式双端消费）
+- 解析优先级：`customThemes[分类]` > `CATEGORY_THEMES[分类]` > `DEFAULT_THEME`，再被工程级 34 项覆盖（§4）；覆盖口径单源为 `THEME_OVERRIDE_KEYS`（校验与夹取集中在 `sanitizeThemePatch` + `resolveArticleTheme`，数值用 `!== undefined` 判定，0 是合法覆盖值如段距 0 / 图片方角）
+- **AI 可触达视觉层（三条路径全通）**：① 对话里 `set_theme` 按 34 字段逐项覆盖/null 恢复默认，工具守则要求「文本结构走 patch_article、视觉参数走 set_theme」连招；② 新工具 `save_theme_preset` 让模型一次输出整套主题入库（同名分类自动创建），成功后渲染层回调 `onCustomThemesChanged` 即时重拉主题库，作者不用重开应用；**两个工具都不得静默吞参数**：入参先按 `THEME_KEY_ALIASES` 归一（蛇形、`text_color`/`quote_bg` 这类自造名、`"16px"` 这种字符串数值），再校验后写入，返回带 `appliedFields` / `unknownKeys` / `droppedKeys` 与一句「未写入的部分不得声称已生效」，守则同时要求模型照实转述（§12 排查记录）；③ **排版优化对话框打包输出**：一次给出排版全文 + 可选 `<theme>` 视觉参数围栏，`parseLayoutOutput` 剥离后正文走 diff、视觉参数走 `handleApplyTypography`，确认区列出「中文名 = 值」预览，可只应用排版（协议向后兼容：无围栏/坏 JSON/非对象等同模型没给视觉意见）
+- **越界与脏参数一律不静默**：数值夹取区间单源 `THEME_NUM_RANGES`（行高 1.5–3 / 段距 0–48 / 圆角 0–40 / 字号 10–40），`set_theme` 夹取后把「行高只支持 1.5-3，你给的 1.4 已抬到 1.5」写进返回 hint，模型照实转述（2026-09-30 定：**保持 1.5 下限不放宽**，因为「设了没反应」比「值被改过」更难查）；模型爱写的蛇形参数名（`line_height`）与写成 JSON 字符串的数组，在渲染层执行前按该工具 `inputSchema` 的合法键统一归一（`toolArgs.normalizeToolArgs`，只有对应驼峰键合法才改名，未知键仍留给工具自己剔）
+- **主题库与 meta 的字号键名不同口径**（`ArticleTheme.fontSize` vs `ProjectMeta.bodyFontSize`）：存主题前必过 `metaPatchToThemeKeys`，否则编辑器与导出按主题口径读不到——曾导致「主题入库成功但毫无变化」；`save_theme_preset` 的 `name` 与 `category` 互为别名（模型常只给后者）
 - **昼夜配色贯穿导出**：日间/夜间两套配色反色，编辑器预览、复制、导出、推送一致
 
 ### 7.7 贴图卡片（小红书 / 公众号贴图）
@@ -466,9 +469,9 @@ Word（`docx`）与 PDF（`printToPDF`）落工程内 `交付/`，用于对外�
 - **本地 HTTP**：`http://127.0.0.1:<port>/api/*`，端口与 token 写入 `settings\bridge.json` 供本机工具发现
 - **「一键接入」卡片**：设置页生成 Codex（`config.toml`）/ Qoder / Claude Code 的 MCP 配置片段，一键复制
 
-### 10.2 MCP 工具面（当前 25 个）
+### 10.2 MCP 工具面（当前 27 个）
 
-> **chat-tools v1（2026-09-29，滚动补记）**：内部对话副驾驶已接入工具调用——排除 5 个 `*_prompt` 后的 **20 个工具**以 function calling 暴露给对话模型（`agent:listTools` / `agent:callTool`），三层确认（读类静默 / 写类结果卡 / 推送确认卡），供应商不支持 tools 参数时自动降级回围栏协议。规格见 `docs/superpowers/specs/2026-09-29-chat-tools-design.md`。
+> **chat-tools v1（2026-09-29，滚动补记）**：内部对话副驾驶已接入工具调用——排除 5 个 `*_prompt` 后的 **22 个工具**以 function calling 暴露给对话模型（`agent:listTools` / `agent:callTool`），三层确认（读类静默 / 写类结果卡 / 推送确认卡），供应商不支持 tools 参数时自动降级回围栏协议。规格见 `docs/superpowers/specs/2026-09-29-chat-tools-design.md`。
 
 **关键设计变更**：v1.0 设想的 `brainstorm_topics / generate_article / review_article / generate_titles` 由应用代跑 LLM，实际改为 **`*_prompt` 返回提示词消息组、本应用不代跑 LLM**——外部 Agent 用它自己的模型跑，再调落盘工具写入。理由：Agent 侧模型更强且已有配额，避免把 API Key 与计费绑到编辑器上；同时提示词里已注入当前正文与风格 Skill，Agent 无需自行拼装上下文。
 
@@ -476,10 +479,10 @@ Word（`docx`）与 PDF（`printToPDF`）落工程内 `交付/`，用于对外�
 工程管理   list_projects / create_project / set_project_category / get_project
 正文读写   read_article / write_article / patch_article（搜索替换式局部改）
 提示词     brainstorm_prompt / outline_prompt / article_prompt / review_prompt / titles_prompt
-落盘       save_ideas / save_review / set_titles / set_theme
+落盘       save_ideas / save_review / set_titles / set_theme / save_theme_preset
 配图       render_figure / generate_image / import_image / set_cover
 排期       schedule_set
-导出发布   export_html / export_docx / push_draft / push_cards
+导出发布   export_html / export_docx / export_pdf / push_draft / push_cards
 ```
 
 每个写操作后触发 `notifyChange()`，GUI 侧热载。
@@ -529,6 +532,10 @@ Agent 直接编辑 article.md / figures/*.html / project.json → watcher 热载
 | figures 渲染失败 | 保留旧 PNG，报错定位到源 HTML 行 |
 | 抠图效果差 | 三算法切换 + 阈值滑杆，实时预览 |
 | 富文本粘贴公众号后图片丢失 | 图片 dataURL 内嵌兜底；单图 >10MB 警告 |
+| 排版数值越界（如行距要 1.4，口径下限 1.5） | 工具层夹到区间端点，并把「行高只支持 1.5-3，你给的 1.4 已抬到 1.5」写进返回值 hint——**不静默改值**，区间单源 `THEME_NUM_RANGES`（§7.6） |
+| 模型用蛇形参数名（`line_height`）或把数组写成 JSON 字符串 | 执行前按该工具 `inputSchema` 的合法键归一（`normalizeToolArgs`），只有对应驼峰键合法才改名；非法 JSON 原样交给工具报错 |
+| 破坏性操作确认 | 一律走主进程父窗口模态（IPC `dialog:confirm` → `showMessageBox`，按钮写动词「删除/覆盖生成/继续」）。**不用 `window.confirm`**：Windows 上它关掉后焦点不回 BrowserWindow，之后页面里点了没反应（切出窗口再切回才恢复），删除会话实测命中；IPC 取不到结果时返回「取消」——问不成就不删 |
+| 模型参数写错形状（蛇形键 / 包一层 theme: / 自造键名 / 带单位字符串） | 先按该工具 `inputSchema` 与排版别名表归一（`toolArgs.normalizeToolArgs` + `THEME_KEY_ALIASES`），归一不了的**连同原因写进返回 hint**（`unknownKeys` / `droppedKeys` / `ignoredKeys` / `appliedFields`），守则要求模型照实转述——绝不返回「成功」却什么都没写 |
 | MCP 并发写冲突 | 工程级写锁，后到操作排队 |
 | 选题库文件缺失/损坏 | 降级为空列表，不阻塞其他功能 |
 | 检索未配置 Key | 相关能力自动降级为不检索 |
@@ -546,7 +553,7 @@ Agent 直接编辑 article.md / figures/*.html / project.json → watcher 热载
 5. 导出的富文本粘贴进公众号后台：排版不丢、图注完好、图片正常转存 CDN
 6. 同一篇内容可转出贴图卡片并按四平台画像复制，排版不串（S9）
 7. 工程可在日历上拖拽排期，选题可拖到日期格直接立项（S10）
-8. `npm run typecheck` 与 `npm run test` 全绿（当前 21 文件 / 340 例）
+8. `npm run typecheck` 与 `npm run test` 全绿（当前 29 文件 / 482 例）
 
 ## 14. 风险与开放问题
 
@@ -556,7 +563,7 @@ Agent 直接编辑 article.md / figures/*.html / project.json → watcher 热载
 - **md ↔ 富文本双向同步**是编辑器最大技术难点，约束子集为：标题/段落/加粗/引用/图片+图注/分隔线，不支持任意嵌套富文本
 - **PDF 素材抽取**质量不稳，仅做纯文本抽取，不做版面还原
 - **图像接口**出入参需在实现前用真实 Key 联调确认（已支持两种形态，仍可能遇到新供应商差异）
-- **`readMeta` 白名单**是回归高发点（§4 维护约束），新增 `ProjectMeta` 字段须同步透传
+- **`readMeta` 白名单**是回归高发点（§4 维护约束），新增 `ProjectMeta` 字段须同步透传。现有两道护栏：覆盖口径单源 `THEME_OVERRIDE_KEYS`（34 键，中文名表与夹取区间同处一份文件，配「逐键可写/逐键有中文名」断言），以及 `projectMetaVisualPassthrough.test.ts` 走真实临时目录做 readMeta→writeMeta→readMeta 往返，逐键断言「改一个不吞其余」
 - **凭据边界**：`categoryPresets.json` 明文不加密，凭据一律不得入内；公众号密钥只进 `wechat.json` 且经 safeStorage（DPAPI）加密，仅本机可解（安全存储不可用时降级明文，同 llm.json）。只改绑定的路径刻意不让密文经 safeStorage 往返，避免解密失败把密钥覆写成空
 - **发布产物与网盘版本可能静默分叉**：本地 `releases/` 同名重打会覆盖旧产物，而对外分发链接指向的是上传时的那一份；发版须同步版本号与下载链接（缓解：v0.6.x 起应用内更新提醒以官网 update.json + GitHub Release 双源为准，且 GitHub release 正文贴网盘链接才触发提醒——按 docs/release.md 的五步顺序发版即可保证提示上线时网盘已就绪）
 - **文档债**：本 PRD 曾落后实现约 6 周（v1.0 → M13），后续每加一类能力应同步回写本文，否则它不再可信
