@@ -58,7 +58,7 @@ function ThemeSwatch({ theme }: { theme: ArticleTheme }): ReactElement {
   const centered = (theme.h1Style ? theme.headingAlign !== 'left' : theme.headingAlign === 'center')
   return (
     <div
-      className="h-[104px] overflow-hidden border-b border-panel-3 px-3.5 py-3"
+      className="h-[104px] overflow-hidden border-b border-panel-3 px-4 py-3"
       style={{ background: bg || undefined, fontFamily: theme.fontFamily, lineHeight: theme.lineHeight || 1.9 }}
     >
       <div className={centered ? 'text-center' : 'text-left'}>

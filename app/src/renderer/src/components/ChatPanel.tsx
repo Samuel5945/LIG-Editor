@@ -1035,8 +1035,9 @@ export default function ChatPanel({
         </div>
       )}
 
-      {/* 输入区（shrink-0：附件预览条再高也不许被压，消息区该让的是自己那一份高度） */}
-      <div className="shrink-0 border-t border-panel-3 p-2">
+      {/* 输入区（shrink-0：附件预览条再高也不许被压，消息区该让的是自己那一份高度）
+          内缩一律 12px（p-3）——与头部、消息流同一列，输入框壳不再比气泡往左凸 4px */}
+      <div className="shrink-0 border-t border-panel-3 p-3">
         {/* 附件预览条 */}
         {(attachImages.length > 0 || attachDocs.length > 0) && (
           <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
@@ -1083,27 +1084,31 @@ export default function ChatPanel({
           className="hidden"
           onChange={(e) => { void addAttachments(e.target.files); e.target.value = '' }}
         />
-        <div className="no-scrollbar flex min-w-0 items-center gap-1 overflow-x-auto px-2 pb-2">
-          <ToolPill icon="clip" onClick={() => attachRef.current?.click()} title="附带图片（走 vision）或文档（提取文本）">
-            附件
-          </ToolPill>
-          <ToolPill on={webOn} icon="globe" onClick={() => setWebOn((v) => !v)} title="联网搜索：开启后每轮先搜索再回答（时效性问题建议开）">
-            联网
-          </ToolPill>
-          <ToolPill
-            on={ctxOn && !!project}
-            disabled={!project}
-            icon="book"
-            onClick={() => setCtxOn((v) => !v)}
-            title="工程上下文：开启后每轮自动附带当前正文/贴图文案，AI 能直接回答内容相关问题"
-          >
-            上下文
-          </ToolPill>
+        {/* 工具胶囊行与上方文字同一 12px 列：hover 底色左缘不再比正文凸出 4px。
+            发送/停止键放在滚动区**外面**——右栏窄时胶囊横滑，但发送键永远在右下角点得到 */}
+        <div className="flex min-w-0 items-center gap-1 px-3 pb-2.5">
+          <div className="no-scrollbar flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+            <ToolPill icon="clip" onClick={() => attachRef.current?.click()} title="附带图片（走 vision）或文档（提取文本）">
+              附件
+            </ToolPill>
+            <ToolPill on={webOn} icon="globe" onClick={() => setWebOn((v) => !v)} title="联网搜索：开启后每轮先搜索再回答（时效性问题建议开）">
+              联网
+            </ToolPill>
+            <ToolPill
+              on={ctxOn && !!project}
+              disabled={!project}
+              icon="book"
+              onClick={() => setCtxOn((v) => !v)}
+              title="工程上下文：开启后每轮自动附带当前正文/贴图文案，AI 能直接回答内容相关问题"
+            >
+              上下文
+            </ToolPill>
+          </div>
           {streaming ? (
             <button
               onClick={abort}
               title="停止生成"
-              className="ml-auto inline-flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-lg bg-panel-3 text-st-bad hover:bg-panel"
+              className="inline-flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-lg bg-panel-3 text-st-bad hover:bg-panel"
             >
               <Icon name="square" size={13} />
             </button>
@@ -1112,7 +1117,7 @@ export default function ChatPanel({
               onClick={() => void send()}
               disabled={!input.trim() && attachImages.length === 0 && attachDocs.length === 0}
               title="发送（Enter）"
-              className="ml-auto inline-flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-lg bg-accent text-white hover:brightness-110 disabled:opacity-40"
+              className="inline-flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-lg bg-accent text-white hover:brightness-110 disabled:opacity-40"
             >
               <Icon name="send" size={14} />
             </button>

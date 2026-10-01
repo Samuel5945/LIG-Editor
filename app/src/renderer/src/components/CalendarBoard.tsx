@@ -394,7 +394,7 @@ export default function CalendarBoard({
               </>
             )}
           </div>
-          <div className="shrink-0 border-t border-panel-3 px-3 py-1.5 text-[10px] text-ink-dim">
+          <div className="shrink-0 border-t border-panel-3 px-4 py-1.5 text-[10px] text-ink-dim">
             {asideHot
               ? '松手即取消排期'
               : asideTab === 'unscheduled'
