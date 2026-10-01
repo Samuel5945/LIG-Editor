@@ -6,6 +6,7 @@ import type { ArticleTheme } from '@shared/categoryThemes'
 import type { PlatformId } from '@shared/types'
 import type { PushDraftResult } from '@shared/wechatIpc'
 import { Icon } from '../../ui/Icon'
+import { Segmented } from '../../ui/primitives'
 
 /**
  * 导出面板体（创作向导「导出」步工作面；自 ExportDialog 抽出，原弹窗壳已随页签体系退役）：
@@ -34,11 +35,9 @@ export interface ExportPanelProps {
 type PubVariant = 'day' | 'night'
 
 const btnPrimary =
-  'rounded bg-sky-600 px-3 py-1.5 text-xs text-white hover:bg-sky-500 disabled:opacity-40 whitespace-nowrap'
+  'rounded bg-accent px-3 py-1.5 text-xs text-white hover:brightness-110 disabled:opacity-40 whitespace-nowrap'
 const btnGhost =
   'rounded border border-panel-3 px-3 py-1.5 text-xs text-ink-dim hover:bg-panel-3 disabled:opacity-40 whitespace-nowrap'
-const segBtn = (active: boolean) =>
-  `px-2.5 py-1 text-[11px] ${active ? 'bg-sky-600 text-white' : 'text-ink-dim hover:bg-panel-3'}`
 
 export default function ExportPanel({ project, projectDir, markdown, theme, category, onExported, onToast }: ExportPanelProps) {
   const [busy, setBusy] = useState(false)
@@ -219,18 +218,16 @@ export default function ExportPanel({ project, projectDir, markdown, theme, cate
         {/* 分发目标平台（M11）：影响复制富文本与预览；推送草稿始终走公众号 */}
         <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px] text-ink-dim">
           <span>分发平台：</span>
-          <div className="flex overflow-hidden rounded border border-panel-3">
-            {(Object.keys(PLATFORM_LABELS) as PlatformId[]).map((id) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => setPlatform(id)}
-                className={`${segBtn(platform === id)} ${id !== 'wechat' ? 'border-l border-panel-3' : ''}`}
-              >
-                {PLATFORM_LABELS[id]}
-              </button>
-            ))}
-          </div>
+          <Segmented
+            size="sm"
+            ariaLabel="分发平台"
+            value={platform}
+            onChange={setPlatform}
+            items={(Object.keys(PLATFORM_LABELS) as PlatformId[]).map((id) => ({
+              value: id,
+              label: PLATFORM_LABELS[id]
+            }))}
+          />
           {platform !== 'wechat' && (
             <span className="text-ink-dim/80">适配平台净化规则的简化排版，以实际粘贴效果为准</span>
           )}
@@ -241,24 +238,23 @@ export default function ExportPanel({ project, projectDir, markdown, theme, cate
         {platform === 'wechat' && (
           <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px] text-ink-dim">
             <span>发布配色：</span>
-            <div className="flex overflow-hidden rounded border border-panel-3">
-              <button type="button" onClick={() => setPubVariant('day')} className={segBtn(pubVariant === 'day')}>
-                <Icon name="sun" size={12} className="mr-1" />日间
-              </button>
-              <button
-                type="button"
-                onClick={() => setPubVariant('night')}
-                className={`${segBtn(pubVariant === 'night')} border-l border-panel-3`}
-              >
-                <Icon name="moon" size={12} className="mr-1" />夜间
-              </button>
-            </div>
+            <Segmented
+              size="sm"
+              ariaLabel="发布配色"
+              value={pubVariant}
+              onChange={setPubVariant}
+              title="公众号读者端不支持媒体查询，只能定一套；article.html 另有读者端自动昼夜"
+              items={[
+                { value: 'day', label: '日间', icon: 'sun' },
+                { value: 'night', label: '夜间', icon: 'moon' }
+              ]}
+            />
             <label className="ml-1 flex cursor-pointer items-center gap-1 text-ink-dim">
               <input
                 type="checkbox"
                 checked={htmlAuto}
                 onChange={(e) => setHtmlAuto(e.target.checked)}
-                className="accent-sky-500"
+                className="accent-accent"
               />
               article.html 读者端自动昼夜
             </label>

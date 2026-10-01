@@ -49,7 +49,7 @@ export default function IdeaLibrary({ version, onMakeOutline, onToast }: IdeaLib
       {ideas.map((it) => (
         <div key={`${it.index}-${it.title}`} className="group mb-1.5 rounded-lg border border-panel-3 bg-panel p-2">
           <div className="flex items-start gap-1.5">
-            <span className={`shrink-0 rounded px-1 py-0.5 font-bold ${it.score >= 8 ? 'bg-green-950 text-green-400' : 'bg-panel-3 text-ink-dim'}`}>
+            <span className={`shrink-0 rounded px-1 py-0.5 font-bold ${it.score >= 8 ? 'bg-st-done/15 text-st-done' : 'bg-panel-3 text-ink-dim'}`}>
               {it.score}
             </span>
             <p className="min-w-0 flex-1 font-bold text-ink">{it.title}</p>
@@ -64,7 +64,7 @@ export default function IdeaLibrary({ version, onMakeOutline, onToast }: IdeaLib
             >
               生成大纲 →
             </button>
-            <button onClick={() => void remove(it)} className="ml-auto rounded px-2 py-0.5 text-ink-dim opacity-0 hover:bg-panel-3 hover:text-red-400 group-hover:opacity-100">
+            <button onClick={() => void remove(it)} className="ml-auto rounded px-2 py-0.5 text-ink-dim opacity-0 hover:bg-panel-3 hover:text-st-bad group-hover:opacity-100">
               删除
             </button>
           </div>

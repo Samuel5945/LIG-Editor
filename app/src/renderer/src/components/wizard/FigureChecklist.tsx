@@ -42,7 +42,7 @@ export default function FigureChecklist({
       {/* 进度头 */}
       <div className="mb-3 flex items-center gap-3">
         <span className="shrink-0 text-ink">配图进度</span>
-        <div className="h-1.5 flex-1 overflow-hidden rounded bg-panel-3">
+        <div className="h-1 flex-1 overflow-hidden rounded-full bg-panel-3">
           <div className="h-full bg-accent transition-all" style={{ width: `${pct}%` }} />
         </div>
         <span className="shrink-0 text-ink-dim">
@@ -70,8 +70,15 @@ export default function FigureChecklist({
       ) : (
         <div className="mb-3 space-y-1.5">
           {suggestions.map((s, i) => (
-            <div key={`${s.line}-${i}`} className="rounded-lg border border-panel-3 bg-panel px-3 py-2">
+            <div
+              key={`${s.line}-${i}`}
+              className="rounded-xl border border-panel-3 bg-panel-2 px-3 py-2.5 shadow-[0_1px_6px_rgba(0,0,0,.18)] transition-[border-color,transform] duration-150 hover:border-accent/60"
+            >
               <div className="flex items-center gap-2.5">
+                {/* 48px 缩略图占位框：处理完之前是虚线空框，占位与成图同一位置，行高不跳 */}
+                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md border border-dashed border-panel-3 bg-panel-2 text-ink-dim">
+                  <Icon name="image" size={16} />
+                </span>
                 <span className="shrink-0 font-bold text-accent">{images.length + i + 1}</span>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-[13px] text-ink" title={s.prompt}>

@@ -4,6 +4,7 @@ import type { McpAccessCard, SkillInfo } from '@shared/types'
 import { shouldSubmitOnEnter } from '@shared/imeEnter'
 import { DialogShell } from '../ui/DialogShell'
 import { Icon } from '../ui/Icon'
+import { Segmented } from '../ui/primitives'
 import type { WechatAccount, WechatConfig } from '@shared/wechatIpc'
 
 /**
@@ -29,6 +30,44 @@ interface IntegrationDialogProps {
 
 const btnGhost =
   'rounded border border-slate-600 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-700 disabled:opacity-40 whitespace-nowrap'
+
+/**
+ * 配置片段块（§5.11）：标题 + 落地文件路径一行，代码块贴面板底色，
+ * 复制按钮浮在代码块右上角（§4：主操作贴着它操作的对象，不另起一行）。
+ */
+function Snippet({
+  label,
+  path,
+  text,
+  onCopy
+}: {
+  label: string
+  path: string
+  text: string
+  onCopy: (text: string) => void
+}): ReactElement {
+  return (
+    <section>
+      <div className="mb-1 flex items-baseline gap-2">
+        <span className="shrink-0 text-[11.5px] font-semibold text-ink">{label}</span>
+        <span className="selectable min-w-0 truncate font-mono text-[10.5px] text-ink-dim">{path}</span>
+      </div>
+      <div className="relative">
+        <pre className="thin-scroll selectable max-h-52 overflow-auto rounded-lg border border-panel-3 bg-panel p-3 pr-16 text-[11px] leading-5 text-ink-dim">
+          {text}
+        </pre>
+        <button
+          onClick={() => onCopy(text)}
+          title="复制到剪贴板"
+          className="absolute right-1.5 top-1.5 inline-flex h-[24px] items-center gap-1 rounded-md border border-panel-3 bg-panel-2 px-2 text-[11px] text-ink-dim transition-colors hover:border-accent hover:text-accent"
+        >
+          <Icon name="copy" size={11} />
+          复制
+        </button>
+      </div>
+    </section>
+  )
+}
 
 export default function IntegrationDialog({
   onToast,
@@ -178,28 +217,18 @@ export default function IntegrationDialog({
       bodyClass="p-0"
       onClose={onClose}
     >
-        <div className="flex shrink-0 items-center gap-2 border-b border-panel-3 px-4 py-2.5">
-          <button
-            onClick={() => setTab('mcp')}
-            className={`rounded px-2.5 py-1 text-xs ${tab === 'mcp' ? 'bg-slate-700 text-slate-100' : 'text-slate-400 hover:bg-slate-800'}`}
-          >
-            <Icon name="plug" size={12} className="mr-1" />Agent 接入
-          </button>
-          <button
-            onClick={() => setTab('skill')}
-            className={`rounded px-2.5 py-1 text-xs ${tab === 'skill' ? 'bg-slate-700 text-slate-100' : 'text-slate-400 hover:bg-slate-800'}`}
-          >
-            <Icon name="zap" size={12} className="mr-1.5" />Skill 管理
-          </button>
-          <button
-            onClick={() => setTab('push')}
-            className={`rounded px-2.5 py-1 text-xs ${tab === 'push' ? 'bg-slate-700 text-slate-100' : 'text-slate-400 hover:bg-slate-800'}`}
-          >
-            <Icon name="send" size={12} className="mr-1.5" />推送设置
-          </button>
-          <button onClick={onClose} className="ml-auto text-slate-500 hover:text-slate-300">
-            <Icon name="x" size={12} className="mr-1.5" />
-          </button>
+        {/* 页签行用全局分段控件单源；右上角关闭由 DialogShell 头部承担，不再重复画一只 ✕ */}
+        <div className="flex shrink-0 items-center border-b border-panel-3 px-4 py-2.5">
+          <Segmented
+            ariaLabel="接入分区"
+            value={tab}
+            onChange={setTab}
+            items={[
+              { value: 'mcp', label: 'Agent 接入', icon: 'plug' },
+              { value: 'skill', label: 'Skill 管理', icon: 'zap' },
+              { value: 'push', label: '推送设置', icon: 'send' }
+            ]}
+          />
         </div>
 
         <div className="min-h-0 flex-1 overflow-auto p-4 text-xs text-slate-300">
@@ -245,7 +274,7 @@ export default function IntegrationDialog({
                         </button>
                         <button
                           onClick={() => removeAccount(i)}
-                          className="rounded border border-slate-700 px-2 py-1 text-[11px] text-slate-400 hover:border-red-500 hover:text-red-400"
+                          className="rounded border border-slate-700 px-2 py-1 text-[11px] text-slate-400 hover:border-st-bad hover:text-st-bad"
                         >
                           删除
                         </button>
@@ -303,7 +332,7 @@ export default function IntegrationDialog({
                   </button>
                 </div>
                 {ipResult && (
-                  <p className={`break-all text-[11px] ${ipResult.ok ? 'text-green-400' : 'text-red-400'}`}>
+                  <p className={`break-all text-[11px] ${ipResult.ok ? 'text-st-done' : 'text-st-bad'}`}>
                     {ipResult.ok ? ` 公网 IP：${ipResult.text}（已复制，粘贴到白名单即可）` : ` ${ipResult.text}`}
                   </p>
                 )}
@@ -318,28 +347,18 @@ export default function IntegrationDialog({
                   把本应用注册为外部 Agent（Codex / Qoder 等）的 MCP 工具：复制下方片段填进对应配置文件，
                   Agent 即可通过对话完成「建项目 → 生成正文 → 改图 → 导出」全流程。
                 </p>
-                <section>
-                  <div className="mb-1 flex items-center justify-between">
-                    <span className="font-medium text-slate-200">Codex — ~/.codex/config.toml</span>
-                    <button onClick={() => copy('Codex 片段', card.codexToml)} className={btnGhost}>
-                      <Icon name="copy" size={12} className="mr-1.5" />复制
-                    </button>
-                  </div>
-                  <pre className="selectable overflow-auto rounded bg-slate-950 p-3 text-[11px] leading-5 text-emerald-300">
-                    {card.codexToml}
-                  </pre>
-                </section>
-                <section>
-                  <div className="mb-1 flex items-center justify-between">
-                    <span className="font-medium text-slate-200">Qoder / Claude — mcp.json</span>
-                    <button onClick={() => copy('mcp.json 片段', card.qoderJson)} className={btnGhost}>
-                      <Icon name="copy" size={12} className="mr-1.5" />复制
-                    </button>
-                  </div>
-                  <pre className="selectable overflow-auto rounded bg-slate-950 p-3 text-[11px] leading-5 text-sky-300">
-                    {card.qoderJson}
-                  </pre>
-                </section>
+                <Snippet
+                  label="Codex"
+                  path="~/.codex/config.toml"
+                  text={card.codexToml}
+                  onCopy={(t) => copy('Codex 片段', t)}
+                />
+                <Snippet
+                  label="Qoder / Claude"
+                  path="mcp.json"
+                  text={card.qoderJson}
+                  onCopy={(t) => copy('mcp.json 片段', t)}
+                />
                 <section>
                   <p className="text-slate-500">
                     进阶：本应用运行期间还开着本地 HTTP 桥（免二开进程），端口与 token 见
@@ -372,7 +391,7 @@ export default function IntegrationDialog({
                   </button>
                   <button
                     onClick={() => deleteSkill(s)}
-                    className="shrink-0 rounded border border-slate-700 px-2 py-1 text-[11px] text-slate-400 hover:border-red-500 hover:text-red-400"
+                    className="shrink-0 rounded border border-slate-700 px-2 py-1 text-[11px] text-slate-400 hover:border-st-bad hover:text-st-bad"
                   >
                     删除
                   </button>
@@ -404,20 +423,20 @@ export default function IntegrationDialog({
               href="https://github.com/aqm857886159/Nomi"
               target="_blank"
               title="参考项目 Nomi：本地优先 + AI 副驾驶 + 无头能力核"
-              className="rounded px-2 py-1 text-slate-400 hover:bg-slate-800 hover:text-sky-300"
+              className="rounded px-2 py-1 text-slate-400 hover:bg-slate-800 hover:text-accent"
             >
               <Icon name="book" size={12} className="mr-1.5" />Nomi
             </a>
             <button
               onClick={() => window.open('https://ligdesign.win/')}
               title="LIG 立格 Studio 品牌官网"
-              className="rounded px-2 py-1 text-slate-300 hover:bg-slate-800 hover:text-sky-300"
+              className="rounded px-2 py-1 text-slate-300 hover:bg-slate-800 hover:text-accent"
             >
               <Icon name="globe" size={12} className="mr-1" />官网<Icon name="external" size={10} className="ml-1" />
             </button>
             <button
               onClick={() => window.open('https://pan.quark.cn/s/1cb400aa407b')}
-              className="rounded px-2 py-1 text-slate-300 hover:bg-slate-800 hover:text-sky-300"
+              className="rounded px-2 py-1 text-slate-300 hover:bg-slate-800 hover:text-accent"
             >
               <Icon name="download" size={12} className="mr-1" />版本更新<Icon name="external" size={10} className="ml-1" />
             </button>

@@ -454,7 +454,7 @@ export default function CreationWizard({
             {cardsFormat ? `${CARD_FORMAT_LABEL[cardsFormat]}卡片生成中…` : '正文生成中，正在流式写入…'}
           </span>
           <span className="min-w-0 flex-1 truncate text-ink-dim">{streamText || '正在连接模型…'}</span>
-          <button onClick={abort} className="shrink-0 rounded bg-panel-3 px-2 py-0.5 text-red-400 hover:bg-panel">
+          <button onClick={abort} className="shrink-0 rounded bg-panel-3 px-2 py-0.5 text-st-bad hover:bg-panel">
             停止
           </button>
         </div>

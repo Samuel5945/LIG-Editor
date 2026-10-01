@@ -55,13 +55,13 @@ function FigureImageView({ node, selected, updateAttributes, editor, getPos }: N
     })
 
   const opBtn =
-    'whitespace-nowrap rounded border border-slate-700 px-1.5 py-0.5 text-slate-400 hover:border-sky-600 hover:text-sky-400'
+    'whitespace-nowrap rounded border border-slate-700 px-1.5 py-0.5 text-slate-400 hover:border-accent hover:text-accent'
 
   return (
     <NodeViewWrapper className="my-4" data-drag-handle>
       <figure
         className={`rounded-lg border p-2 transition-colors ${
-          selected ? 'border-sky-500 bg-sky-500/5' : 'border-transparent'
+          selected ? 'border-accent bg-accent/5' : 'border-transparent'
         }`}
       >
         {broken ? (

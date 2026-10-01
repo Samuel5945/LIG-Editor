@@ -31,7 +31,7 @@ import Sidebar from './components/Sidebar'
 import ProjectWall from './components/ProjectWall'
 import ThemeLibrary, { type ThemeEntry } from './components/ThemeLibrary'
 import { Icon } from './ui/Icon'
-import { StatusDot } from './ui/primitives'
+import { Segmented, StatusDot } from './ui/primitives'
 import ArticleEditor, { type ArticleEditorHandle, type EditorSelection } from './editor/ArticleEditor'
 import type { FigPipeline } from './editor/FigSuggest'
 import { shouldAutoStart, startTour } from './components/onboardingTour'
@@ -557,6 +557,20 @@ export default function App(): JSX.Element {
     setToast('已保留本地版本并写回磁盘')
   }, [current, conflict])
 
+  /** 逐行合并：弹窗算好的全文写盘并落基线，编辑器与磁盘同源（冲突就此了结） */
+  const resolveMerge = useCallback(
+    async (text: string) => {
+      if (!current) return
+      const next = text.endsWith(String.fromCharCode(10)) ? text : text + String.fromCharCode(10)
+      await window.api.invoke('project:writeFile', current, 'article.md', next)
+      setArticle(next)
+      setSaved(next)
+      setConflict(null)
+      setToast('已按逐行合并结果写回 article.md')
+    },
+    [current]
+  )
+
   const resolveAcceptExternal = useCallback(() => {
     if (!conflict) return
     setArticle(conflict.external)
@@ -871,29 +885,30 @@ export default function App(): JSX.Element {
                 <div className="fixed inset-0 z-40" onClick={() => setShowAppearance(false)} />
                 <div className="no-drag absolute right-0 top-full z-50 mt-1 w-48 rounded border border-panel-3 bg-panel-2 p-2 shadow-lg">
                   <p className="mb-1 text-[10px] text-ink-dim">主题</p>
-                  <div className="mb-2 flex overflow-hidden rounded border border-panel-3 text-[11px]">
-                    {([['system', '跟随系统'], ['light', '日间'], ['dark', '夜间']] as const).map(([v, label]) => (
-                      <button
-                        key={v}
-                        onClick={() => setThemeMode(v)}
-                        className={`flex-1 whitespace-nowrap px-1 py-1 ${themeMode === v ? 'bg-accent text-white' : 'text-ink-dim hover:bg-panel-3'}`}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
+                  <Segmented
+                    className="mb-2"
+                    size="sm"
+                    ariaLabel="主题模式"
+                    value={themeMode}
+                    onChange={setThemeMode}
+                    items={[
+                      { value: 'system', label: '跟随系统' },
+                      { value: 'light', label: '日间' },
+                      { value: 'dark', label: '夜间' }
+                    ]}
+                  />
                   <p className="mb-1 text-[10px] text-ink-dim">界面字号</p>
-                  <div className="flex overflow-hidden rounded border border-panel-3 text-[11px]">
-                    {([['s', '小'], ['m', '中'], ['l', '大']] as const).map(([v, label]) => (
-                      <button
-                        key={v}
-                        onClick={() => setUiScale(v)}
-                        className={`flex-1 px-1 py-1 ${uiScale === v ? 'bg-accent text-white' : 'text-ink-dim hover:bg-panel-3'}`}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
+                  <Segmented
+                    size="sm"
+                    ariaLabel="界面字号"
+                    value={uiScale}
+                    onChange={setUiScale}
+                    items={[
+                      { value: 's', label: '小' },
+                      { value: 'm', label: '中' },
+                      { value: 'l', label: '大' }
+                    ]}
+                  />
                 </div>
               </>
             )}
@@ -945,7 +960,7 @@ export default function App(): JSX.Element {
           <button
             onClick={() => void window.api.invoke('win:close')}
             title="关闭"
-            className="w-11 text-sm text-ink-dim hover:bg-red-600 hover:text-white"
+            className="w-11 text-sm text-ink-dim hover:bg-st-bad hover:text-white"
           >
             <Icon name="x" size={13} />
           </button>
@@ -1473,6 +1488,7 @@ export default function App(): JSX.Element {
           external={conflict.external}
           onKeepLocal={resolveKeepLocal}
           onAcceptExternal={resolveAcceptExternal}
+          onMerge={(text) => void resolveMerge(text)}
         />
       )}
 
@@ -1512,9 +1528,17 @@ export default function App(): JSX.Element {
           skill={skillContent}
           review={polish.review}
           theme={articleTheme}
-          onConfirm={(result, themePatch) => {
-            setArticle(result)
+          onConfirm={(result, themePatch, only) => {
+            // only=visual：正文一个字都不动，只落视觉参数
+            if (only !== 'visual') setArticle(result)
             setPolish(null)
+            if (only === 'visual') {
+              void handleApplyTypography(themePatch ?? {}).then(
+                () => setToast('视觉参数已应用，正文未改动'),
+                (err) => setToast('视觉参数应用失败：' + String(err instanceof Error ? err.message : err))
+              )
+              return
+            }
             if (!themePatch) {
               setToast(polish.review ? '审阅修订已应用' : '新排版已应用')
               return

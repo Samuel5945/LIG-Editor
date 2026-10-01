@@ -33,11 +33,11 @@ const SAMPLE = `# 导入排版预览
 `
 
 const btnPrimary =
-  'rounded bg-sky-600 px-3 py-1.5 text-xs text-white hover:bg-sky-500 disabled:opacity-40 whitespace-nowrap'
+  'rounded bg-accent px-3 py-1.5 text-xs text-white hover:brightness-110 disabled:opacity-40 whitespace-nowrap'
 const btnGhost =
   'rounded border border-slate-600 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-700 disabled:opacity-40 whitespace-nowrap'
 const inputCls =
-  'w-full rounded border border-slate-700 bg-slate-800 px-2 py-1 text-xs text-slate-200 outline-none focus:border-sky-600'
+  'w-full rounded border border-slate-700 bg-slate-800 px-2 py-1 text-xs text-slate-200 outline-none focus:border-accent'
 
 export default function ThemeImportDialog({ onClose, onSaved, onToast }: Props): ReactElement {
   const [html, setHtml] = useState('')
@@ -131,7 +131,7 @@ export default function ThemeImportDialog({ onClose, onSaved, onToast }: Props):
               value={html}
               onChange={(e) => setHtml(e.target.value)}
               placeholder="把公众号文章的 HTML 源码粘贴到这里（微信编辑器里选「复制」→ 粘贴到文本文件后复制源码，或直接用网页另存）&#10;&#10;也可以直接粘贴链接抓取。"
-              className="min-h-0 flex-1 resize-none rounded border border-slate-700 bg-slate-800 p-2 font-mono text-[11px] leading-relaxed text-slate-300 outline-none focus:border-sky-600"
+              className="min-h-0 flex-1 resize-none rounded border border-slate-700 bg-slate-800 p-2 font-mono text-[11px] leading-relaxed text-slate-300 outline-none focus:border-accent"
             />
             <div className="flex gap-2">
               <button onClick={parse} disabled={!html.trim() || busy} className={btnPrimary}>

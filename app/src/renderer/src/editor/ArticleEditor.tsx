@@ -228,7 +228,7 @@ function TypeOptions<T extends string | number>({
           key={String(o.value)}
           type="button"
           onClick={() => onPick(o.value)}
-          className={`rounded px-1 py-1 text-xs ${value === o.value ? 'bg-sky-600 text-white' : 'text-slate-300 hover:bg-slate-700'}`}
+          className={`rounded px-1 py-1 text-xs ${value === o.value ? 'bg-accent text-white' : 'text-slate-300 hover:bg-slate-700'}`}
         >
           {o.label}
         </button>
@@ -486,18 +486,20 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
           onClick={() => editor.chain().focus().undo().run()}
           disabled={!editor.can().undo()}
           title="撤销"
-          className="rounded px-2 py-0.5 text-slate-300 hover:bg-slate-700 disabled:opacity-30"
+          className="inline-flex items-center gap-1.5 whitespace-nowrap rounded px-2 py-0.5 text-ink-dim hover:bg-panel-3 hover:text-ink disabled:opacity-30"
         >
-          ↩{toolbarNarrow ? '' : ' 撤销'}
+          <Icon name="undo" size={12} />
+          {toolbarNarrow ? '' : '撤销'}
         </button>
         <button
           type="button"
           onClick={() => editor.chain().focus().redo().run()}
           disabled={!editor.can().redo()}
           title="重做"
-          className="rounded px-2 py-0.5 text-slate-300 hover:bg-slate-700 disabled:opacity-30"
+          className="inline-flex items-center gap-1.5 whitespace-nowrap rounded px-2 py-0.5 text-ink-dim hover:bg-panel-3 hover:text-ink disabled:opacity-30"
         >
-          ↪{toolbarNarrow ? '' : ' 重做'}
+          <Icon name="redo" size={12} />
+          {toolbarNarrow ? '' : '重做'}
         </button>
         <div className="mx-1 h-4 w-px bg-slate-700" />
         <button
@@ -546,7 +548,7 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
                       setToolPop(null)
                     }}
                     className={`h-5 w-5 rounded-full border border-slate-600 ${
-                      (accent ?? '#0d9488').toLowerCase() === p.color ? 'ring-2 ring-white' : ''
+                      (accent ?? '#0d9488').toLowerCase() === p.color ? 'ring-2 ring-accent' : ''
                     }`}
                     style={{ background: p.color }}
                   />
@@ -608,7 +610,7 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
                           setToolPop(null)
                         }}
                         className={`h-5 w-5 rounded-full border border-slate-600 ${
-                          String(effBg ?? '').toLowerCase() === p.color ? 'ring-2 ring-white' : ''
+                          String(effBg ?? '').toLowerCase() === p.color ? 'ring-2 ring-accent' : ''
                         }`}
                         style={{ background: p.color }}
                       />
@@ -632,7 +634,7 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
                         setToolPop(null)
                       }}
                       className={`rounded border px-2 py-1 text-[10px] hover:bg-slate-700 ${
-                        bgNone ? 'border-sky-500 text-sky-300' : 'border-slate-600 text-slate-300'
+                        bgNone ? 'border-accent text-accent' : 'border-slate-600 text-slate-300'
                       }`}
                     >
                       无卡片
@@ -778,19 +780,22 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
         <BubbleMenu
           editor={editor}
           tippyOptions={{
+            // tippy 默认 max-width: 350px 会把整条指令条压窄，「高亮」「字号」被挤成竖排
+            // （实测：加 AI 主/次按钮后总宽 >350）。指令条按内容自然展开，不设上限。
+            maxWidth: 'none',
             duration: 100,
             // BubbleMenu 隐藏（点外部/选区清空）时同步收回样式面板，避免下次选中又冒出来
             onHidden: () => setStylePop(null)
           }}
         >
-          <div className="relative flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-900 px-1.5 py-1 shadow-xl">
+          <div className="relative flex items-center gap-1 rounded-xl border border-panel-3 bg-panel-2 px-2 py-1.5 shadow-[0_4px_16px_rgba(0,0,0,.28)]">
             <button
               type="button"
               onClick={() => editor.chain().focus().toggleBold().run()}
-              className={`flex h-6 min-w-6 items-center justify-center rounded px-1.5 text-xs font-bold ${
+              className={`flex h-[26px] min-w-[26px] items-center justify-center rounded px-1.5 text-xs font-bold ${
                 editor.isActive('bold')
-                  ? 'bg-sky-600 text-white'
-                  : 'text-slate-300 hover:bg-slate-700'
+                  ? 'bg-accent text-white'
+                  : 'text-ink-dim hover:bg-panel-3 hover:text-ink'
               }`}
             >
               B
@@ -801,10 +806,10 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
                 type="button"
                 onClick={() => setStylePop(stylePop === 'color' ? null : 'color')}
                 title="字体颜色"
-                className="flex h-6 items-center justify-center gap-1 rounded px-1.5 text-xs text-slate-300 hover:bg-slate-700"
+                className="flex h-[26px] items-center justify-center gap-1 rounded px-1.5 text-xs text-ink-dim hover:bg-panel-3 hover:text-ink"
               >
                 <span
-                  className="inline-block h-3 w-3 rounded-full border border-slate-500"
+                  className="inline-block h-3 w-3 rounded-full border border-panel-3"
                   style={{
                     background:
                       (editor.getAttributes('textStyle').color as string | undefined) ?? '#e2e4ea'
@@ -826,14 +831,14 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
                         }}
                         className={`h-6 w-6 rounded border ${
                           editor.isActive('textStyle', { color: c.color })
-                            ? 'border-sky-400 ring-1 ring-sky-400'
-                            : 'border-slate-600'
+                            ? 'border-accent ring-1 ring-accent'
+                            : 'border-panel-3'
                         }`}
                         style={{ background: c.color }}
                       />
                     ))}
                   </div>
-                  <label className="mt-2 flex cursor-pointer items-center gap-2 rounded border border-slate-600 px-2 py-1 text-[10px] text-slate-300 hover:bg-slate-700">
+                  <label className="mt-2 flex cursor-pointer items-center gap-2 rounded border border-panel-3 px-2 py-1 text-[10px] text-ink-dim hover:bg-panel-3 hover:text-ink">
                     自定义
                     <input
                       type="color"
@@ -851,7 +856,7 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
                       editor.chain().focus().setTextStyle({ color: null }).run()
                       setStylePop(null)
                     }}
-                    className="mt-2 w-full rounded border border-slate-600 px-2 py-1 text-[10px] text-slate-400 hover:bg-slate-700"
+                    className="mt-2 w-full rounded border border-panel-3 px-2 py-1 text-[10px] text-ink-dim hover:bg-panel-3"
                   >
                     恢复默认（跟随主题色）
                   </button>
@@ -864,10 +869,10 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
                 type="button"
                 onClick={() => setStylePop(stylePop === 'bg' ? null : 'bg')}
                 title="背景高亮"
-                className="flex h-6 items-center justify-center gap-1 rounded px-1.5 text-xs text-slate-300 hover:bg-slate-700"
+                className="flex h-[26px] items-center justify-center gap-1 rounded px-1.5 text-xs text-ink-dim hover:bg-panel-3 hover:text-ink"
               >
                 <span
-                  className="inline-block h-3 w-3 rounded-sm border border-slate-500"
+                  className="inline-block h-3 w-3 rounded-sm border border-panel-3"
                   style={{
                     background:
                       (editor.getAttributes('textStyle').bg as string | undefined) ?? 'transparent'
@@ -889,14 +894,14 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
                         }}
                         className={`h-6 w-8 rounded border ${
                           editor.isActive('textStyle', { bg: c.color })
-                            ? 'border-sky-400 ring-1 ring-sky-400'
-                            : 'border-slate-600'
+                            ? 'border-accent ring-1 ring-accent'
+                            : 'border-panel-3'
                         }`}
                         style={{ background: c.color }}
                       />
                     ))}
                   </div>
-                  <label className="mt-2 flex cursor-pointer items-center gap-2 rounded border border-slate-600 px-2 py-1 text-[10px] text-slate-300 hover:bg-slate-700">
+                  <label className="mt-2 flex cursor-pointer items-center gap-2 rounded border border-panel-3 px-2 py-1 text-[10px] text-ink-dim hover:bg-panel-3 hover:text-ink">
                     自定义
                     <input
                       type="color"
@@ -914,7 +919,7 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
                       editor.chain().focus().setTextStyle({ bg: null }).run()
                       setStylePop(null)
                     }}
-                    className="mt-2 w-full rounded border border-slate-600 px-2 py-1 text-[10px] text-slate-400 hover:bg-slate-700"
+                    className="mt-2 w-full rounded border border-panel-3 px-2 py-1 text-[10px] text-ink-dim hover:bg-panel-3"
                   >
                     清除高亮
                   </button>
@@ -927,7 +932,7 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
                 type="button"
                 onClick={() => setStylePop(stylePop === 'size' ? null : 'size')}
                 title="字号"
-                className="flex h-6 min-w-6 items-center justify-center rounded px-1.5 text-xs text-slate-300 hover:bg-slate-700"
+                className="flex h-[26px] min-w-[26px] items-center justify-center rounded px-1.5 text-xs text-ink-dim hover:bg-panel-3 hover:text-ink"
               >
                 {(editor.getAttributes('textStyle').fontSize as number | undefined) ?? '字号'}
               </button>
@@ -940,7 +945,7 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
                         editor.chain().focus().setTextStyle({ fontSize: null }).run()
                         setStylePop(null)
                       }}
-                      className="mb-1 rounded border border-slate-600 px-2 py-0.5 text-left text-[10px] text-slate-400 hover:bg-slate-700"
+                      className="mb-1 rounded border border-panel-3 px-2 py-0.5 text-left text-[10px] text-ink-dim hover:bg-panel-3"
                     >
                       跟随正文默认
                     </button>
@@ -954,8 +959,8 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
                         }}
                         className={`rounded px-2 py-0.5 text-left ${
                           editor.isActive('textStyle', { fontSize: n })
-                            ? 'bg-sky-600 text-white'
-                            : 'text-slate-300 hover:bg-slate-700'
+                            ? 'bg-accent text-white'
+                            : 'text-ink-dim hover:bg-panel-3 hover:text-ink'
                         }`}
                         style={{ fontSize: Math.min(n, 20) }}
                       >
@@ -971,23 +976,27 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
               type="button"
               onClick={() => editor.chain().focus().unsetTextStyle().run()}
               title="清除全部手动样式（字色/高亮/字号，保留加粗）"
-              className="flex h-6 min-w-6 items-center justify-center rounded px-1.5 text-xs text-slate-400 hover:bg-red-900/60 hover:text-red-200"
+              className="flex h-[26px] min-w-[26px] items-center justify-center rounded px-1.5 text-ink-dim hover:bg-st-bad/15 hover:text-st-bad"
             >
-              ×
+              <Icon name="x" size={13} />
             </button>
-            <div className="mx-0.5 h-4 w-px bg-slate-700" />
+            <div className="mx-1 h-5 w-px shrink-0 bg-panel-3" />
+            {/* AI 动作：选中后的一条主路径 + 一条次路径；主按钮实心强调色，
+                与工具栏其它 26px 控件同高（shrink-0 防长句选区时压字） */}
             <button
               type="button"
               onClick={() => onAiModify?.()}
-              className="flex h-6 items-center rounded px-2 text-xs text-slate-300 hover:bg-slate-700"
+              className="inline-flex h-[26px] shrink-0 items-center gap-1 rounded-md bg-accent px-2.5 text-[11.5px] font-semibold text-white hover:brightness-110"
             >
+              <Icon name="pencil" size={12} />
               AI 修改
             </button>
             <button
               type="button"
               onClick={() => onAiReview?.()}
-              className="flex h-6 items-center rounded px-2 text-xs text-slate-300 hover:bg-slate-700"
+              className="inline-flex h-[26px] shrink-0 items-center gap-1 rounded-md border border-panel-3 px-2 text-[11.5px] text-ink-dim hover:bg-panel-3 hover:text-ink"
             >
+              <Icon name="search" size={12} />
               AI 审阅
             </button>
           </div>

@@ -867,7 +867,7 @@ export default function ChatPanel({
                   ) : (
                     <>
                       {article.length > 8000 && (
-                        <p className="mt-1 text-amber-400">
+                        <p className="mt-1 text-st-draft">
                           <Icon name="alert" size={12} className="mr-1" />当前正文较长，AI 可能只看到开头部分，应用前请确认结尾完整
                         </p>
                       )}

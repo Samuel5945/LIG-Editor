@@ -30,9 +30,9 @@ interface Props {
 
 const btn =
   'rounded border border-slate-600 px-2 py-0.5 text-[11px] text-slate-300 hover:bg-slate-700 disabled:opacity-40 whitespace-nowrap'
-const btnDanger = 'rounded px-2 py-0.5 text-[11px] text-red-300 hover:bg-red-950/50 disabled:opacity-40 whitespace-nowrap'
+const btnDanger = 'rounded px-2 py-0.5 text-[11px] text-st-bad hover:bg-st-bad/10 disabled:opacity-40 whitespace-nowrap'
 const inputCls =
-  'min-w-0 flex-1 rounded border border-slate-600 bg-slate-800 px-1.5 py-0.5 text-[11px] text-slate-200 outline-none focus:border-sky-600'
+  'min-w-0 flex-1 rounded border border-slate-600 bg-slate-800 px-1.5 py-0.5 text-[11px] text-slate-200 outline-none focus:border-accent'
 
 export default function CategoryManageDialog({
   categories,

@@ -81,12 +81,12 @@ function GalleryView({ node, selected, updateAttributes, editor, getPos }: NodeV
   }
 
   const opBtn =
-    'whitespace-nowrap rounded border border-slate-700 px-1.5 py-0.5 text-slate-400 hover:border-sky-600 hover:text-sky-400'
+    'whitespace-nowrap rounded border border-slate-700 px-1.5 py-0.5 text-slate-400 hover:border-accent hover:text-accent'
 
   return (
     <NodeViewWrapper className="my-4" data-drag-handle>
       <figure
-        className={`rounded-lg p-1 transition-shadow ${selected ? 'ring-2 ring-sky-600' : ''}`}
+        className={`rounded-lg p-1 transition-shadow ${selected ? 'ring-2 ring-accent' : ''}`}
         contentEditable={false}
         onClick={selectSelf}
       >
@@ -132,7 +132,7 @@ function GalleryView({ node, selected, updateAttributes, editor, getPos }: NodeV
               {images.map((_, k) => (
                 <span
                   key={k}
-                  className={`inline-block h-1.5 w-1.5 rounded-full ${k === index ? 'bg-sky-500' : 'bg-slate-600'}`}
+                  className={`inline-block h-1.5 w-1.5 rounded-full ${k === index ? 'bg-accent' : 'bg-slate-600'}`}
                 />
               ))}
             </span>
@@ -159,7 +159,7 @@ function GalleryView({ node, selected, updateAttributes, editor, getPos }: NodeV
                   type="button"
                   onClick={() => updateAttributes({ layout: id })}
                   title={id === 'grid' ? '多图同时展示的拼图网格' : '左右滑动轮播'}
-                  className={`${opBtn} ${layout === id ? 'border-sky-600 text-sky-400' : ''}`}
+                  className={`${opBtn} ${layout === id ? 'border-accent text-accent' : ''}`}
                 >
                   {label}
                 </button>
@@ -170,7 +170,7 @@ function GalleryView({ node, selected, updateAttributes, editor, getPos }: NodeV
                   type="button"
                   onClick={() => updateAttributes({ frame: f })}
                   title={f ? `统一 ${f} 取景框（裁切填满）` : '每张按原比例自适应'}
-                  className={`${opBtn} ${frame === f ? 'border-sky-600 text-sky-400' : ''}`}
+                  className={`${opBtn} ${frame === f ? 'border-accent text-accent' : ''}`}
                 >
                   {f || '自适应'}
                 </button>
@@ -196,7 +196,7 @@ function GalleryView({ node, selected, updateAttributes, editor, getPos }: NodeV
                   <img
                     src={resolve(im.src)}
                     alt={im.alt}
-                    className={`h-12 rounded border object-cover ${k === index ? 'border-sky-600' : 'border-slate-700'}`}
+                    className={`h-12 rounded border object-cover ${k === index ? 'border-accent' : 'border-slate-700'}`}
                   />
                   <div className="flex items-center gap-0.5 text-[11px]">
                     <button
@@ -212,7 +212,7 @@ function GalleryView({ node, selected, updateAttributes, editor, getPos }: NodeV
                       type="button"
                       onClick={() => removeImage(k)}
                       title={images.length === 2 ? '删除后剩 1 张，自动退化为单图' : '删除这张'}
-                      className={`${opBtn} hover:border-red-500 hover:text-st-bad`}
+                      className={`${opBtn} hover:border-st-bad hover:text-st-bad`}
                     >
                       <Icon name="x" size={12} />
                     </button>

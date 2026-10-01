@@ -320,7 +320,7 @@ export default function TitleCoverPanel({
       <div className="mb-2 flex items-center gap-2">
         <h3 className="text-sm font-bold text-ink">标题候选</h3>
         {titling ? (
-          <button onClick={() => abortRef.current?.()} className="rounded bg-panel-3 px-2.5 py-1 text-red-400 hover:bg-panel">
+          <button onClick={() => abortRef.current?.()} className="rounded bg-panel-3 px-2.5 py-1 text-st-bad hover:bg-panel">
              停止
           </button>
         ) : (
@@ -330,14 +330,14 @@ export default function TitleCoverPanel({
         )}
         {titling && <span className="text-ink-dim">基于正文生成中…</span>}
       </div>
-      {titleError && <p className="mb-2 break-all text-red-400"><Icon name="x" size={12} className="mr-1.5" />{titleError}</p>}
+      {titleError && <p className="mb-2 break-all text-st-bad"><Icon name="x" size={12} className="mr-1.5" />{titleError}</p>}
       {titles.length === 0 ? (
         <p className="mb-4 text-ink-dim">暂无候选。点上方按钮，AI 会基于{meta.format === 'cards' ? '贴图文案' : '正文'}起 6 个标题并打分。</p>
       ) : (
         <div className="mb-4">
           {titles.map((t, i) => (
             <div key={i} className="mb-1.5 flex items-start gap-2 rounded bg-panel-2 px-2.5 py-2">
-              <span className={`shrink-0 rounded px-1.5 py-0.5 font-bold ${t.score >= 8 ? 'bg-green-950 text-green-400' : 'bg-panel-3 text-ink-dim'}`}>
+              <span className={`shrink-0 rounded px-1.5 py-0.5 font-bold ${t.score >= 8 ? 'bg-st-done/15 text-st-done' : 'bg-panel-3 text-ink-dim'}`}>
                 {t.score}
               </span>
               <div className="min-w-0 flex-1">
@@ -373,7 +373,7 @@ export default function TitleCoverPanel({
       {/* ---- 封面：两条产出路径，出口相同（assets/cover-235.png 与 cover-11.png） ---- */}
       <h3 className="mb-2 text-sm font-bold text-ink">封面图</h3>
       {meta.cover && (
-        <p className="mb-2 text-green-500">
+        <p className="mb-2 text-st-done">
           <Icon name="check" size={12} className="mr-1.5" />已保存：{meta.cover.main} / {meta.cover.square}
           {meta.cover.template ? `（模板：${COVER_TEMPLATES.find((t) => t.id === meta.cover?.template)?.name ?? meta.cover.template}）` : ''}
         </p>
@@ -472,7 +472,7 @@ export default function TitleCoverPanel({
       />
       <div className="mb-2 flex flex-wrap items-center gap-2">
         {prompting ? (
-          <button onClick={() => promptAbortRef.current?.()} className="rounded bg-panel-3 px-3 py-1.5 text-red-400 hover:bg-panel">
+          <button onClick={() => promptAbortRef.current?.()} className="rounded bg-panel-3 px-3 py-1.5 text-st-bad hover:bg-panel">
              停止
           </button>
         ) : (

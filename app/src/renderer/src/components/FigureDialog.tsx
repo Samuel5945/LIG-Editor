@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactElement } from 'react'
 import { Icon } from '../ui/Icon'
 import { DialogShell } from '../ui/DialogShell'
+import { Segmented } from '../ui/primitives'
 import {
   applyCutoutMasked,
   createCutoutMask,
@@ -49,13 +50,13 @@ const PIPELINE_TITLE: Record<FigPipeline, string> = {
 }
 
 const btnPrimary =
-  'rounded bg-sky-600 px-3 py-1.5 text-xs text-white hover:bg-sky-500 disabled:opacity-40 whitespace-nowrap'
+  'rounded bg-accent px-3 py-1.5 text-xs text-white hover:brightness-110 disabled:opacity-40 whitespace-nowrap'
 const btnGhost =
   'rounded border border-slate-600 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-700 disabled:opacity-40 whitespace-nowrap'
 const inputCls =
-  'w-full rounded border border-slate-700 bg-slate-800 px-2 py-1.5 text-xs text-slate-200 outline-none focus:border-sky-600'
+  'w-full rounded border border-slate-700 bg-slate-800 px-2 py-1.5 text-xs text-slate-200 outline-none focus:border-accent'
 const selectCls =
-  'rounded border border-slate-700 bg-slate-800 px-2 py-1.5 text-xs text-slate-200 outline-none focus:border-sky-600'
+  'rounded border border-slate-700 bg-slate-800 px-2 py-1.5 text-xs text-slate-200 outline-none focus:border-accent'
 
 export default function FigureDialog({
   project,
@@ -65,26 +66,37 @@ export default function FigureDialog({
   skill,
   onClose
 }: FigureDialogProps): ReactElement {
+  // 管线以打开时的请求为初值，弹窗内可换（换管线即换面板，各面板自己的中间态随之重置）
+  const [pipeline, setPipeline] = useState<FigPipeline>(request.pipeline)
+  const req = pipeline === request.pipeline ? request : { ...request, pipeline }
   const assetUrl = useCallback(
     (rel: string) => 'asset://file/' + encodeURIComponent(`${projectDir}\\${rel.replace(/\//g, '\\')}`),
     [projectDir]
   )
   return (
     <DialogShell
-      icon={request.pipeline === 'ai' ? 'sparkles' : request.pipeline === 'code' ? 'chart' : 'folder'}
-      title={PIPELINE_TITLE[request.pipeline]}
+      icon={pipeline === 'ai' ? 'sparkles' : pipeline === 'code' ? 'chart' : 'folder'}
+      title={PIPELINE_TITLE[pipeline]}
       hint={request.htmlRelPath ? `编辑 ${request.htmlRelPath}` : undefined}
       width={720}
       maxHeight="86vh"
       onClose={onClose}
     >
-        {request.pipeline === 'ai' && (
-            <AiPane project={project} article={article} request={request} skill={skill} />
-          )}
-          {request.pipeline === 'code' && (
-            <CodePane project={project} request={request} skill={skill} assetUrl={assetUrl} />
-          )}
-        {request.pipeline === 'import' && <ImportPane project={project} request={request} />}
+      {/* 三管线分段控件（§5.11）：不必关掉重开就能换路子 */}
+      <Segmented<FigPipeline>
+        className="mb-3"
+        ariaLabel="配图管线"
+        value={pipeline}
+        onChange={setPipeline}
+        items={[
+          { value: 'ai', label: 'AI 生图', icon: 'sparkles', title: 'AI 文生图 → 预览 → 插入正文' },
+          { value: 'code', label: '代码绘图', icon: 'chart', title: 'AI 写 HTML 绘图 → 离屏渲染 PNG' },
+          { value: 'import', label: '导入图片', icon: 'folder', title: '导入本地图片，可选抠图去背景' }
+        ]}
+      />
+      {pipeline === 'ai' && <AiPane project={project} article={article} request={req} skill={skill} />}
+      {pipeline === 'code' && <CodePane project={project} request={req} skill={skill} assetUrl={assetUrl} />}
+      {pipeline === 'import' && <ImportPane project={project} request={req} />}
     </DialogShell>
   )
 }
@@ -216,7 +228,7 @@ function AiPane({
         </button>
       </div>
       <p className="text-[11px] text-slate-500">{spec.hint}</p>
-      {error && <div className="rounded bg-red-900/30 px-3 py-2 text-xs text-red-400">{error}</div>}
+      {error && <div className="rounded bg-st-bad/10 px-3 py-2 text-xs text-st-bad">{error}</div>}
       {b64 && (
         <>
           <img
@@ -366,7 +378,7 @@ function CodePane({
           {editMode ? ' 完成' : ' 插入正文'}
         </button>
       </div>
-      {error && <div className="rounded bg-red-900/30 px-3 py-2 text-xs text-red-400">{error}</div>}
+      {error && <div className="rounded bg-st-bad/10 px-3 py-2 text-xs text-st-bad">{error}</div>}
       <textarea
         value={html}
         onChange={(e) => setHtml(e.target.value)}
@@ -677,7 +689,7 @@ function ImportPane({ project, request }: { project: string; request: FigureRequ
                 <button
                   onClick={() => setMulti((p) => p.filter((_, i) => i !== k))}
                   title="移除这张"
-                  className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-slate-700 text-[10px] text-slate-300 hover:bg-red-600 hover:text-white"
+                  className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-slate-700 text-[10px] text-slate-300 hover:bg-st-bad hover:text-white"
                 >
                   <Icon name="x" size={12} className="mr-1.5" />
                 </button>
@@ -687,9 +699,9 @@ function ImportPane({ project, request }: { project: string; request: FigureRequ
               <button
                 onClick={() => fileRef.current?.click()}
                 title="继续添加图片"
-                className="flex h-20 w-14 items-center justify-center rounded border-2 border-dashed border-slate-700 text-xl text-slate-500 hover:border-sky-600 hover:text-sky-400"
+                className="flex h-20 w-14 items-center justify-center rounded border-2 border-dashed border-panel-3 text-ink-dim hover:border-accent hover:text-accent"
               >
-                ＋
+                <Icon name="plus" size={18} />
               </button>
             )}
           </div>
@@ -721,7 +733,7 @@ function ImportPane({ project, request }: { project: string; request: FigureRequ
               <Icon name="sparkles" size={12} className="mr-1.5" />智能推荐构图
             </button>
           </div>
-          {reason && <div className="rounded bg-sky-900/30 px-3 py-2 text-xs text-sky-300">{reason}</div>}
+          {reason && <div className="rounded bg-accent/10 px-3 py-2 text-xs text-accent">{reason}</div>}
           <div className="flex flex-wrap items-center gap-2">
             <button onClick={insertGallery} disabled={multi.length < 2 || busy} className={btnPrimary}>
               {busy ? '保存中…' : ` 生成图集并插入正文（${multi.length} 张）`}
@@ -761,7 +773,7 @@ function ImportPane({ project, request }: { project: string; request: FigureRequ
             e.preventDefault()
             void loadFiles(Array.from(e.dataTransfer.files))
           }}
-          className="flex h-40 cursor-pointer items-center justify-center rounded-lg border-2 border-dashed border-slate-700 text-xs text-slate-500 hover:border-sky-600 hover:text-sky-400"
+          className="flex h-40 cursor-pointer items-center justify-center rounded-lg border-2 border-dashed border-slate-700 text-xs text-slate-500 hover:border-accent hover:text-accent"
         >
           点击选择或拖入图片（PNG/JPG/WebP/GIF）；多选 2-6 张自动生成轮播
         </div>
@@ -775,7 +787,7 @@ function ImportPane({ project, request }: { project: string; request: FigureRequ
                 onClick={() => pickAlgo(a.id)}
                 title={a.label}
                 className={`whitespace-nowrap rounded px-2 py-1 ${
-                  algo === a.id ? 'bg-sky-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                  algo === a.id ? 'bg-accent text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
                 }`}
               >
                 {a.label}
@@ -792,7 +804,7 @@ function ImportPane({ project, request }: { project: string; request: FigureRequ
                 step={algoMeta.step}
                 value={param}
                 onChange={(e) => setParam(Number(e.target.value))}
-                className="flex-1 accent-sky-500"
+                className="flex-1 accent-accent"
               />
               <span className="w-10 text-right tabular-nums text-slate-300">{param.toFixed(2)}</span>
             </label>
@@ -804,7 +816,7 @@ function ImportPane({ project, request }: { project: string; request: FigureRequ
               onClick={() => setBrush('keep')}
               title="涂抹补回算法误删的前景（颜色取原图）"
               className={`whitespace-nowrap rounded px-2 py-1 ${
-                brush === 'keep' ? 'bg-sky-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                brush === 'keep' ? 'bg-accent text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
               }`}
             >
               保留画笔
@@ -813,7 +825,7 @@ function ImportPane({ project, request }: { project: string; request: FigureRequ
               onClick={() => setBrush('erase')}
               title="涂抹去掉算法误留的背景"
               className={`whitespace-nowrap rounded px-2 py-1 ${
-                brush === 'erase' ? 'bg-sky-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                brush === 'erase' ? 'bg-accent text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
               }`}
             >
               擦除画笔
@@ -826,8 +838,9 @@ function ImportPane({ project, request }: { project: string; request: FigureRequ
                 max={Math.max(8, Math.round(Math.min(raw.width, raw.height) / 4))}
                 value={brushRadius}
                 onChange={(e) => setBrushRadius(Number(e.target.value))}
-                className="w-24 accent-sky-500"
+                className="w-24 accent-accent"
               />
+              <span className="w-9 text-right font-mono text-[10.5px] tabular-nums text-slate-300">{brushRadius}px</span>
             </label>
             <button onClick={clearMask} disabled={!maskPainted} className={btnGhost}>
               清除涂抹
@@ -876,7 +889,7 @@ function ImportPane({ project, request }: { project: string; request: FigureRequ
           e.target.value = ''
         }}
       />
-      {error && <div className="rounded bg-red-900/30 px-3 py-2 text-xs text-red-400">{error}</div>}
+      {error && <div className="rounded bg-st-bad/10 px-3 py-2 text-xs text-st-bad">{error}</div>}
     </div>
   )
 }

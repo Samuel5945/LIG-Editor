@@ -66,54 +66,11 @@
   --slate-950: 248 250 252;
 }
 
-/* 日间模式下，原本「浅字配深底」的语义色翻到浅底上要加深，保证可读性 */
-:root.light .text-red-300 {
-  color: #b91c1c;
-}
-:root.light .text-green-300 {
-  color: #15803d;
-}
-:root.light .text-emerald-300 {
-  color: #047857;
-}
-:root.light .text-sky-300 {
-  color: #0369a1;
-}
-:root.light .text-amber-300 {
-  color: #b45309;
-}
-/* 日间模式下 diff 修订对比标记（红删绿增）：浅底深字高对比。
-   这些类是深色模式的深底浅字设计，浅底上 60%/10% 半透明混出来发灰，改浅红/浅绿底 + 已加深的
-   text-red-300/green-300 字（上文已修正）正好互补；深色模式保持原样。仅 diff 组件使用这些类。 */
-:root.light .bg-red-950\/60,
-:root.light .bg-red-900\/40,
-:root.light .bg-red-500\/10 {
-  background-color: #fee2e2; /* red-100 删除行/原行底 */
-}
-:root.light .bg-green-950\/60,
-:root.light .bg-green-900\/40,
-:root.light .bg-green-500\/10 {
-  background-color: #dcfce7; /* green-100 新增行/改行底 */
-}
-:root.light .bg-red-500\/25 {
-  background-color: #fecaca; /* red-200 删除字/「原」标签底 */
-}
-:root.light .bg-green-500\/25 {
-  background-color: #bbf7d0; /* green-200 新增字/「改」标签底 */
-}
-:root.light .border-red-500\/70 {
-  border-color: #dc2626; /* red-600 原行左边条 */
-}
-:root.light .border-green-500\/70 {
-  border-color: #16a34a; /* green-600 改行左边条 */
-}
-/* 错误/警示提示文字在日间浅底上同样加深（原为浅红/浅黄） */
-:root.light .text-red-400 {
-  color: #dc2626;
-}
-:root.light .text-amber-400 {
-  color: #b45309;
-}
+/* 语义色（主色 / 状态色）一律走上方 CSS 变量：accent / st-draft / st-doing / st-done / st-bad
+   在 :root 与 :root.light 各给一套值，组件侧无需知道当前是昼是夜。
+   这里曾有一批 `:root.light .text-red-300 {…}` 式的「原色日间兜底」——那是存量组件直接写
+   Tailwind 原色（red/green/sky/amber-300~500）时的补丁，等于第二套配色机制。
+   2026-10-01 语义色单源清扫后全部失效并删除；再写原色=日间对比度问题会重新出现，禁止。 */
 
 html,
 body,

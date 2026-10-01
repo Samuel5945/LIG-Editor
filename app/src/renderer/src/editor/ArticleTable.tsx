@@ -105,7 +105,7 @@ function TableNodeView(props: NodeViewProps): ReactElement {
                   type="button"
                   title="删除此列"
                   onClick={() => delCol(ci)}
-                  className="absolute -right-1.5 -top-1.5 hidden h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] leading-none text-white hover:bg-red-400 group-hover/table:flex"
+                  className="absolute -right-1.5 -top-1.5 hidden h-4 w-4 items-center justify-center rounded-full bg-st-bad text-[10px] leading-none text-white hover:brightness-125 group-hover/table:flex"
                 >
                   ×
                 </button>
@@ -128,7 +128,7 @@ function TableNodeView(props: NodeViewProps): ReactElement {
                       type="button"
                       title="删除此行"
                       onClick={() => delRow(ri + 1)}
-                      className="absolute -bottom-1.5 -right-1.5 hidden h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] leading-none text-white hover:bg-red-400 group-hover/table:flex"
+                      className="absolute -bottom-1.5 -right-1.5 hidden h-4 w-4 items-center justify-center rounded-full bg-st-bad text-[10px] leading-none text-white hover:brightness-125 group-hover/table:flex"
                     >
                       ×
                     </button>
@@ -143,21 +143,21 @@ function TableNodeView(props: NodeViewProps): ReactElement {
         <button
           type="button"
           onClick={addRow}
-          className="rounded border border-panel-3 px-1.5 py-0.5 text-ink-dim hover:border-sky-600 hover:text-sky-400"
+          className="rounded border border-panel-3 px-1.5 py-0.5 text-ink-dim hover:border-accent hover:text-accent"
         >
           + 行
         </button>
         <button
           type="button"
           onClick={addCol}
-          className="rounded border border-panel-3 px-1.5 py-0.5 text-ink-dim hover:border-sky-600 hover:text-sky-400"
+          className="rounded border border-panel-3 px-1.5 py-0.5 text-ink-dim hover:border-accent hover:text-accent"
         >
           + 列
         </button>
         <button
           type="button"
           onClick={() => deleteNode()}
-          className="ml-auto rounded border border-panel-3 px-1.5 py-0.5 text-ink-dim hover:border-red-500 hover:text-red-400"
+          className="ml-auto rounded border border-panel-3 px-1.5 py-0.5 text-ink-dim hover:border-st-bad hover:text-st-bad"
         >
           删除表格
         </button>

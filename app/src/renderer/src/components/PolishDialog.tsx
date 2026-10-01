@@ -17,7 +17,7 @@ interface PolishDialogProps {
   /** 当前生效的排版调性（视觉层基线）：传入才允许模型打包给出视觉参数补丁 */
   theme?: ArticleTheme | null
   /** 确认应用：排版全文 + 可选视觉参数覆盖（仅排版优化模式会给第二参） */
-  onConfirm: (result: string, themePatch?: Partial<ProjectMeta>) => void
+  onConfirm: (result: string, themePatch?: Partial<ProjectMeta>, only?: 'layout' | 'visual') => void
   onClose: () => void
 }
 
@@ -41,6 +41,9 @@ export default function PolishDialog({
   const [patchInfo, setPatchInfo] = useState<{ applied: number; failed: string[]; items: { old: string; new: string }[] } | null>(null)
   const abortRef = useRef<(() => void) | null>(null)
   const [streamLen, setStreamLen] = useState(0)
+  // 排版结构与视觉参数分两组，可分别勾选应用（§5.11：不想动哪组就不勾）
+  const [pickLayout, setPickLayout] = useState(true)
+  const [pickVisual, setPickVisual] = useState(true)
 
   const run = useCallback(() => {
     setError(null)
@@ -138,19 +141,63 @@ export default function PolishDialog({
           <Button variant="ghost" onClick={cancel}>
             取消
           </Button>
-          {done && themePatch && (
-            <Button variant="sec" onClick={() => onConfirm(result)} disabled={!result} title="只落排版参数，不动视觉层">
-              只应用排版
-            </Button>
-          )}
-          <Button variant="pri" icon="check" onClick={() => onConfirm(result, themePatch)} disabled={!done || !result}>
-            {isReview ? '应用修订' : themePatch ? '应用排版 + 视觉' : '应用新排版'}
+          <Button
+            variant="pri"
+            icon="check"
+            onClick={() =>
+              pickVisual && !pickLayout
+                ? onConfirm(result, themePatch, 'visual')
+                : onConfirm(result, pickVisual ? themePatch : undefined)
+            }
+            disabled={!done || !result || (!pickLayout && !(pickVisual && themePatch))}
+          >
+            {isReview ? '应用所选修订' : '应用所选'}
           </Button>
         </>
       }
     >
 
         <div className="min-h-0 flex-1 overflow-auto p-4 text-xs">
+          {done && (
+            <div className="mb-3 grid grid-cols-2 gap-2">
+              {[
+                {
+                  on: pickLayout,
+                  toggle: () => setPickLayout((v) => !v),
+                  icon: 'layout' as const,
+                  title: isReview ? '结构修订' : '排版结构',
+                  desc: isReview
+                    ? `按报告改 ${patchInfo?.items.length ?? 0} 处，未点名部分不动`
+                    : `全文重排，产出 ${result.length} 字`
+                },
+                {
+                  on: pickVisual && !!themePatch,
+                  toggle: () => themePatch && setPickVisual((v) => !v),
+                  icon: 'palette' as const,
+                  title: '视觉参数',
+                  desc: themePatch
+                    ? `${describeThemePatch(themePatch).length} 项（行距/字色/标题形态等）`
+                    : '模型判断本篇视觉层不用动'
+                }
+              ].map((g) => (
+                <button
+                  key={g.title}
+                  onClick={g.toggle}
+                  disabled={!themePatch && g.icon === 'palette'}
+                  className={`rounded-xl border px-3 py-2 text-left transition-colors disabled:opacity-45 ${
+                    g.on ? 'border-accent bg-accent/10' : 'border-panel-3 bg-panel hover:border-accent/50'
+                  }`}
+                >
+                  <span className={`flex items-center gap-1.5 text-xs font-bold ${g.on ? 'text-accent' : 'text-ink'}`}>
+                    <Icon name={g.icon} size={12} />
+                    {g.title}
+                    <Icon name={g.on ? 'checkCircle' : 'circle'} size={13} className={`ml-auto ${g.on ? 'text-accent' : 'text-ink-dim'}`} />
+                  </span>
+                  <span className="mt-1 block text-[11px] leading-relaxed text-ink-dim">{g.desc}</span>
+                </button>
+              ))}
+            </div>
+          )}
           {error && (
             <>
               <p className="mb-2 break-all text-st-bad"><Icon name="xCircle" size={12} className="mr-1.5" />{error}</p>
@@ -180,7 +227,7 @@ export default function PolishDialog({
             <p className="mb-2 text-ink-dim">
               <Icon name="checkCircle" size={12} className="mr-1.5 text-st-done" />已精准应用 {patchInfo.applied} 处修订
               {patchInfo.failed.length > 0 && (
-                <span className="text-amber-400">；{patchInfo.failed.length} 处未命中原文已跳过：{patchInfo.failed.join('、')}</span>
+                <span className="text-st-draft">；{patchInfo.failed.length} 处未命中原文已跳过：{patchInfo.failed.join('、')}</span>
               )}
             </p>
           )}
@@ -213,9 +260,9 @@ export default function PolishDialog({
                       key={i}
                       className={
                         l.type === 'del'
-                          ? 'bg-red-950/60 text-red-300 line-through'
+                          ? 'bg-st-bad/10 text-st-bad line-through'
                           : l.type === 'add'
-                            ? 'bg-green-950/60 text-green-300'
+                            ? 'bg-st-done/10 text-st-done'
                             : 'text-ink-dim'
                       }
                     >
@@ -227,18 +274,36 @@ export default function PolishDialog({
             </>
           )}
           {done && themePatch && (
-            <div className="mt-3 rounded border border-accent/50 bg-panel p-2.5">
-              <p className="flex items-center gap-1.5 text-ink"><Icon name="palette" size={12} className="text-accent" />视觉参数（模型判断本篇适合调整，随排版一起应用）</p>
-              <div className="mt-1 grid grid-cols-2 gap-x-4 gap-y-0.5 text-[11px]">
-                {describeThemePatch(themePatch).map((f) => (
-                  <div key={f.label} className="flex min-w-0 items-baseline gap-1">
-                    <span className="shrink-0 text-ink-dim">{f.label}</span>
-                    <span className="truncate text-ink">{f.value}</span>
-                  </div>
-                ))}
-              </div>
-              <p className="mt-1 text-[10px] leading-4 text-ink-dim">
-                只改列出的这几项，其余排版沿用当前调性；不想动视觉层就点右下「只应用排版」。
+            <div className="mt-3 rounded-xl border border-panel-3 bg-panel p-3">
+              <p className="flex items-center gap-1.5 text-xs font-bold text-ink">
+                <Icon name="palette" size={12} className="text-accent" />
+                视觉参数清单
+                <span className={`ml-auto text-[10.5px] font-normal ${pickVisual ? 'text-accent' : 'text-ink-dim'}`}>
+                  {pickVisual ? '将随本次应用' : '已取消勾选，不会应用'}
+                </span>
+              </p>
+              <table className="mt-2 w-full table-fixed border-collapse text-[11px]">
+                <tbody>
+                  {Array.from({ length: Math.ceil(describeThemePatch(themePatch).length / 2) }, (_, r) => (
+                    <tr key={r} className="border-t border-panel first:border-t-0">
+                      {describeThemePatch(themePatch)
+                        .slice(r * 2, r * 2 + 2)
+                        .map((f) => (
+                          <td key={f.label} className="w-1/2 gap-2 py-1 pr-4 align-baseline">
+                            <span className="flex min-w-0 items-baseline gap-2">
+                              <span className="w-20 shrink-0 text-ink-dim">{f.label}</span>
+                              <span className="min-w-0 flex-1 truncate text-ink" title={f.value}>
+                                {f.value}
+                              </span>
+                            </span>
+                          </td>
+                        ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p className="mt-1.5 text-[10px] leading-4 text-ink-dim">
+                只改列出的这几项，其余排版沿用当前调性；不想动视觉层就取消上方「视觉参数」勾选。
               </p>
             </div>
           )}
@@ -299,13 +364,13 @@ function DiffPair({ oldText, newText }: { oldText: string; newText: string }): R
   const segs = useMemo(() => diffChars(oldText, newText), [oldText, newText])
   return (
     <div className="space-y-1.5 text-xs leading-6">
-      <div className="selectable whitespace-pre-wrap rounded border-l-2 border-red-500/70 bg-red-500/10 px-2.5 py-1.5">
-        <span className="mr-1.5 select-none rounded bg-red-500/25 px-1 align-middle text-[10px] text-red-300">原</span>
+      <div className="selectable whitespace-pre-wrap rounded border-l-2 border-st-bad/70 bg-st-bad/10 px-2.5 py-1.5">
+        <span className="mr-1.5 select-none rounded bg-st-bad/20 px-1 align-middle text-[10px] text-st-bad">原</span>
         {segs
           .filter((s) => s.type !== 'add')
           .map((s, i) =>
             s.type === 'del' ? (
-              <del key={i} className="rounded bg-red-500/25 px-0.5 text-red-300">
+              <del key={i} className="rounded bg-st-bad/20 px-0.5 text-st-bad">
                 {s.text}
               </del>
             ) : (
@@ -315,13 +380,13 @@ function DiffPair({ oldText, newText }: { oldText: string; newText: string }): R
             )
           )}
       </div>
-      <div className="selectable whitespace-pre-wrap rounded border-l-2 border-green-500/70 bg-green-500/10 px-2.5 py-1.5">
-        <span className="mr-1.5 select-none rounded bg-green-500/25 px-1 align-middle text-[10px] text-green-300">改</span>
+      <div className="selectable whitespace-pre-wrap rounded border-l-2 border-st-done/70 bg-st-done/10 px-2.5 py-1.5">
+        <span className="mr-1.5 select-none rounded bg-st-done/20 px-1 align-middle text-[10px] text-st-done">改</span>
         {segs
           .filter((s) => s.type !== 'del')
           .map((s, i) =>
             s.type === 'add' ? (
-              <span key={i} className="rounded bg-green-500/25 px-0.5 text-green-300">
+              <span key={i} className="rounded bg-st-done/20 px-0.5 text-st-done">
                 {s.text}
               </span>
             ) : (

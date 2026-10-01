@@ -71,6 +71,78 @@ export function IconButton({ icon, className = '', title, ...rest }: ButtonHTMLA
   )
 }
 
+// ---------------- 分段控件 ----------------
+
+export interface SegmentedItem<T extends string> {
+  value: T
+  label: string
+  icon?: IconName
+  title?: string
+  disabled?: boolean
+}
+
+export interface SegmentedProps<T extends string> {
+  items: SegmentedItem<T>[]
+  value: T
+  onChange: (v: T) => void
+  /** 无障碍名（role=group），如「配图管线」 */
+  ariaLabel: string
+  title?: string
+  /** md=26px 高（弹窗/页签）；sm=22px（工具行内嵌） */
+  size?: 'md' | 'sm'
+  className?: string
+}
+
+/**
+ * 二选一 / 多选一的互斥分段控件（§4）。
+ * 从 CardsPanel 版式切换、FigureDialog 三管线、ProjectWall 排序、SettingsDialog 外观三处
+ * 手写的同款结构抽出来的单源——「当前段浮起白底 + 其余灰字」这套形态只在这里定义一次。
+ */
+export function Segmented<T extends string>({
+  items,
+  value,
+  onChange,
+  ariaLabel,
+  title,
+  size = 'md',
+  className = ''
+}: SegmentedProps<T>): ReactElement {
+  const btn =
+    size === 'sm'
+      ? 'h-[22px] rounded-md px-2.5 text-[11px]'
+      : 'h-[26px] rounded-md px-3 text-[11.5px]'
+  return (
+    <span
+      role="group"
+      aria-label={ariaLabel}
+      title={title}
+      className={`inline-flex shrink-0 items-center rounded-lg bg-panel-3 p-0.5 ${className}`}
+    >
+      {items.map((it) => {
+        const on = it.value === value
+        return (
+          <button
+            key={it.value}
+            type="button"
+            title={it.title}
+            disabled={it.disabled}
+            aria-pressed={on}
+            onClick={() => !on && !it.disabled && onChange(it.value)}
+            className={`inline-flex items-center justify-center gap-1.5 whitespace-nowrap transition-colors disabled:cursor-default disabled:opacity-100 ${btn} ${
+              on
+                ? 'bg-panel-2 font-semibold text-ink shadow-[0_1px_3px_rgba(0,0,0,.16)]'
+                : 'text-ink-dim hover:text-ink disabled:opacity-45 disabled:hover:text-ink-dim'
+            }`}
+          >
+            {it.icon && <Icon name={it.icon} size={12} />}
+            {it.label}
+          </button>
+        )
+      })}
+    </span>
+  )
+}
+
 // ---------------- 胶囊 ----------------
 
 export interface ChipProps {

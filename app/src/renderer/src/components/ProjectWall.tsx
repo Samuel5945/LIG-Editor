@@ -2,7 +2,7 @@ import { useMemo, useState, type ReactElement } from 'react'
 import type { ProjectSummary } from '@shared/types'
 import { UNCATEGORIZED } from '@shared/categories'
 import { Icon } from '../ui/Icon'
-import { Button, Chip, ChipGroup, StatusDot } from '../ui/primitives'
+import { Button, Chip, ChipGroup, Segmented, StatusDot } from '../ui/primitives'
 import { dotOfStatus, PROJECT_STATUS_TEXT } from '../ui/status'
 import { useTreeFlags } from '../ui/useTreeFlags'
 
@@ -120,19 +120,12 @@ export default function ProjectWall({
             className="min-w-0 flex-1 bg-transparent text-ink outline-none placeholder:text-ink-dim"
           />
         </label>
-        <div className="inline-flex shrink-0 items-center rounded-lg bg-panel-3 p-0.5" role="group" aria-label="排序方式">
-          {SORTS.map((s) => (
-            <button
-              key={s.id}
-              onClick={() => setSort(s.id)}
-              className={`h-[26px] rounded-md px-2.5 text-[11.5px] transition-colors ${
-                sort === s.id ? 'bg-panel-2 font-semibold text-ink shadow-[0_1px_3px_rgba(0,0,0,.16)]' : 'text-ink-dim hover:text-ink'
-              }`}
-            >
-              {s.label}
-            </button>
-          ))}
-        </div>
+        <Segmented
+          ariaLabel="排序方式"
+          value={sort}
+          onChange={setSort}
+          items={SORTS.map((s) => ({ value: s.id, label: s.label }))}
+        />
         {creating ? (
           <span className="inline-flex shrink-0 items-center gap-1">
             <input

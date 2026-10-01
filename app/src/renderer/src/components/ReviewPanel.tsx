@@ -250,7 +250,7 @@ export default function ReviewPanel({
           </div>
         )}
 
-        {!streaming && missTip && <p className="mb-2 rounded bg-amber-950/60 px-2 py-1 text-amber-300">{missTip}</p>}
+        {!streaming && missTip && <p className="mb-2 rounded bg-st-draft/10 px-2 py-1 text-st-draft">{missTip}</p>}
         {!streaming &&
           sections.map((sec, i) => (
             <section key={i} className="mb-3 rounded-xl border border-panel-3 bg-panel-2 p-3.5 shadow-[0_1px_6px_rgba(0,0,0,.18)]">

@@ -8,6 +8,7 @@ import {
   type ReactElement
 } from 'react'
 import { Icon } from '../ui/Icon'
+import { Segmented } from '../ui/primitives'
 import { confirmAction } from '../confirm'
 import {
   CARD_FORMAT_LABEL,
@@ -600,7 +601,7 @@ const CardsPanel = forwardRef<CardsPanelHandle, CardsPanelProps>(function CardsP
           </button>
           {hasArticle && (
             <button onClick={backToArticle} className="rounded bg-panel-3 px-3 py-1.5 text-ink hover:bg-panel">
-              ↩ 回到文章
+              <Icon name="undo" size={12} className="mr-1.5" />回到文章
             </button>
           )}
         </div>
@@ -614,9 +615,9 @@ const CardsPanel = forwardRef<CardsPanelHandle, CardsPanelProps>(function CardsP
   return (
     <div className="flex min-h-0 flex-1 flex-col text-xs">
       {/* 工具条：按钮不换行，放不下就整体折行成两排（格式/张数已移到中栏页签行） */}
-      <div className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-panel-3 px-4 py-1.5 text-ink-dim">
+      <div className="no-scrollbar flex shrink-0 flex-nowrap items-center gap-x-2 overflow-x-auto border-b border-panel-3 px-4 py-1.5 text-ink-dim">
         <button onClick={renderAll} disabled={globalBusy || !deck.cards.length} className="whitespace-nowrap rounded px-2 py-0.5 hover:bg-panel-3 disabled:opacity-40">
-           全部重渲染
+          <Icon name="refresh" size={12} className="mr-1.5" />全部重渲染
         </button>
         <button
           onClick={() => setShowAccent((v) => !v)}
@@ -630,15 +631,27 @@ const CardsPanel = forwardRef<CardsPanelHandle, CardsPanelProps>(function CardsP
             style={{ background: deck.accent || (deck.format === 'wechat' ? '#b0803c' : '#ff2e63') }}
           />
         </button>
-        {archived ? (
-          <button onClick={() => void switchFormat()} disabled={globalBusy} title={`直接换回已有的${otherLabel}版本，不重新生成不花 token；当前版同步存档`} className="whitespace-nowrap rounded px-2 py-0.5 hover:bg-panel-3 disabled:opacity-40">
-            ⇄ 切回{otherLabel}
-          </button>
-        ) : (
-          <button onClick={restyle} disabled={globalBusy || !deck.cards.length} title="张数与背图保留，文案改写成另一平台风格；原版自动存档可随时切回" className="whitespace-nowrap rounded px-2 py-0.5 hover:bg-panel-3 disabled:opacity-40">
-            ⇄ 转成{otherLabel}
-          </button>
-        )}
+        {/* 版式分段控件（§5.8）：当前版高亮，点另一段即执行「切回/转成」，
+            不再让用户从两个动词按钮里猜哪条路不花 token */}
+        <Segmented
+          size="sm"
+          ariaLabel="贴图版式"
+          value={deck.format}
+          onChange={() => {
+            if (archived) void switchFormat()
+            else restyle()
+          }}
+          title={
+            archived
+              ? `已有${otherLabel}版本存档，点另一段直接换回（不重新生成、不花 token）`
+              : '点另一段：张数与背图保留，文案改写成另一平台风格，原版自动存档'
+          }
+          items={(['wechat', 'xhs'] as const).map((f) => ({
+            value: f as CardFormat,
+            label: f === 'wechat' ? '公众号' : '小红书',
+            disabled: globalBusy || f === deck.format || !deck.cards.length
+          }))}
+        />
         <button onClick={() => void refine()} disabled={globalBusy || !deck.cards.length} title="逐张润色标题与要点，并生成贴题的封面角标；背图、透出、深色、字号设置保留；逐张点评请用右栏「审阅」" className="whitespace-nowrap rounded px-2 py-0.5 hover:bg-panel-3 disabled:opacity-40">
           <Icon name="sparkles" size={12} className="mr-1.5" />AI 优化
         </button>
@@ -647,7 +660,7 @@ const CardsPanel = forwardRef<CardsPanelHandle, CardsPanelProps>(function CardsP
         </button>
         {hasArticle && (
           <button onClick={backToArticle} disabled={globalBusy} title="不重新生成，直接切回已有正文；卡片数据保留可随时切回来" className="whitespace-nowrap rounded px-2 py-0.5 hover:bg-panel-3 disabled:opacity-40">
-            ↩ 回到文章
+            <Icon name="undo" size={12} className="mr-1.5" />回到文章
           </button>
         )}
         <button
@@ -656,7 +669,7 @@ const CardsPanel = forwardRef<CardsPanelHandle, CardsPanelProps>(function CardsP
           title="以图片消息形态推送到公众号草稿箱（读者可左右滑动看图）；推送账号按工程所属分类的绑定决定，账号在「设置-推送设置」里管理"
           className="whitespace-nowrap rounded px-2 py-0.5 hover:bg-panel-3 disabled:opacity-40"
         >
-          {pushing ? ' 推送中…' : ' 推送草稿箱'}
+          {pushing ? '推送中…' : '推送草稿箱'}
         </button>
         <button onClick={openFolder} className="ml-auto whitespace-nowrap rounded px-2 py-0.5 hover:bg-panel-3" title="渲染好的 PNG 按平台分目录存在工程 cards/ 下，直接取用发布">
           <Icon name="folder" size={12} className="mr-1.5" />打开图片文件夹
@@ -705,7 +718,7 @@ const CardsPanel = forwardRef<CardsPanelHandle, CardsPanelProps>(function CardsP
         <div className="flex items-center gap-2 border-b border-panel-3 bg-panel-2 px-4 py-1.5 text-ink-dim">
           <span className="animate-pulse"></span>
           <span className="min-w-0 flex-1 truncate">{busy}</span>
-          <button onClick={() => abortRef.current?.()} className="rounded px-2 py-0.5 text-red-400 hover:bg-panel-3">
+          <button onClick={() => abortRef.current?.()} className="rounded px-2 py-0.5 text-st-bad hover:bg-panel-3">
             停止
           </button>
         </div>
@@ -719,7 +732,7 @@ const CardsPanel = forwardRef<CardsPanelHandle, CardsPanelProps>(function CardsP
             ref={(el) => {
               cardRefs.current[i] = el
             }}
-            className="mb-3 flex gap-3 rounded-lg border border-panel-3 bg-panel-2 p-3"
+            className="group/card mb-3 flex gap-3 rounded-xl border border-panel-3 bg-panel-2 p-3 shadow-[0_1px_6px_rgba(0,0,0,.18)] transition-[transform,border-color,box-shadow] duration-150 hover:-translate-y-px hover:border-accent"
           >
             {/* 预览缩略图 */}
             <div className="shrink-0">
@@ -750,18 +763,20 @@ const CardsPanel = forwardRef<CardsPanelHandle, CardsPanelProps>(function CardsP
                 ) : (
                   card.bgImage && <span className="text-[10px]">已有背图</span>
                 )}
-                <span className="ml-auto flex gap-1">
-                  <button onClick={() => moveCard(i, -1)} disabled={globalBusy || i === 0} title="上移" className="rounded px-1.5 py-0.5 hover:bg-panel-3 disabled:opacity-30">
-                    ↑
+                {/* 逐张操作 hover 显现（§5.8，与选题卡/工作树同规则）：常态只留缩略图与文案，
+                    键鼠用户靠 focus-within 也能唤出 */}
+                <span className="ml-auto flex shrink-0 gap-1 opacity-0 transition-opacity duration-150 group-hover/card:opacity-100 group-focus-within/card:opacity-100">
+                  <button onClick={() => moveCard(i, -1)} disabled={globalBusy || i === 0} title="上移" className="inline-flex h-[22px] w-[22px] items-center justify-center rounded hover:bg-panel-3 disabled:opacity-30">
+                    <Icon name="chevronUp" size={12} />
                   </button>
-                  <button onClick={() => moveCard(i, 1)} disabled={globalBusy || i === deck.cards.length - 1} title="下移" className="rounded px-1.5 py-0.5 hover:bg-panel-3 disabled:opacity-30">
-                    ↓
+                  <button onClick={() => moveCard(i, 1)} disabled={globalBusy || i === deck.cards.length - 1} title="下移" className="inline-flex h-[22px] w-[22px] items-center justify-center rounded hover:bg-panel-3 disabled:opacity-30">
+                    <Icon name="chevronDown" size={12} />
                   </button>
-                  <button onClick={() => insertCard(i)} disabled={globalBusy} title="在此卡下方插入新卡片" className="rounded px-1.5 py-0.5 hover:bg-panel-3 hover:text-accent disabled:opacity-30">
-                    ＋
+                  <button onClick={() => insertCard(i)} disabled={globalBusy} title="在此卡下方插入新卡片" className="inline-flex h-[22px] w-[22px] items-center justify-center rounded hover:bg-panel-3 hover:text-accent disabled:opacity-30">
+                    <Icon name="plus" size={12} />
                   </button>
-                  <button onClick={() => deleteCard(i)} disabled={globalBusy} title="删除" className="rounded px-1.5 py-0.5 hover:bg-panel-3 hover:text-red-400 disabled:opacity-30">
-                    <Icon name="x" size={12} className="mr-1.5" />
+                  <button onClick={() => deleteCard(i)} disabled={globalBusy} title="删除本张" className="inline-flex h-[22px] w-[22px] items-center justify-center rounded hover:bg-panel-3 hover:text-st-bad disabled:opacity-30">
+                    <Icon name="trash" size={12} />
                   </button>
                 </span>
               </div>
@@ -864,7 +879,7 @@ const CardsPanel = forwardRef<CardsPanelHandle, CardsPanelProps>(function CardsP
                   disabled={globalBusy || bgBusy !== null || aiBusy !== null || card.mode === 'ai' || !card.bgPrompt.trim()}
                   className="rounded bg-accent px-2.5 py-1 text-white hover:opacity-90 disabled:opacity-40"
                 >
-                  {bgBusy === i ? '背图生成中…' : ' 生成背图'}
+                  {bgBusy === i ? '背图生成中…' : '生成背图'}
                 </button>
                 <button
                   onClick={() => genAiFull(i)}
@@ -872,7 +887,7 @@ const CardsPanel = forwardRef<CardsPanelHandle, CardsPanelProps>(function CardsP
                   title="AI 一次画出整张成品卡（文字直接画进图里），不走排版模板；风格取背图描述"
                   className="rounded bg-panel-3 px-2.5 py-1 text-ink hover:bg-panel disabled:opacity-40"
                 >
-                  {aiBusy === i ? 'AI 成图中…' : ' AI 直接成图'}
+                  {aiBusy === i ? 'AI 成图中…' : 'AI 直接成图'}
                 </button>
                 {card.mode === 'ai' && (
                   <button
@@ -881,7 +896,7 @@ const CardsPanel = forwardRef<CardsPanelHandle, CardsPanelProps>(function CardsP
                     title="切回排版+背图渲染；成图文件保留"
                     className="rounded bg-panel-3 px-2.5 py-1 text-ink hover:bg-panel disabled:opacity-40"
                   >
-                    ↩ 恢复排版
+                    <Icon name="undo" size={12} className="mr-1.5" />恢复排版
                   </button>
                 )}
                 <button
@@ -906,7 +921,7 @@ const CardsPanel = forwardRef<CardsPanelHandle, CardsPanelProps>(function CardsP
         {deck.cards.length > 0 && (
           <div className="mt-1 rounded-lg border border-panel-3 bg-panel-2 p-3">
             <div className="mb-1.5 flex items-center gap-2">
-              <span className="font-bold text-ink"> 发布配文</span>
+              <span className="flex items-center gap-1.5 font-bold text-ink"><Icon name="tag" size={12} className="text-accent" />发布配文</span>
               <span className="text-ink-dim">带话题标签，发图时直接复制粘贴</span>
               <button onClick={() => void genCaption()} disabled={globalBusy} className="ml-auto whitespace-nowrap rounded bg-accent px-2 py-0.5 text-white hover:opacity-90 disabled:opacity-40">
                 {deck.caption?.trim() ? ' 重新生成' : ' 生成配文'}

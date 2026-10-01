@@ -53,36 +53,47 @@ function FigSuggestView({ node, editor, getPos, deleteNode, updateAttributes }: 
     })
   }
 
-  const btn = 'rounded border border-slate-600 px-2 py-0.5 text-[11px] text-slate-300 hover:border-sky-500 hover:text-sky-400'
+  const btn = 'inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] text-ink-dim hover:bg-panel-3 hover:text-ink'
 
   return (
     <NodeViewWrapper className="my-3" data-drag-handle>
-      <div className="rounded-lg border border-dashed border-slate-600 bg-slate-800/40 px-3 py-2.5">
-        <div className="flex items-center gap-1.5 text-xs text-slate-400">
-          <span className="shrink-0">
-            <Icon name="image" size={13} className="mr-1" />配图建议：
-          </span>
+      {/* 与配图清单行同一规格：48px 缩略图占位框 + 描述 + 主按钮「处理 →」
+          （管线在配图弹窗顶部三分段里选，占位卡不再摆三个并列按钮） */}
+      <div className="flex items-start gap-2.5 rounded-xl border border-dashed border-panel-3 bg-panel-2 px-3 py-2.5">
+        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md border border-dashed border-panel-3 bg-panel text-ink-dim">
+          <Icon name="image" size={16} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="mb-1 shrink-0 text-[10.5px] text-ink-dim">配图建议</p>
           <input
             value={desc}
             onChange={(e) => updateAttributes({ desc: e.target.value })}
             placeholder="描述这张图画什么…"
-            className="min-w-0 flex-1 bg-transparent text-slate-300 outline-none placeholder:text-slate-600"
+            className="w-full bg-transparent text-xs text-ink outline-none placeholder:text-ink-dim"
           />
         </div>
-        <div className="mt-2 flex flex-wrap items-center gap-1.5">
-          <button type="button" onClick={() => fire('ai')} className={btn} title="AI 文生图 → 预览 → 插入正文">
-            <Icon name="sparkles" size={12} className="mr-1" />AI 生图
+        <div className="flex shrink-0 flex-wrap items-center gap-1">
+          <button
+            type="button"
+            onClick={() => fire('ai')}
+            title="打开配图弹窗（管线可在弹窗顶部切换）"
+            className="inline-flex items-center gap-1 rounded-md bg-accent px-2.5 py-1 text-[11px] font-semibold text-white hover:brightness-110"
+          >
+            处理
+            <Icon name="chevronRight" size={11} />
           </button>
           <button type="button" onClick={() => fire('code')} className={btn} title="AI 写 HTML 绘图 → 离屏渲染 PNG → 插入">
-            <Icon name="chart" size={12} className="mr-1" />代码绘图
+            <Icon name="chart" size={12} />
+            代码绘图
           </button>
           <button type="button" onClick={() => fire('import')} className={btn} title="导入本地图片，可选抠图去背景">
-            <Icon name="folder" size={12} className="mr-1" />导入图片
+            <Icon name="folder" size={12} />
+            导入
           </button>
           <button
             type="button"
             onClick={() => deleteNode()}
-            className="ml-auto rounded px-1.5 py-0.5 text-[11px] text-slate-500 hover:bg-slate-700 hover:text-st-bad"
+            className="rounded-md px-1.5 py-1 text-[11px] text-ink-dim hover:bg-panel-3 hover:text-st-bad"
             title="删除此配图占位"
           >
             <Icon name="trash" size={12} />

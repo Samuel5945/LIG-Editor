@@ -3,7 +3,7 @@ import type { LlmSettings, LlmTestResult, ModelInfo, ProviderConfig } from '@sha
 import { imageFormatFor } from '@shared/imageFormats'
 import { isRhythmProvider, providerSiteLinks } from '@shared/providerSites'
 import { DialogShell } from '../ui/DialogShell'
-import { Button } from '../ui/primitives'
+import { Button, Segmented } from '../ui/primitives'
 import { Icon, type IconName } from '../ui/Icon'
 
 interface SettingsDialogProps {
@@ -454,7 +454,7 @@ export default function SettingsDialog({ onClose, appearance, onOpenIntegration 
                     >
                       {fetchingModels ? '拉取中…' : '↓ 拉取可用模型'}
                     </button>
-                    {modelsError && <span className="text-[11px] text-red-400"><Icon name="x" size={12} className="mr-1.5" />{modelsError}</span>}
+                    {modelsError && <span className="text-[11px] text-st-bad"><Icon name="x" size={12} className="mr-1.5" />{modelsError}</span>}
                   </div>
 
                   {models.length > 0 && (
@@ -521,13 +521,13 @@ export default function SettingsDialog({ onClose, appearance, onOpenIntegration 
                       {testing ? '测试中…' : '测试连接'}
                     </button>
                     {settings.providers.length > 1 && (
-                      <button onClick={removeProvider} className="rounded px-2 py-1.5 text-xs text-red-400 hover:bg-panel-3">
+                      <button onClick={removeProvider} className="rounded px-2 py-1.5 text-xs text-st-bad hover:bg-panel-3">
                         删除此供应商
                       </button>
                     )}
                   </div>
                   {testResult && (
-                    <p className={`mt-2 break-all text-xs ${testResult.ok ? 'text-green-500' : 'text-red-400'}`}>
+                    <p className={`mt-2 break-all text-xs ${testResult.ok ? 'text-st-done' : 'text-st-bad'}`}>
                       {testResult.ok ? ' ' : ' '}
                       {testResult.message}
                     </p>
@@ -652,37 +652,27 @@ export default function SettingsDialog({ onClose, appearance, onOpenIntegration 
           <div className="min-h-0 flex-1 overflow-y-auto thin-scroll p-4">
             <p className="mb-1 text-xs font-bold text-ink">主题</p>
             <p className="mb-2 text-[11px] text-ink-dim">跟随系统会随 Windows 深浅色自动切换；界面字号即时生效。</p>
-            <div className="inline-flex rounded-lg bg-panel-3 p-0.5">
-              {([['system', '跟随系统'], ['light', '日间'], ['dark', '夜间']] as const).map(([v, label]) => (
-                <button
-                  key={v}
-                  onClick={() => appearance.onMode(v)}
-                  className={`h-[26px] rounded-md px-3 text-[11.5px] transition-colors ${
-                    appearance.mode === v
-                      ? 'bg-panel-2 font-semibold text-ink shadow-[0_1px_3px_rgba(0,0,0,.16)]'
-                      : 'text-ink-dim hover:text-ink'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+            <Segmented
+              ariaLabel="主题模式"
+              value={appearance.mode}
+              onChange={appearance.onMode}
+              items={[
+                { value: 'system', label: '跟随系统' },
+                { value: 'light', label: '日间' },
+                { value: 'dark', label: '夜间' }
+              ]}
+            />
             <p className="mb-1 mt-5 text-xs font-bold text-ink">界面字号</p>
-            <div className="inline-flex rounded-lg bg-panel-3 p-0.5">
-              {([['s', '小'], ['m', '中'], ['l', '大']] as const).map(([v, label]) => (
-                <button
-                  key={v}
-                  onClick={() => appearance.onScale(v)}
-                  className={`h-[26px] rounded-md px-3 text-[11.5px] transition-colors ${
-                    appearance.scale === v
-                      ? 'bg-panel-2 font-semibold text-ink shadow-[0_1px_3px_rgba(0,0,0,.16)]'
-                      : 'text-ink-dim hover:text-ink'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+            <Segmented
+              ariaLabel="界面字号"
+              value={appearance.scale}
+              onChange={appearance.onScale}
+              items={[
+                { value: 's', label: '小' },
+                { value: 'm', label: '中' },
+                { value: 'l', label: '大' }
+              ]}
+            />
           </div>
         ) : (
           /* 关于：版本 / 检查更新 / 分发入口（与顶栏「版本更新」同一套结果） */

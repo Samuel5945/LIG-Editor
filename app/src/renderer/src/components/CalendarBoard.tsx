@@ -245,20 +245,20 @@ export default function CalendarBoard({
       <div className="flex h-10 shrink-0 items-center gap-2 border-b border-panel-3 px-4 text-xs text-ink-dim">
         <button
           onClick={() => setCursor((c) => addMonths(c.year, c.month0, -1))}
-          className="rounded px-1.5 py-0.5 hover:bg-panel-3"
+          className="inline-flex h-[26px] w-[26px] items-center justify-center rounded hover:bg-panel-3"
           title="上个月"
         >
-          ‹
+          <Icon name="chevronLeft" size={13} />
         </button>
         <span className="w-24 text-center text-ink">
           {cursor.year} 年 {cursor.month0 + 1} 月
         </span>
         <button
           onClick={() => setCursor((c) => addMonths(c.year, c.month0, 1))}
-          className="rounded px-1.5 py-0.5 hover:bg-panel-3"
+          className="inline-flex h-[26px] w-[26px] items-center justify-center rounded hover:bg-panel-3"
           title="下个月"
         >
-          ›
+          <Icon name="chevronRight" size={13} />
         </button>
         <button
           onClick={() => {
