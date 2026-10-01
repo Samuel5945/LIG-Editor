@@ -533,8 +533,7 @@ export function MenuItem({ icon, children, onClick, title, tone = 'default', act
   )
 }
 
-/** 选项格（编辑器工具条下拉这类「点一个值」的格子）：选中主色实心，未选灰字浅底 hover */
-export function ChoiceTile({
+/** 选项格（编辑器工具条下拉这类「点一个值」的格子）：选中主色实心，未选灰字浅底 hover */export function ChoiceTile({
   on,
   children,
   onClick,
@@ -560,6 +559,57 @@ export function ChoiceTile({
     </button>
   )
 }
+
+/**
+ * 单行胶囊条溢出时的「还有别的可选」入口：横滑与渐隐只解决「看得见」，
+ * 被滑出视区的项仍要有地方能选到——所以补一只下拉，列全量项并标当前项。
+ * 调用方在条带 `data-overflow=1` 时才渲染它（放得下就不加噪音）。
+ */
+export function PickerButton<T extends string>({
+  value,
+  items,
+  onSelect,
+  label = '全部',
+  icon = 'filter',
+  align = 'left'
+}: {
+  value: T
+  items: { value: T; label: string; hint?: string }[]
+  onSelect: (v: T) => void
+  label?: string
+  icon?: IconName
+  /** 触发按钮贴在条带右端时传 'right'，让浮层向左长，不越出中栏压到邻栏 */
+  align?: 'left' | 'right'
+}): ReactElement {
+  const [open, setOpen] = useState(false)
+  return (
+    <span className="relative shrink-0">
+      <Button
+        size="sm"
+        variant="sec"
+        icon={icon}
+        title={`共 ${items.length} 项，条带里放不下时用这个选`}
+        onClick={() => setOpen((v) => !v)}
+      >
+        {label}
+      </Button>
+      {open && (
+        <Popover
+          onClose={() => setOpen(false)}
+          className={`absolute top-full mt-1 max-h-[300px] w-52 overflow-y-auto p-1 ${align === 'right' ? 'right-0' : 'left-0'}`}
+        >
+          {items.map((it) => (
+            <MenuItem key={it.value} title={it.hint} active={it.value === value} onClick={() => { onSelect(it.value); setOpen(false) }}>
+              {it.label}
+            </MenuItem>
+          ))}
+        </Popover>
+      )}
+    </span>
+  )
+}
+
+// ---------------- 输入框壳 / 卡片壳 ----------------
 
 /**
  * 输入框壳单源：描边 + 聚焦主色 3px 光晕。`field-shell` 这个类名同时是 CSS 的开关——
