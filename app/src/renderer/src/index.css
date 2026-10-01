@@ -13,7 +13,9 @@
   --ink: 226 228 234; /* #e2e4ea */
   --ink-dim: 154 160 173; /* #9aa0ad */
   --accent: 79 140 255; /* #4f8cff */
-  --scrollbar: 128 132 140; /* 与导出预览同一支中性灰：昼夜同值，靠 alpha 退到背景里 */
+  --scrollbar: 170 178 192; /* 夜间：深底上必须用浅灰（原来那支 128 中灰压在 #22252d 上几乎看不见） */
+  --sb-a: 0.16; /* 静置：极淡，不跟内容抢视线 */
+  --sb-a-hover: 0.34; /* 拖动 / hover：比原来的 .72 淡一半 */
   /* 状态色（UI/UX PRD §3.1）：语义固定 黄=草稿 / 蓝=进行中 / 绿=已成稿或已发布，
      深色底上取高亮度版本保证可读，日间取 PRD 原值；圆点与文字共用同一变量 */
   --st-draft: 251 191 36; /* amber-400 */
@@ -44,7 +46,7 @@
   --ink: 28 32 40;
   --ink-dim: 103 112 127;
   --accent: 15 118 110; /* #0f766e 青绿强调，白底对比 4.9:1 */
-  --scrollbar: 128 132 140; /* 同夜间：预览那支灰，白底上不抢眼 */
+  --scrollbar: 104 112 124; /* 日间：白底上的中性灰；alpha 沿用 :root 的 --sb-a 两档 */
   /* 状态色日间值 = PRD tokens（黄 #E8A13A / 蓝 #4C88FF / 绿 #22A06B / 红 #E5484D）；
      草稿黄在白底上做文字对比不足时由 .text-st-draft 的调用方配文字标签，色相不另起 */
   --st-draft: 217 130 30; /* #d9821e，日间可读的琥珀（原 #E8A13A 白底对比 2.2:1 不达标） */
@@ -112,9 +114,10 @@ select,
   -webkit-app-region: no-drag;
 }
 
-/* ---- 全局滚动条规范（2026-10-01 专项；三修：只此一款，与导出预览 iframe 同源）----
-   内嵌胶囊式：轨道与四角全透明，thumb 用透明描边 + padding-box 裁切压成 ~3px 细胶囊，
-   底色带 alpha 让它退到背景里，hover 才提亮。
+/* ---- 全局滚动条规范（2026-10-01 专项；四修：静置极淡、拖动才提亮）----
+   内嵌胶囊式：轨道与四角全透明，thumb 用透明描边 + padding-box 裁切压成 ~3px 细胶囊。
+   静置 alpha .16（几乎只剩一条浅痕），hover / active .34（比旧值 .72 淡一半）。
+   昼夜各一支底色：夜间必须浅灰，日间深灰——alpha 两档共用。
    ⚠ 刻意不写 scrollbar-width / scrollbar-color：Chromium 一旦在根上见到标准属性，
    就整个文档停用 ::-webkit-scrollbar 自定义（实测：写了 html 上那两条，规范里的
    8px/6px 全退回默认 17 物理 px 粗灰条；清掉立刻恢复 8/6）。本应用只跑 Chromium，
@@ -128,13 +131,14 @@ select,
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgb(var(--scrollbar) / 0.42);
+  background: rgb(var(--scrollbar) / var(--sb-a));
   border: 2.5px solid transparent;
   border-radius: 999px;
   background-clip: padding-box;
 }
-::-webkit-scrollbar-thumb:hover {
-  background: rgb(var(--scrollbar) / 0.72);
+::-webkit-scrollbar-thumb:hover,
+::-webkit-scrollbar-thumb:active {
+  background: rgb(var(--scrollbar) / var(--sb-a-hover));
   border: 2.5px solid transparent;
   background-clip: padding-box;
 }

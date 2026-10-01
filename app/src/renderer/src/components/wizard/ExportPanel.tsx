@@ -84,10 +84,12 @@ export default function ExportPanel({ project, projectDir, markdown, theme, cate
     if (platform === 'wechat') {
       const fragment = docToExportHtml(doc, resolveAsset, theme, pubVariant === 'night')
       // 页面外壳背景跟随所选配色变体：夜间深底、日间白底/浅卡（与正文片段同源，整页一体）
-      return withPreviewScrollCss(wrapExportPage(fragment, extractTitle(doc, project), exportPageBg(theme, pubVariant === 'night')))
+      // 夜间配色 = 深底预览，注入的滚动条要跟着换成浅灰（否则压在夜读底上看不见）
+      return withPreviewScrollCss(wrapExportPage(fragment, extractTitle(doc, project), exportPageBg(theme, pubVariant === 'night')), pubVariant === 'night')
     }
     const fragment = docToPlatformHtml(doc, resolveAsset, theme, platform)
-    return withPreviewScrollCss(wrapPlatformPage(fragment, extractTitle(doc, project)))
+    // 平台预览页固定白底
+    return withPreviewScrollCss(wrapPlatformPage(fragment, extractTitle(doc, project)), false)
   }, [markdown, projectDir, project, theme, pubVariant, platform])
 
   const copyRich = useCallback(async () => {
@@ -236,9 +238,6 @@ export default function ExportPanel({ project, projectDir, markdown, theme, cate
           />
         </div>
         <div ref={previewRef} className="relative mt-2.5 min-h-0 flex-1 overflow-hidden rounded-lg bg-panel-3/40">
-          <span className="absolute right-2 top-2 z-10 rounded-full bg-black/45 px-2 py-0.5 text-[10px] tabular-nums text-white">
-            {targetW} × {shotH}
-          </span>
           {/* 绝对定位：iframe 的高度由框子算出来，若让它参与常规流就会「框子撑高 → iframe 再撑高」无限长 */}
           <div className="absolute inset-0 flex justify-center">
             <div style={{ width: targetW * shot, height: previewBox.h }}>
