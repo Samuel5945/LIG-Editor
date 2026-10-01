@@ -30,11 +30,31 @@ import IdeaBoard from './components/IdeaBoard'
 import Sidebar from './components/Sidebar'
 import ProjectWall from './components/ProjectWall'
 import ThemeLibrary, { type ThemeEntry } from './components/ThemeLibrary'
-import { Icon } from './ui/Icon'
-import { Segmented, StatusDot } from './ui/primitives'
+import { Icon, type IconName } from './ui/Icon'
+import { Segmented, StatusDot, useFittingRow } from './ui/primitives'
 import ArticleEditor, { type ArticleEditorHandle, type EditorSelection } from './editor/ArticleEditor'
 import type { FigPipeline } from './editor/FigSuggest'
 import { shouldAutoStart, startTour } from './components/onboardingTour'
+
+/** 中栏页签（诊断 8/11）：⌂ 项目库常驻入口 + 这四页 */
+type CenterTab = 'create' | 'ideas' | 'calendar' | 'themes'
+
+/**
+ * 页签清单一处定义：`label` 是长名，`short` 只在条带放不下时使用（诊断 8 的「选题看板→看板」）。
+ * title 保留完整说法——降级的是标签文字，不是信息。
+ */
+const CENTER_TABS: { id: CenterTab; icon: IconName; label: string; short?: string; title: string }[] = [
+  { id: 'create', icon: 'compass', label: '创作', title: '创作向导：选题 → 大纲 → 成文 → 配图 → 标题封面 → 审阅 → 导出' },
+  {
+    id: 'ideas',
+    icon: 'bulb',
+    label: '选题看板',
+    short: '看板',
+    title: '选题流转看板：待立项 / 已立项 / 已排期 / 已成稿，状态由对应工程推导'
+  },
+  { id: 'calendar', icon: 'calendar', label: '日历', title: '跨工程发布排期看板：拖拽工程卡片到日期即排期' },
+  { id: 'themes', icon: 'layers', label: '主题库', title: '主题库：内置 / 导入 / 面板沉淀的集中入口，可预览与绑定分类' }
+]
 
 /** 三栏工作台：左 项目/选题库，中 编辑器/标题封面，右 对话/脑暴/审阅（互相独立不串扰） */
 export default function App(): JSX.Element {
@@ -99,7 +119,7 @@ export default function App(): JSX.Element {
     if (shouldAutoStart()) startTour(tourHandlers)
   }, [tourHandlers])
   // M5 副驾驶；中栏 = 创作向导（主工作面）+ 两个跨工程页签
-  const [centerTab, setCenterTab] = useState<'create' | 'calendar' | 'ideas' | 'themes'>('create')
+  const [centerTab, setCenterTab] = useState<CenterTab>('create')
   /** 主题库里的「预览」：只覆盖编辑器观感，不写盘、退出即还原（§5.6） */
   const [themePreview, setThemePreview] = useState<{ name: string; theme: ArticleTheme } | null>(null)
   // 向导深链跳步（工作树/对话/审阅定位等）：ts 变化即生效（仿 reviewRequest 模式）
@@ -116,6 +136,8 @@ export default function App(): JSX.Element {
   const [leftCollapsed, setLeftCollapsed] = useState(() => localStorage.getItem('lig-pane-left-collapsed') === '1')
   /** 封面墙让位给创作向导的开关（无工程时默认显示封面墙，主 PRD §7.13） */
   const [wallOff, setWallOff] = useState(() => localStorage.getItem('lig-wall-off') === '1')
+  /** ⌂ 常驻入口按下后把封面墙钉住（诊断 11：一进向导就再也回不去墙，等于开屏广告） */
+  const [wallPinned, setWallPinned] = useState(false)
   const [rightCollapsed, setRightCollapsed] = useState(() => localStorage.getItem('lig-pane-right-collapsed') === '1')
   const [skills, setSkills] = useState<SkillInfo[]>([])
   const [skillName, setSkillName] = useState('')
@@ -187,8 +209,28 @@ export default function App(): JSX.Element {
     [customThemes]
   )
 
-  /** 中栏创作页签的空态：未打开工程且用户没主动让位时 = 封面墙 */
-  const showWall = centerTab === 'create' && !current && !wallOff
+  /**
+   * 中栏创作页签显示封面墙：未打开工程且用户没主动让位（原逻辑），
+   * 或按下 ⌂ 主动回墙（诊断 11）——钉住时不受「已打开工程」与让位开关限制。
+   */
+  const showWall = centerTab === 'create' && (wallPinned || (!current && !wallOff))
+
+  /** 页签行单行测量（诊断 8）：narrow=长标签放不下改短名，overflow=短标签仍放不下→横滑渐隐 */
+  const tabsRow = useFittingRow<HTMLDivElement>()
+
+  /** 切中栏页签：回到「创作」即退出钉墙状态（⌂ 才是回墙的入口，页签职责单一） */
+  const selectCenterTab = useCallback((id: CenterTab): void => {
+    setCenterTab(id)
+    if (id === 'create') setWallPinned(false)
+  }, [])
+
+  /** ⌂ 回项目库：钉住封面墙，并清掉「用户已让位给向导」的本地开关（否则点了没反应） */
+  const goWall = useCallback((): void => {
+    setCenterTab('create')
+    setWallPinned(true)
+    setWallOff(false)
+    localStorage.removeItem('lig-wall-off')
+  }, [])
 
   /** 当前工程真实目录（分类布局后在 workspace/<分类>/<工程名>/，不能再用 workspace 根拼接） */
   const currentDir = useMemo(() => projects.find((p) => p.name === current)?.dir ?? '', [projects, current])
@@ -284,6 +326,8 @@ export default function App(): JSX.Element {
       setSaved(data.article)
       setConflict(null)
       setCenterTab('create')
+      // 从墙上/树里点开工程就退出「钉住封面墙」，否则开完工程还停在墙上
+      setWallPinned(false)
       // 不切向导步骤：脑暴立项后向导自己停在成文步看流式
       await mountSkill(data.meta.style_skill ?? '', false)
     },
@@ -1024,51 +1068,47 @@ export default function App(): JSX.Element {
 
         {/* 中栏：创作向导（主工作面）/ 选题看板 / 日历 */}
         <main className="flex min-w-0 flex-1 flex-col bg-panel">
-          {/* 中栏页签行：页签 + 右端字数胶囊（字数从步进器里拆出，标注③）；单行不折行 */}
-          <div data-tour="center-toolbar" className="flex h-[42px] shrink-0 items-center gap-1 border-b border-panel-3 px-4">
+          {/* 中栏页签行（诊断 8/11）：⌂ 项目库常驻入口 + 四页签 + 右端字数胶囊。
+              整条强制单行：放不下时长标签先降短名（选题看板→看板），仍放不下则横滑 + 右缘渐隐，绝不折行；
+              字数胶囊钉在条带外，不随页签滚走 */}
+          <div data-tour="center-toolbar" className="flex h-[42px] shrink-0 items-center gap-2 border-b border-panel-3 px-4">
             <button
-              onClick={() => setCenterTab('create')}
-              title="创作向导：选题 → 大纲 → 成文 → 配图 → 标题封面 → 审阅 → 导出"
-              className={`inline-flex h-7 items-center gap-1.5 rounded-md px-3 text-xs transition-colors ${
-                centerTab === 'create' ? 'bg-accent/15 font-semibold text-accent' : 'text-ink-dim hover:bg-panel-3 hover:text-ink'
+              onClick={goWall}
+              title="工程封面墙：所有工程的视觉入口（与选题看板、日历三视角并存）"
+              aria-label="项目库"
+              aria-pressed={showWall}
+              className={`inline-flex h-7 shrink-0 items-center rounded-md border px-2 transition-colors ${
+                showWall
+                  ? 'border-accent bg-accent/15 text-accent'
+                  : 'border-panel-3 text-ink-dim hover:border-accent hover:text-accent'
               }`}
             >
-              <Icon name="compass" size={13} />创作
+              <Icon name="home" size={13} />
             </button>
-            <button
-              onClick={() => setCenterTab('ideas')}
-              title="选题流转看板：待立项 / 已立项 / 已排期 / 已成稿，状态由对应工程推导"
-              className={`inline-flex h-7 items-center gap-1.5 rounded-md px-3 text-xs transition-colors ${
-                centerTab === 'ideas' ? 'bg-accent/15 font-semibold text-accent' : 'text-ink-dim hover:bg-panel-3 hover:text-ink'
-              }`}
+            <div
+              ref={tabsRow.ref}
+              data-overflow={tabsRow.overflow ? '1' : '0'}
+              className="chip-row flex min-w-0 flex-1 flex-nowrap items-center gap-1"
             >
-              <Icon name="bulb" size={13} />选题看板
-            </button>
-            <button
-              onClick={() => setCenterTab('calendar')}
-              title="跨工程发布排期看板：拖拽工程卡片到日期即排期"
-              className={`inline-flex h-7 items-center gap-1.5 rounded-md px-3 text-xs transition-colors ${
-                centerTab === 'calendar' ? 'bg-accent/15 font-semibold text-accent' : 'text-ink-dim hover:bg-panel-3 hover:text-ink'
-              }`}
-            >
-              <Icon name="calendar" size={13} />日历
-            </button>
-            <button
-              onClick={() => setCenterTab('themes')}
-              title="主题库：内置 / 导入 / 面板沉淀的集中入口，可预览与绑定分类"
-              className={`inline-flex h-7 items-center gap-1.5 rounded-md px-3 text-xs transition-colors ${
-                centerTab === 'themes' ? 'bg-accent/15 font-semibold text-accent' : 'text-ink-dim hover:bg-panel-3 hover:text-ink'
-              }`}
-            >
-              <Icon name="layers" size={13} />主题库
-            </button>
-            <span className="ml-auto flex min-w-0 items-center gap-2">
-              {current && wordCount > 0 && (
-                <span className="shrink-0 rounded-full bg-panel-3 px-2.5 py-0.5 text-[11.5px] text-ink-dim" title="当前正文字数（不含标记）">
-                  本文 {wordCount} 字
-                </span>
-              )}
-            </span>
+              {CENTER_TABS.map((t) => (
+                <button
+                  key={t.id}
+                  onClick={() => selectCenterTab(t.id)}
+                  title={t.title}
+                  className={`inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-3 text-xs transition-colors ${
+                    centerTab === t.id ? 'bg-accent/15 font-semibold text-accent' : 'text-ink-dim hover:bg-panel-3 hover:text-ink'
+                  }`}
+                >
+                  <Icon name={t.icon} size={13} />
+                  {tabsRow.narrow && t.short ? t.short : t.label}
+                </button>
+              ))}
+            </div>
+            {current && wordCount > 0 && (
+              <span className="shrink-0 rounded-full bg-panel-3 px-2.5 py-0.5 text-[11.5px] text-ink-dim" title="当前正文字数（不含标记）">
+                本文 {wordCount} 字
+              </span>
+            )}
           </div>
           {centerTab === 'calendar' ? (
             <CalendarBoard
@@ -1129,16 +1169,19 @@ export default function App(): JSX.Element {
               onToast={setToast}
             />
           ) : null}
-          {/* 工程封面墙（主 PRD §7.13）：未打开工程时中栏不再是空壳。向导仍常驻挂载，
-              只是 hidden 保活——脑暴/生成的流式状态不因切到墙上而断 */}
+          {/* 工程封面墙（主 PRD §7.13）：未打开工程时中栏不再是空壳，打开后 ⌂ 也能随时回墙（诊断 11）。
+              向导仍常驻挂载，只是 hidden 保活——脑暴/生成的流式状态不因切到墙上而断 */}
           {showWall && (
             <ProjectWall
               projects={projects}
               categories={categories}
               initialCat={filterCat}
+              current={current ?? undefined}
+              onClose={wallPinned ? () => setWallPinned(false) : undefined}
               onOpen={(name) => void openProject(name)}
               onCreate={(name) => void createProjectNamed(name, filterCat === 'all' ? undefined : filterCat)}
               onBrainstorm={() => {
+                setWallPinned(false)
                 setWallOff(true)
                 localStorage.setItem('lig-wall-off', '1')
               }}

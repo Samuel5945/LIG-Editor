@@ -24,6 +24,61 @@ function useElWidth<T extends HTMLElement>(): [React.RefObject<T>, number] {
   return [ref, w]
 }
 
+/**
+ * 观测元素可用宽高（导出步预览缩放要同时知道宽和高；hidden 挂载时读到 0，重新显示会再回调一次）。
+ */
+export function useElementBox<T extends HTMLElement>(): [React.RefObject<T>, { w: number; h: number }] {
+  const ref = useRef<T>(null)
+  const [box, setBox] = useState({ w: 0, h: 0 })
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const read = () => setBox({ w: el.clientWidth, h: el.clientHeight })
+    const ro = new ResizeObserver(read)
+    ro.observe(el)
+    read()
+    return () => ro.disconnect()
+  }, [])
+  return [ref, box]
+}
+
+/**
+ * 横向条带的单行测量（诊断 8）：一个 ResizeObserver 同时给出
+ * - `overflow`：内容放不下 → 调用方置 `data-overflow="1"`，由 `.chip-row` 出右缘渐隐 + 横滑
+ * - `narrow`：长标签放不下 → 调用方改用短名；短名仍放不下就不再降（交给横滑）
+ *
+ * 降级那一次读到的长标签自然宽作迟滞阈值，窗口变宽后自动回到长标签，避免临界宽度反复抖动。
+ */
+export function useFittingRow<T extends HTMLElement>(): { ref: React.RefObject<T>; narrow: boolean; overflow: boolean } {
+  const ref = useRef<T>(null)
+  const [narrow, setNarrow] = useState(false)
+  const [overflow, setOverflow] = useState(false)
+  const longNatural = useRef(0)
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const check = (): void => {
+      const w = el.clientWidth
+      const natural = el.scrollWidth
+      if (w <= 0) return
+      setOverflow(natural > w + 1)
+      if (!narrow) {
+        if (natural > w + 1) {
+          longNatural.current = natural
+          setNarrow(true)
+        }
+      } else if (longNatural.current && w >= longNatural.current + 1) {
+        setNarrow(false)
+      }
+    }
+    const ro = new ResizeObserver(check)
+    ro.observe(el)
+    check()
+    return () => ro.disconnect()
+  }, [narrow])
+  return { ref, narrow, overflow }
+}
+
 // ---------------- 按钮 ----------------
 
 export type BtnVariant = 'pri' | 'sec' | 'ghost'
@@ -192,13 +247,9 @@ export function Chip({ on, icon, onClose, onClick, title, children, className = 
 }
 
 export function ChipGroup({ children, className = '' }: { children: ReactNode; className?: string }): ReactElement {
-  const [ref, over] = useElWidth<HTMLDivElement>()
+  const row = useFittingRow<HTMLDivElement>()
   return (
-    <div
-      ref={ref}
-      data-overflow={over > 0 && ref.current && ref.current.scrollWidth > ref.current.clientWidth + 1 ? '1' : '0'}
-      className={`chip-row flex flex-nowrap items-center gap-1.5 ${className}`}
-    >
+    <div ref={row.ref} data-overflow={row.overflow ? '1' : '0'} className={`chip-row flex flex-nowrap items-center gap-1.5 ${className}`}>
       {children}
     </div>
   )
@@ -420,4 +471,34 @@ export function useMounted(): boolean {
   const [m, setM] = useState(false)
   useEffect(() => setM(true), [])
   return m
+}
+
+export interface CollapseBarProps {
+  /** 条上文字：一句话说清展开后是什么（如「版式与裁剪规则（文字锁左区 / 底图同化）」） */
+  label: string
+  children: ReactNode
+  className?: string
+}
+
+/**
+ * 说明折叠条（§5.3 二轮重构 / 稿 E⑳・稿 F㉓）：把规则长文从操作区里拿走，默认收起，
+ * 要查依据时展开即有——工作面只剩「选择 + 按钮」，按钮不再淹在段落里。
+ * 标题封面步与导出步共用这一只，禁各处手抄虚线条。
+ */
+export function CollapseBar({ label, children, className = '' }: CollapseBarProps): ReactElement {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className={className}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="flex w-full items-center gap-2 rounded-lg border border-dashed border-panel-3 bg-panel-3/40 px-3 py-2 text-left text-[11.5px] text-ink-dim transition-colors hover:text-ink"
+      >
+        <span className="min-w-0 flex-1">{label}</span>
+        <Icon name={open ? 'chevronUp' : 'chevronDown'} size={11} className="shrink-0 opacity-70" />
+      </button>
+      {open && <div className="mt-2 space-y-1.5 px-1 text-[11.5px] leading-relaxed text-ink-dim">{children}</div>}
+    </div>
+  )
 }

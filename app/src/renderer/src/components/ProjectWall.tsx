@@ -22,6 +22,10 @@ export interface ProjectWallProps {
   categories: string[]
   /** 初始分类筛选（跟左栏当前选中分类同步） */
   initialCat?: string
+  /** 正在编辑的工程：卡片挂「编辑中」角标——从 ⌂ 回墙时能立刻认出自己从哪来（诊断 11） */
+  current?: string
+  /** 回创作向导：仅 ⌂ 主动回墙（钉住态）时给，无工程自动显示墙时不需要关闭 */
+  onClose?: () => void
   onOpen: (name: string) => void
   /** 新建图文工程（名字由墙上内联输入，落当前选中分类） */
   onCreate: (name: string) => void
@@ -62,6 +66,8 @@ export default function ProjectWall({
   projects,
   categories,
   initialCat,
+  current,
+  onClose,
   onOpen,
   onCreate,
   onBrainstorm,
@@ -107,10 +113,15 @@ export default function ProjectWall({
     <div className="flex min-h-0 flex-1 flex-col">
       {/* 顶条第一行：搜索 + 排序（2026-09-30 定案：标题与排序一行，分类胶囊独立一行） */}
       <div className="flex shrink-0 flex-nowrap items-center gap-2 px-4 pt-3">
-        <span className="inline-flex items-baseline gap-1.5 text-[13.5px] font-bold text-ink">
+        <span className="inline-flex shrink-0 items-baseline gap-1.5 text-[13.5px] font-bold text-ink">
           工程封面墙
           <span className="text-[11.5px] font-normal text-ink-dim">{visible.length} 篇</span>
         </span>
+        {onClose && (
+          <Button size="sm" variant="ghost" icon="compass" onClick={onClose} title="回到当前工程的创作向导">
+            返回创作
+          </Button>
+        )}
         <label className="ml-auto inline-flex h-[30px] w-[190px] items-center gap-1.5 rounded-lg border border-panel-3 bg-panel-2 px-2.5 text-[12px] text-ink-dim focus-within:border-accent">
           <Icon name="search" size={12} />
           <input
@@ -212,6 +223,11 @@ export default function ProjectWall({
                     <span className="relative block aspect-[2.35] overflow-hidden">
                       <img src={assetUrl(p.dir, p.cover)} alt={p.name} className="h-full w-full object-cover" />
                       <span className="absolute right-2 top-2 rounded-full bg-black/35 px-2 py-0.5 text-[10px] text-white">2.35:1</span>
+                      {p.name === current && (
+                        <span className="absolute left-2 top-2 rounded-full bg-accent px-2 py-0.5 text-[10px] font-semibold text-white">
+                          编辑中
+                        </span>
+                      )}
                     </span>
                   ) : (
                     /* 无封面兜底：分类主题色 + 标题文字占位卡（版式复用封面模板的纯色底逻辑），整墙不塌 */
@@ -223,6 +239,11 @@ export default function ProjectWall({
                         {p.name}
                       </span>
                       <span className="absolute right-2 top-2 rounded-full bg-black/30 px-2 py-0.5 text-[10px] text-white">待生成封面</span>
+                      {p.name === current && (
+                        <span className="absolute left-2 top-2 rounded-full bg-black/35 px-2 py-0.5 text-[10px] font-semibold text-white">
+                          编辑中
+                        </span>
+                      )}
                     </span>
                   )}
                   <span className="block px-3 py-2.5">
