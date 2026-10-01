@@ -45,7 +45,7 @@
 
 ## 2. 设计原则
 
-1. **零失控滚动条**：任何横向条带（步骤、胶囊、页签）必须自适应收缩或单行横滑（隐藏滚动条+边缘渐隐），禁止裸露出系统粗滚动条；纵向滚动条一律细条（8px/6px）+  hover 加深
+1. **零失控滚动条**：任何横向条带（步骤、胶囊、页签）必须自适应收缩或单行横滑（隐藏滚动条+边缘渐隐），禁止裸露出系统粗滚动条；**纵向滚动条只此一款**（8px 轨 + 2.5px 透明描边 = 视觉 ~3px 中性灰胶囊 `rgba(128,132,140,.42)`，hover 提到 .72）——历史上有 8px/6px 两档，6px 那档呼吸缝更小、颜色又另走一套 token，实测就是用户说的「主题库/项目库/选题面板比导出预览粗且抢眼」，2026-10-01 三修合并为一档
 2. **一套图标**：全量线性 SVG（Lucide 风格），stroke-width=2；尺寸按场景三档（13/14/15px），emoji 只允许出现在用户内容里，不允许出现在 UI 上
 3. **状态语义单源**：同一语义同一表达——步骤三态（完成/当前/未开始）、工程状态圆点（草稿黄/进行中蓝/已发布绿）全应用一致，且必须有图例或文字伴生，不靠猜
 4. **主次分明**：一个视图一个主按钮（主色实心），次要操作描边，再次要幽灵；操作按语义归组右对齐，不游离
@@ -279,6 +279,8 @@
 - 全量滚动审计（封面墙 / 向导成文·配图·标题封面·审阅·导出 / 选题看板 / 日历 / 主题库 / 一键接入弹窗）：可滚动元素占沟档位分布 `vg6×9 · vg5×1 · vg8/hg2×1`，**>8px 的 0 个**
 - 预览 iframe 注入核对（读 `iframe[srcdoc]` 源码）：`hasWebkitRule: true`、`hasStandardProps: false`、thumb `rgba(128,132,140,.42)` —— 导出预览与主题导入预览同源
 - 二修全量：`typecheck` 零报错、`npm run build` 通过、`npm test` **507 例全绿（34 文件）**（首版记的 407 例/32 文件是当时的旧基线）
+- **三修（用户复测「还是比导出预览粗且抢眼」）**：差异不在颜色而在**档位**——`.thin-scroll` 压到 6px 轨 + 1.5px 描边（呼吸缝 1.5px），预览是 8px + 2.5px（呼吸缝 2.5px），加上主窗口 thumb 走 `--scrollbar` token（日间 104 112 124）而预览走固定灰，看着就是两套。合并成一款：取消 `.thin-scroll` 尺寸覆盖（类名留作语义标记）、两套主题的 `--scrollbar` 都设成预览那支 `128 132 140`
+- 三修实测（重启到新构建 + CDP）：`getComputedStyle(el, '::-webkit-scrollbar-thumb')` 直接读伪元素——`bg rgba(128,132,140,.42) / border 2.5px / radius 999px`；探针盒 `plain 沟 7 === thin-scroll 沟 7`（二修时是 8 vs 6），项目库/主题库/选题看板实际滚动元素占沟全部 7-8（zoom 1.2 取整噪声），6px 档归零
 
 **P5 批次实测记录（2026-10-01，重启到新构建 + CDP 真改窗口尺寸量 DOM）**：
 
@@ -355,7 +357,7 @@
 - **浮层与选项格只认一套**（2026-10-01 P5 补）：点外面即关的小浮层一律 `POPOVER_CLS` / `<Popover>`，菜单行 `MenuItem`，分区标题 `PopoverLabel`，选项格 `ChoiceTile`；弹窗内按钮用 `btnCls(variant,size)` 拿字符串形态（与 `<Button>` 同一份 class），输入控件用 `FIELD_CLS`。`POPOVER_CLS` 刻意不含 padding——同权重的 `p-1`/`p-2` 互相覆盖不可预测，内边距由调用方给
 - **代码块不许裸露横向滚动条**（2026-10-01 P5 补）：`<pre>` 类展示内容（配置片段、JSON）用 `whitespace-pre-wrap break-all` + `overflow-x-hidden`，宁可换行也不顶出横条——原则 1 对代码块同样成立
 - **滚动条只认一套**（2026-10-01 P7 补）：纵向滚动条默认全局内嵌细胶囊（`index.css`），密集面板加 `.thin-scroll`（6px）；**任何 srcDoc iframe 预览一律过 `withPreviewScrollCss`**——srcDoc 是独立文档，页面全局 CSS 进不去；禁止再写第三套自定义滚动条样式
-- **标准滚动条属性与 `::-webkit-scrollbar` 互斥，而且是文档级**（2026-10-01 P7 二修补，实测踩过）：只要 `html` 上出现 `scrollbar-width` / `scrollbar-color`（非 auto），Chromium 就整个文档停用 `::-webkit-scrollbar` 自定义，所有滚动条退回 UA 默认——构建期零报错、CSS 看起来完全正确，只能靠量 `offsetWidth - clientWidth` 才发现。定案：本应用只用 webkit 伪元素那套，**根上不写标准属性**（Electron 无 Firefox 场景）；元素级 `scrollbar-width: none`（隐藏条）不受影响可继续用。验收判据：造一个 `overflow:scroll` 的探针盒量占沟，规范内应是 6/8 CSS px，出现 14/17 即整套失效
+- **标准滚动条属性与 `::-webkit-scrollbar` 互斥，而且是文档级**（2026-10-01 P7 二修补，实测踩过）：只要 `html` 上出现 `scrollbar-width` / `scrollbar-color`（非 auto），Chromium 就整个文档停用 `::-webkit-scrollbar` 自定义，所有滚动条退回 UA 默认——构建期零报错、CSS 看起来完全正确，只能靠量 `offsetWidth - clientWidth` 才发现。定案：本应用只用 webkit 伪元素那套，**根上不写标准属性**（Electron 无 Firefox 场景）；元素级 `scrollbar-width: none`（隐藏条）不受影响可继续用。验收判据：造一个 `overflow:scroll` 的探针盒量占沟，规范内应是 6/8 CSS px，出现 14/17 即整套失效；thumb 的颜色/描边可直接 `getComputedStyle(el, '::-webkit-scrollbar-thumb')` 读出来对账
 - **hover 浮起的卡片，滚动容器必须留够上内缩**（2026-10-01 P6 补，用户实测「封面墙/主题库首行 hover 上边缘绿线看不到」）：卡片 hover 是 `translateY(-2px)` + 主色描边 + 阴影，而网格容器只写 `px-4 pb-4` 没有 `pt`——首行卡片上边缘正好贴在滚动框的裁切线上，抬 2px 后**描边与阴影的上半截被容器裁掉**，于是「左/右/下三条绿线在、上面那条看不见」。定案：凡带 hover 浮起的网格/列表，滚动容器上内缩 ≥ 浮起量 + 描边（这里给 `pt-2`=8px）。实测改后 `hover=true`、`borderTopColor rgb(15,118,110)`、`transform translateY(-2)`、`gapAfterLift 6`、`clippedTop false`；同修的还有分类管理列表
 - **顶条降级 + 选择器入口**（2026-10-01 P6 补）：中栏各面板的顶条（标题 + 搜索 + 分段 + 动作按钮）一律 `useFittingRow` + 三级降级：搜索框 `w-[132px]`→`w-[104px]`（四字占位不截断为下限）、分段控件短名（`title` 留全称）、动作按钮退成 30px 纯图标（`title` + `aria-label` 留名）。**降级能测到的前提是条带内所有子项都 `shrink-0`**——只要有一项可收缩，它会先吸收空间，`scrollWidth > clientWidth` 就永远不成立、降级永不触发（新加顶条时最容易漏这条）。行内动作若与「正在输入的字段」抢位，直接隐藏次要项（封面墙建工程时隐藏搜索框）。胶囊条若是选择器（分类/来源筛选），溢出时必须挂 `PickerButton`，且 `align="right"` 让浮层向左长——浮层越出中栏压到邻栏等于把遮挡问题换了个地方
 - 每完成一批次，回写本文对应章节状态（✅/进行中），并同步主 PRD §11.3；**文档债在主 PRD §14 已立过规矩，本文同样适用**
