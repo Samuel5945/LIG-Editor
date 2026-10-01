@@ -174,7 +174,7 @@ export default function ThemeImportDialog({ onClose, onSaved, onToast }: Props):
                   title="排版预览"
                   srcDoc={previewHtml}
                   sandbox=""
-                  className="h-full w-[375px] shrink-0 rounded border border-panel-3 bg-white"
+                  className="h-full w-[375px] shrink-0 rounded border border-panel-3 bg-[#e2e8f0]"
                 />
               ) : (
                 <p className="mt-8 text-xs text-ink-dim">解析后这里显示排版效果</p>

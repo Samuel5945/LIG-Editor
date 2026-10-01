@@ -92,6 +92,16 @@ export default function ExportPanel({ project, projectDir, markdown, theme, cate
     return withPreviewScrollCss(wrapPlatformPage(fragment, extractTitle(doc, project)), false)
   }, [markdown, projectDir, project, theme, pubVariant, platform])
 
+  /**
+   * 预览页自己的底色（iframe 元素必须跟着上这个色）：
+   * 注入的滚动条轨道是透明的，轨道那条缝会透出 **iframe 元素自身**的背景——
+   * 原来写死 bg-white，夜间配色预览（深底）里就变成一条扎眼的亮白带子。
+   */
+  const previewBg = useMemo(
+    () => (platform === 'wechat' ? exportPageBg(theme, pubVariant === 'night') : '#fff'),
+    [platform, theme, pubVariant]
+  )
+
   const copyRich = useCallback(async () => {
     if (busy) return
     setBusy(true)
@@ -245,20 +255,25 @@ export default function ExportPanel({ project, projectDir, markdown, theme, cate
                 title="导出预览"
                 srcDoc={previewHtml}
                 sandbox=""
-                className="rounded-md border border-panel-3 bg-white"
+                className="rounded-md border border-panel-3"
                 style={{
                   width: targetW,
                   height: shotH,
                   transform: `scale(${shot})`,
                   transformOrigin: 'top left',
-                  display: 'block'
+                  display: 'block',
+                  // 与预览页同底：透明轨道缝里透出来的就是这一层，夜间预览不再是白带子
+                  background: previewBg
                 }}
               />
             </div>
           </div>
         </div>
-        <p className="mt-1.5 shrink-0 text-center text-[10.5px] text-ink-dim">
-          竖屏 = 手机阅读宽度 · 横屏 = 桌面宽度 · 缩放只为放下，折行仍是真实宽度
+        <p
+          className="mt-1.5 shrink-0 text-center text-[10.5px] text-ink-dim [text-wrap:balance]"
+          title="缩放只为了放得下，行宽与折行仍等于该形态下的真实宽度"
+        >
+          竖屏 = 手机宽度 · 横屏 = 桌面宽度
         </p>
       </Card>
 
