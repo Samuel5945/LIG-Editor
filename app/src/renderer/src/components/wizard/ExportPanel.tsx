@@ -7,6 +7,7 @@ import type { PlatformId } from '@shared/types'
 import type { PushDraftResult } from '@shared/wechatIpc'
 import { Icon } from '../../ui/Icon'
 import { Segmented, Button, Card, CollapseBar, Switch, useElementBox } from '../../ui/primitives'
+import { withPreviewScrollCss } from '../../ui/previewScrollCss'
 
 /**
  * 导出步工作面（创作向导「导出」步；自 ExportDialog 抽出，原弹窗壳已随页签体系退役）。
@@ -83,10 +84,10 @@ export default function ExportPanel({ project, projectDir, markdown, theme, cate
     if (platform === 'wechat') {
       const fragment = docToExportHtml(doc, resolveAsset, theme, pubVariant === 'night')
       // 页面外壳背景跟随所选配色变体：夜间深底、日间白底/浅卡（与正文片段同源，整页一体）
-      return wrapExportPage(fragment, extractTitle(doc, project), exportPageBg(theme, pubVariant === 'night'))
+      return withPreviewScrollCss(wrapExportPage(fragment, extractTitle(doc, project), exportPageBg(theme, pubVariant === 'night')))
     }
     const fragment = docToPlatformHtml(doc, resolveAsset, theme, platform)
-    return wrapPlatformPage(fragment, extractTitle(doc, project))
+    return withPreviewScrollCss(wrapPlatformPage(fragment, extractTitle(doc, project)))
   }, [markdown, projectDir, project, theme, pubVariant, platform])
 
   const copyRich = useCallback(async () => {

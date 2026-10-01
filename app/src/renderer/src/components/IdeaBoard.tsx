@@ -98,7 +98,7 @@ export default function IdeaBoard({
           选题库是空的。去右栏「脑暴创作」产出选题并点「入库」，这里就会长出来。
         </p>
       ) : (
-        <div className="flex min-h-0 flex-1 gap-2 overflow-x-auto p-4">
+        <div className="thin-scroll flex min-h-0 flex-1 gap-2 overflow-x-auto p-4">
           {IDEA_STAGES.map((meta) => {
             const items = lanes.get(meta.id) ?? []
             return (
@@ -113,7 +113,7 @@ export default function IdeaBoard({
                   <span className="min-w-0 shrink truncate text-xs font-bold text-ink">{meta.label}</span>
                   <span className="shrink-0 rounded-full bg-panel-3 px-1.5 py-0.5 text-[10px] text-ink-dim">{items.length}</span>
                 </div>
-                <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto p-2">
+                <div className="thin-scroll min-h-0 flex-1 space-y-1.5 overflow-y-auto p-2">
                   {items.length === 0 && <p className="px-1 py-6 text-center text-[11px] text-ink-dim">（空）</p>}
                   {items.map((idea) => {
                     const info = stages[idea.index]

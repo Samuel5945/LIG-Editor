@@ -4,6 +4,7 @@ import { parseThemeFromHtml, type ParsedTheme } from '@shared/themeParse'
 import { shouldSubmitOnEnter } from '@shared/imeEnter'
 import { DialogShell } from '../ui/DialogShell'
 import { btnCls, FIELD_CLS } from '../ui/primitives'
+import { withPreviewScrollCss } from '../ui/previewScrollCss'
 import { mdToDoc } from '@shared/markdown'
 import { docToExportHtml } from '@shared/exportHtml'
 import type { ArticleTheme } from '@shared/types'
@@ -76,11 +77,11 @@ export default function ThemeImportDialog({ onClose, onSaved, onToast }: Props):
   const previewHtml = useMemo(() => {
     if (!parsed) return ''
     const fragment = docToExportHtml(mdToDoc(SAMPLE), (src) => src, parsed.theme)
-    return `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
+    return withPreviewScrollCss(`<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"></head>
 <body style="margin:0;background:#e2e8f0;padding:12px;">
 <div style="max-width:375px;margin:0 auto;">${fragment}</div>
-</body></html>`
+</body></html>`)
   }, [parsed])
 
   const save = async (): Promise<void> => {

@@ -38,7 +38,7 @@ export default function IdeaLibrary({ version, onMakeOutline, onToast }: IdeaLib
   )
 
   return (
-    <div className="min-h-0 flex-1 overflow-auto p-2 text-xs">
+    <div className="thin-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-2 text-xs">
       <div className="mb-1 flex items-center px-1">
         <span className="text-ink-dim">共 {ideas.length} 条（来自脑暴入库）</span>
         <button onClick={() => void refresh()} className="ml-auto rounded px-1.5 py-0.5 text-ink-dim hover:bg-panel-3" title="刷新">

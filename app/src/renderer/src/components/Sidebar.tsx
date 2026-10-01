@@ -677,7 +677,7 @@ export default function Sidebar(props: SidebarProps): ReactElement {
       {leftTab === 'ideas' ? (
         <IdeaLibrary version={ideasVersion} onMakeOutline={onMakeOutline} onToast={onToast} />
       ) : (
-        <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-2 text-xs">
+        <div className="thin-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-2 text-xs">
         {/* 钉住：Skill 库（skills/ 目录，轻量启停；导入走设置弹窗） */}
         <div className={rowBase} onClick={() => setSkillsOpen((v) => !v)}>
           <Chevron open={skillsOpen} />

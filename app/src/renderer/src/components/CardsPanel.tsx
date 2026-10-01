@@ -725,7 +725,7 @@ const CardsPanel = forwardRef<CardsPanelHandle, CardsPanelProps>(function CardsP
       )}
 
       {/* 卡片列表 */}
-      <div className="selectable min-h-0 flex-1 overflow-auto p-4">
+      <div className="selectable thin-scroll min-h-0 flex-1 overflow-auto p-4">
         {deck.cards.map((card, i) => (
           <div
             key={i}

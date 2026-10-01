@@ -798,7 +798,7 @@ export default function ChatPanel({
 
       {/* 消息区：min-h-0 是必须的——flex 项默认 min-height:auto 不肯缩到内容以下，
           长会话会把下方输入区顶出右栏（外层 overflow-hidden 直接裁掉），表现就是「切换会话后对话框点不动」 */}
-      <div ref={listRef} className="selectable min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-3 text-xs">
+      <div ref={listRef} className="selectable thin-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-3 text-xs">
         {messages.length === 0 && (
           <div>
             <p className="mb-2 text-ink-dim">

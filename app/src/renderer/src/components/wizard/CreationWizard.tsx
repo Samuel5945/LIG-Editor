@@ -462,7 +462,7 @@ export default function CreationWizard({
 
       {/* 步 1 选题（常驻挂载保活） */}
       <div className={`min-h-0 flex-1 flex-col ${activeId === 'ideas' ? 'flex' : 'hidden'}`}>
-        <div ref={scrollIdeasRef} className="selectable min-h-0 flex-1 overflow-auto p-4 text-xs">
+        <div ref={scrollIdeasRef} className="selectable thin-scroll min-h-0 flex-1 overflow-auto p-4 text-xs">
           {phase === 'input' || phase === 'brainstorming' ? (
             <BrainstormIdeas
               phase={phase === 'brainstorming' ? 'brainstorming' : 'input'}
@@ -514,7 +514,7 @@ export default function CreationWizard({
 
       {/* 步 2 大纲（常驻挂载保活） */}
       <div className={`min-h-0 flex-1 flex-col ${activeId === 'outline' ? 'flex' : 'hidden'}`}>
-        <div ref={scrollOutlineRef} className="selectable min-h-0 flex-1 overflow-auto p-4 text-xs">
+        <div ref={scrollOutlineRef} className="selectable thin-scroll min-h-0 flex-1 overflow-auto p-4 text-xs">
           {phase === 'outlining' || phase === 'outline' ? (
             <OutlineStep
               phase={phase === 'outlining' ? 'outlining' : 'outline'}
@@ -551,7 +551,7 @@ export default function CreationWizard({
       {/* 步 4 配图（贴图工程无此步） */}
       {!isCards && (
         <div className={`min-h-0 flex-1 flex-col ${activeId === 'figures' ? 'flex' : 'hidden'}`}>
-          <div className="selectable min-h-0 flex-1 overflow-auto p-4 text-xs">
+          <div className="selectable thin-scroll min-h-0 flex-1 overflow-auto p-4 text-xs">
             {project ? (
               <FigureChecklist
                 suggestions={figSuggestions}

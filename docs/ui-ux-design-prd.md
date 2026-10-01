@@ -242,6 +242,9 @@
 
 
 | **P6（窄栏与分类入口）** | 字号「大」时封面墙/主题库顶条溢出压到右栏；搜索框过长；分类多时被滑出的分类没有选择入口 | 用户 2026-10-01 实测 | ✅ **已交付 2026-10-01**：顶条按 §4 逐级降级（搜索 190→132→104、排序短名、按钮退纯图标、建工程态隐藏搜索），实测 1500/1280 两档 `scrollWidth===clientWidth` 且越出中栏元素 0；筛选胶囊溢出时补 `PickerButton` 全量下拉（实测 11 项、`withinMain`、选中生效且墙数随之变化） |
+| **P7（滚动条专项）** | 导出预览/主题库/项目库/选题面板等仍露粗灰滚动条 | 用户 2026-10-01 实测反馈 | ✅ **已交付 2026-10-01**：全局改内嵌细胶囊（轨道透明 + thumb 2px 透明描边 + `background-clip:padding-box` + hover 加重 + 隐藏箭头按钮 + ~~Firefox `scrollbar-width:thin`~~ ⚠ **二修删掉了**——见下）；**iframe srcDoc 是独立文档、全局 CSS 够不着——粗灰条根因**，新建 `ui/previewScrollCss.ts` 注入同源样式（导出预览 `wrapExportPage/wrapPlatformPage`、主题导入预览），只影响应用内预览、不碰导出产物；`thin-scroll`（6px）补铺选题库/看板泳道/对话流/工作树/审阅/贴图/日历/排版面板/向导三工作面 |
+
+> **P7 二修（同日，用户复测「还是有漏的，而且颜色太抢眼太粗」）**：首版在 `html` 上写了 `scrollbar-width: thin; scrollbar-color: …`，而 **Chromium 一旦在根上见到标准属性，就整个文档停用 `::-webkit-scrollbar` 自定义**——等于首版把刚立的规范自己关掉了，所有滚动条退回默认 17 物理 px 实心粗灰条（用户看到的「漏了」其实是「全没生效」）。二修：摘掉 `html` 上的两条标准属性（本应用只跑 Chromium，Firefox 兜底零收益、只会静默废掉规范；`.no-scrollbar`/`.chip-row` 上的 `scrollbar-width: none` 是元素级、不受影响），thumb 改 `rgb(var(--scrollbar)/.42)` + 2.5px 透明描边（视觉 ~3px 胶囊）、hover 提到 .72，日间 `--scrollbar` 从偏深偏绿的 `191 204 199` 换成中性灰 `104 112 124`；`previewScrollCss.ts` 注入 iframe 的那套同步去掉标准属性。
 
 ## 8. 验收标准
 
@@ -264,6 +267,18 @@
 - 主题库同批：1500/1280 顶条不越栏，筛选行溢出时「全部筛选 ▾」在场；封面墙建工程输入态实测顶条不溢出（132px 输入框 + 取消，搜索框让位）
 - **首行卡片 hover 上边缘绿线被裁**（用户第二轮反馈）：根因不在描边也不在遮挡——命中测试证明 `pixelOnTopEdge` 就是卡片自己、无裁剪祖先，但网格容器只有 `px-4 pb-4` 上内缩为 0，卡片 hover 是 `translateY(-2px)`，抬起来后 1px 主色描边与阴影上半截正好越过滚动框的裁切线。补 `pt-2` 后实测：`hover=true`、`borderTopColor rgb(15,118,110)`、`transform matrix(...,-2)`、`gapAfterLift 6`、`clippedTop false`；同修主题卡网格与分类管理列表
 - 全量：`typecheck` 零报错、`npm run build` 通过、`npm test` 507 例全绿（34 文件）
+
+**P7 滚动条专项实测记录（2026-10-01）**：
+
+- 两条根因：全局 thumb 是无呼吸缝的实心 8px 灰条；iframe srcDoc 独立文档全局 CSS 进不去（导出预览/主题导入预览的粗灰条来源）
+- 改法：`index.css` 内嵌细胶囊 + `ui/previewScrollCss.ts`（中立灰 rgba128，昼夜预览通用）+ `thin-scroll` 十一处铺开
+- 验证：`typecheck` 零报错、`npm run build` 通过（CSS 63.79 kB）、`npm test` 407 例全绿（32 文件）
+- 未覆盖（诚实记账）：iframe 内滚动条形态未重启应用实测——改动为纯 CSS 注入，断言 `withPreviewScrollCss` 输出含 `</head>` 前插入与无 head 前置两条路径
+- ⚠ **首版结论作废重来**：首版实测未重启应用，而 `html{scrollbar-width:thin}` 恰好让整套 `::-webkit-scrollbar` 失效——「未覆盖 iframe 实测」这条记账其实掩盖了更大的问题：主窗口也没生效
+- **二修实测（重启到新构建 + CDP 现测 A/B）**：同一页面造两个 overflow:scroll 盒，带标准属性时 `plain 14 / thin-scroll 14`（= 默认粗条，CSS px 折算自 17 物理 px ÷ zoom 1.2），清掉 `html` 上两条后立刻 `plain 8 / thin-scroll 6`；改后重启复测 A/B 两组都是 8/6（差异归零＝规范真的生效）
+- 全量滚动审计（封面墙 / 向导成文·配图·标题封面·审阅·导出 / 选题看板 / 日历 / 主题库 / 一键接入弹窗）：可滚动元素占沟档位分布 `vg6×9 · vg5×1 · vg8/hg2×1`，**>8px 的 0 个**
+- 预览 iframe 注入核对（读 `iframe[srcdoc]` 源码）：`hasWebkitRule: true`、`hasStandardProps: false`、thumb `rgba(128,132,140,.42)` —— 导出预览与主题导入预览同源
+- 二修全量：`typecheck` 零报错、`npm run build` 通过、`npm test` **507 例全绿（34 文件）**（首版记的 407 例/32 文件是当时的旧基线）
 
 **P5 批次实测记录（2026-10-01，重启到新构建 + CDP 真改窗口尺寸量 DOM）**：
 
@@ -339,6 +354,8 @@
 - **聚焦环只由一层画**（2026-10-01 P5 补）：§6 的全局 `:focus-visible{outline:2px}` 打在**外壳内**的 input/textarea 上会画出无圆角的矩形环（outline 跟随控件自身 radius=0），点进去就「变方」。定案：壳用 `FIELD_SHELL_CLS`（自带 `.field-shell` 类名 + `focus-within` 描边与 3px 光晕），CSS 规则 `.field-shell :is(input,textarea,select):focus-visible{outline:none}` 关掉内层环；键盘可达性由壳承担。新壳一律复用该类名，**别**在调用点补 `outline-none` 了事（Tailwind 工具类打不过 index.css 里的非 layer 规则）
 - **浮层与选项格只认一套**（2026-10-01 P5 补）：点外面即关的小浮层一律 `POPOVER_CLS` / `<Popover>`，菜单行 `MenuItem`，分区标题 `PopoverLabel`，选项格 `ChoiceTile`；弹窗内按钮用 `btnCls(variant,size)` 拿字符串形态（与 `<Button>` 同一份 class），输入控件用 `FIELD_CLS`。`POPOVER_CLS` 刻意不含 padding——同权重的 `p-1`/`p-2` 互相覆盖不可预测，内边距由调用方给
 - **代码块不许裸露横向滚动条**（2026-10-01 P5 补）：`<pre>` 类展示内容（配置片段、JSON）用 `whitespace-pre-wrap break-all` + `overflow-x-hidden`，宁可换行也不顶出横条——原则 1 对代码块同样成立
+- **滚动条只认一套**（2026-10-01 P7 补）：纵向滚动条默认全局内嵌细胶囊（`index.css`），密集面板加 `.thin-scroll`（6px）；**任何 srcDoc iframe 预览一律过 `withPreviewScrollCss`**——srcDoc 是独立文档，页面全局 CSS 进不去；禁止再写第三套自定义滚动条样式
+- **标准滚动条属性与 `::-webkit-scrollbar` 互斥，而且是文档级**（2026-10-01 P7 二修补，实测踩过）：只要 `html` 上出现 `scrollbar-width` / `scrollbar-color`（非 auto），Chromium 就整个文档停用 `::-webkit-scrollbar` 自定义，所有滚动条退回 UA 默认——构建期零报错、CSS 看起来完全正确，只能靠量 `offsetWidth - clientWidth` 才发现。定案：本应用只用 webkit 伪元素那套，**根上不写标准属性**（Electron 无 Firefox 场景）；元素级 `scrollbar-width: none`（隐藏条）不受影响可继续用。验收判据：造一个 `overflow:scroll` 的探针盒量占沟，规范内应是 6/8 CSS px，出现 14/17 即整套失效
 - **hover 浮起的卡片，滚动容器必须留够上内缩**（2026-10-01 P6 补，用户实测「封面墙/主题库首行 hover 上边缘绿线看不到」）：卡片 hover 是 `translateY(-2px)` + 主色描边 + 阴影，而网格容器只写 `px-4 pb-4` 没有 `pt`——首行卡片上边缘正好贴在滚动框的裁切线上，抬 2px 后**描边与阴影的上半截被容器裁掉**，于是「左/右/下三条绿线在、上面那条看不见」。定案：凡带 hover 浮起的网格/列表，滚动容器上内缩 ≥ 浮起量 + 描边（这里给 `pt-2`=8px）。实测改后 `hover=true`、`borderTopColor rgb(15,118,110)`、`transform translateY(-2)`、`gapAfterLift 6`、`clippedTop false`；同修的还有分类管理列表
 - **顶条降级 + 选择器入口**（2026-10-01 P6 补）：中栏各面板的顶条（标题 + 搜索 + 分段 + 动作按钮）一律 `useFittingRow` + 三级降级：搜索框 `w-[132px]`→`w-[104px]`（四字占位不截断为下限）、分段控件短名（`title` 留全称）、动作按钮退成 30px 纯图标（`title` + `aria-label` 留名）。**降级能测到的前提是条带内所有子项都 `shrink-0`**——只要有一项可收缩，它会先吸收空间，`scrollWidth > clientWidth` 就永远不成立、降级永不触发（新加顶条时最容易漏这条）。行内动作若与「正在输入的字段」抢位，直接隐藏次要项（封面墙建工程时隐藏搜索框）。胶囊条若是选择器（分类/来源筛选），溢出时必须挂 `PickerButton`，且 `align="right"` 让浮层向左长——浮层越出中栏压到邻栏等于把遮挡问题换了个地方
 - 每完成一批次，回写本文对应章节状态（✅/进行中），并同步主 PRD §11.3；**文档债在主 PRD §14 已立过规矩，本文同样适用**

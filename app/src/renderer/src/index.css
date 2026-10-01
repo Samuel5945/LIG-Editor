@@ -44,7 +44,7 @@
   --ink: 28 32 40;
   --ink-dim: 103 112 127;
   --accent: 15 118 110; /* #0f766e 青绿强调，白底对比 4.9:1 */
-  --scrollbar: 191 204 199;
+  --scrollbar: 104 112 124; /* 中性灰，配合 thumb 的 alpha 用；原 191 204 199 偏深偏绿，白底上太抢眼 */
   /* 状态色日间值 = PRD tokens（黄 #E8A13A / 蓝 #4C88FF / 绿 #22A06B / 红 #E5484D）；
      草稿黄在白底上做文字对比不足时由 .text-st-draft 的调用方配文字标签，色相不另起 */
   --st-draft: 217 130 30; /* #d9821e，日间可读的琥珀（原 #E8A13A 白底对比 2.2:1 不达标） */
@@ -112,16 +112,34 @@ select,
   -webkit-app-region: no-drag;
 }
 
+/* ---- 全局滚动条规范（2026-10-01 专项；同日二修）----
+   内嵌胶囊式：轨道与四角全透明，thumb 用透明描边 + padding-box 裁切压成 ~3px 细胶囊，
+   底色带 alpha 让它退到背景里，hover 才提亮。
+   ⚠ 刻意不写 scrollbar-width / scrollbar-color：Chromium 一旦在根上见到标准属性，
+   就整个文档停用 ::-webkit-scrollbar 自定义（实测：写了 html 上那两条，规范里的
+   8px/6px 全退回默认 17 物理 px 粗灰条；清掉立刻恢复 8/6）。本应用只跑 Chromium，
+   Firefox 兜底没有收益，留着只会静默废掉整套规范。 */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
 ::-webkit-scrollbar-thumb {
-  background: rgb(var(--scrollbar));
-  border-radius: 4px;
+  background: rgb(var(--scrollbar) / 0.42);
+  border: 2.5px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in srgb, rgb(var(--scrollbar)) 78%, rgb(var(--ink)) 22%);
+  background: rgb(var(--scrollbar) / 0.72);
+  border: 2.5px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-button {
+  display: none;
 }
 
 /* ---- 横向条带规范（UI/UX PRD §2 原则 1 / §4 chip）----
@@ -146,9 +164,14 @@ select,
   mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent);
 }
 
-/* 细纵向滚动条场景（对话流、树）：6px */
+/* 细纵向滚动条场景（对话流、树、卡片网格面板）：宽高同细，内嵌胶囊更深一号 */
 .thin-scroll::-webkit-scrollbar {
   width: 6px;
+  height: 6px;
+}
+.thin-scroll::-webkit-scrollbar-thumb {
+  border-width: 1.5px;
+  border-radius: 999px;
 }
 
 /* 焦点可见（§6）：所有可点控件 focus-visible 主色描边，Tab 顺序 = 视觉顺序 */
