@@ -131,7 +131,7 @@ export default function CategoryManageDialog({
         {/* 内容区自己滚（面板 overflow-hidden + 内层 min-h-0 flex-1）：
             整块面板自己滚时，长分类名/账号预设会把内容撑宽，
             纵向滚动条便画在可视区右侧之外——这里保证只在面板内滚 */}
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-2 pb-4">
           {onOpenThemeLibrary && (
             <button
               onClick={onOpenThemeLibrary}
