@@ -3,7 +3,7 @@ import type { LlmSettings, LlmTestResult, ModelInfo, ProviderConfig } from '@sha
 import { imageFormatFor } from '@shared/imageFormats'
 import { isRhythmProvider, providerSiteLinks } from '@shared/providerSites'
 import { DialogShell } from '../ui/DialogShell'
-import { Button, Segmented } from '../ui/primitives'
+import { Button, FIELD_CLS, Segmented } from '../ui/primitives'
 import { Icon, type IconName } from '../ui/Icon'
 
 interface SettingsDialogProps {
@@ -227,7 +227,7 @@ export default function SettingsDialog({ onClose, appearance, onOpenIntegration 
 
   if (!settings) return <></>
 
-  const field = 'w-full rounded bg-panel px-2.5 py-1.5 text-xs text-ink outline-none placeholder:text-ink-dim'
+  const field = `w-full ${FIELD_CLS}`
   const label = 'mb-1 mt-3 block text-[11px] text-ink-dim'
   const tabCls = (active: boolean) =>
     `rounded px-3 py-1 text-xs ${active ? 'bg-panel-3 text-ink' : 'text-ink-dim hover:bg-panel-3'}`

@@ -4,6 +4,7 @@ import { PLATFORM_LABELS } from '@shared/platformHtml'
 import { shouldSubmitOnEnter } from '@shared/imeEnter'
 import type { WechatConfig } from '@shared/wechatIpc'
 import { DialogShell } from '../ui/DialogShell'
+import { btnCls, FIELD_CLS } from '../ui/primitives'
 import { Icon } from '../ui/Icon'
 
 /**
@@ -28,11 +29,9 @@ interface Props {
   onOpenThemeLibrary?: () => void
 }
 
-const btn =
-  'rounded border border-slate-600 px-2 py-0.5 text-[11px] text-slate-300 hover:bg-slate-700 disabled:opacity-40 whitespace-nowrap'
+const btn = btnCls('sec')
 const btnDanger = 'rounded px-2 py-0.5 text-[11px] text-st-bad hover:bg-st-bad/10 disabled:opacity-40 whitespace-nowrap'
-const inputCls =
-  'min-w-0 flex-1 rounded border border-slate-600 bg-slate-800 px-1.5 py-0.5 text-[11px] text-slate-200 outline-none focus:border-accent'
+const inputCls = `min-w-0 flex-1 ${FIELD_CLS} py-1 text-[11.5px]`
 
 export default function CategoryManageDialog({
   categories,

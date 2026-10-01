@@ -2,7 +2,7 @@ import { useMemo, useState, type ReactElement } from 'react'
 import type { ArticleTheme } from '@shared/types'
 import { CATEGORY_THEMES } from '@shared/categoryThemes'
 import { Icon } from '../ui/Icon'
-import { Button, Chip, ChipGroup } from '../ui/primitives'
+import { Button, Chip, ChipGroup, FIELD_SHELL_CLS } from '../ui/primitives'
 
 /**
  * 主题库（主 PRD §7.12 / UI/UX PRD §5.6，稿 C）：中栏第四页签。
@@ -177,7 +177,7 @@ export default function ThemeLibrary({
           主题库
           <span className="text-[11.5px] font-normal text-ink-dim">{entries.length} 套</span>
         </span>
-        <label className="ml-auto inline-flex h-[30px] w-[180px] items-center gap-1.5 rounded-lg border border-panel-3 bg-panel-2 px-2.5 text-[12px] text-ink-dim focus-within:border-accent">
+        <label className={`ml-auto inline-flex h-[30px] w-[180px] items-center gap-1.5 rounded-lg ${FIELD_SHELL_CLS} px-2.5 text-[12px] text-ink-dim`}>
           <Icon name="search" size={12} />
           <input
             value={q}

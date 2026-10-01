@@ -2,7 +2,7 @@ import { useMemo, useState, type ReactElement } from 'react'
 import type { ProjectSummary } from '@shared/types'
 import { UNCATEGORIZED } from '@shared/categories'
 import { Icon } from '../ui/Icon'
-import { Button, Chip, ChipGroup, Segmented, StatusDot } from '../ui/primitives'
+import { Button, Chip, ChipGroup, FIELD_SHELL_CLS, MenuItem, Popover, Segmented, StatusDot } from '../ui/primitives'
 import { dotOfStatus, PROJECT_STATUS_TEXT } from '../ui/status'
 import { useTreeFlags } from '../ui/useTreeFlags'
 
@@ -122,7 +122,7 @@ export default function ProjectWall({
             返回创作
           </Button>
         )}
-        <label className="ml-auto inline-flex h-[30px] w-[190px] items-center gap-1.5 rounded-lg border border-panel-3 bg-panel-2 px-2.5 text-[12px] text-ink-dim focus-within:border-accent">
+        <label className={`ml-auto inline-flex h-[30px] w-[190px] items-center gap-1.5 rounded-lg ${FIELD_SHELL_CLS} px-2.5 text-[12px] text-ink-dim`}>
           <Icon name="search" size={12} />
           <input
             value={q}
@@ -270,47 +270,44 @@ export default function ProjectWall({
         )}
       </div>
 
-      {/* 右键菜单：与左栏工程行菜单同三项（目录 / 置顶 / 归档） */}
+      {/* 右键菜单：与左栏工程行菜单同三项（目录 / 置顶 / 归档），同一只浮层壳 */}
       {menu && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={() => setMenu(null)} onContextMenu={(e) => { e.preventDefault(); setMenu(null) }} />
-          <div
-            className="fixed z-50 w-44 rounded-xl border border-panel-3 bg-panel-2 py-1 shadow-[0_4px_16px_rgba(0,0,0,.28)]"
-            style={{ left: Math.min(menu.x, window.innerWidth - 190), top: Math.min(menu.y, window.innerHeight - 130) }}
+        <Popover
+          onClose={() => setMenu(null)}
+          dismissOnContextMenu
+          className="fixed w-44 p-1"
+          style={{ left: Math.min(menu.x, window.innerWidth - 190), top: Math.min(menu.y, window.innerHeight - 130) }}
+        >
+          <MenuItem
+            icon="external"
+            onClick={() => {
+              const p = projects.find((x) => x.name === menu.name)
+              if (p) void window.api.invoke('export:openFile', p.dir).catch(() => onToast('目录不存在或已被移除'))
+              setMenu(null)
+            }}
           >
-            {[
-              {
-                icon: 'external' as const,
-                label: '打开工程目录',
-                run: () => {
-                  const p = projects.find((x) => x.name === menu.name)
-                  if (p) void window.api.invoke('export:openFile', p.dir).catch(() => onToast('目录不存在或已被移除'))
-                }
-              },
-              { icon: 'pin' as const, label: pinned.includes(menu.name) ? '取消置顶' : '置顶', run: () => togglePin(menu.name) },
-              {
-                icon: 'archive' as const,
-                label: archived.includes(menu.name) ? '取消归档' : '归档',
-                run: () => {
-                  toggleArchive(menu.name)
-                  onToast(archived.includes(menu.name) ? '已恢复到封面墙' : '已归档——左栏树尾「已归档」区可找回')
-                }
-              }
-            ].map((it) => (
-              <button
-                key={it.label}
-                onClick={() => {
-                  it.run()
-                  setMenu(null)
-                }}
-                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[12px] text-ink hover:bg-panel-3"
-              >
-                <Icon name={it.icon} size={12} />
-                {it.label}
-              </button>
-            ))}
-          </div>
-        </>
+            打开工程目录
+          </MenuItem>
+          <MenuItem
+            icon="pin"
+            onClick={() => {
+              togglePin(menu.name)
+              setMenu(null)
+            }}
+          >
+            {pinned.includes(menu.name) ? '取消置顶' : '置顶'}
+          </MenuItem>
+          <MenuItem
+            icon="archive"
+            onClick={() => {
+              toggleArchive(menu.name)
+              onToast(archived.includes(menu.name) ? '已恢复到封面墙' : '已归档——左栏树尾「已归档」区可找回')
+              setMenu(null)
+            }}
+          >
+            {archived.includes(menu.name) ? '取消归档' : '归档'}
+          </MenuItem>
+        </Popover>
       )}
     </div>
   )

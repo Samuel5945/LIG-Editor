@@ -10,6 +10,7 @@ import {
   type ReactNode
 } from 'react'
 import { Icon } from '../ui/Icon'
+import { ChoiceTile, POPOVER_CLS, PopoverLabel } from '../ui/primitives'
 import { useEditor, EditorContent, BubbleMenu } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import type { JSONContent } from '@tiptap/react'
@@ -150,8 +151,8 @@ function StylePanel({
   return (
     <>
       <div className="fixed inset-0 z-10" onClick={onClose} />
-      <div className="absolute bottom-full left-0 z-20 mb-1 w-56 rounded-lg border border-slate-700 bg-slate-900 p-2 shadow-2xl">
-        <p className="mb-1.5 text-[10px] text-slate-500">{title}</p>
+      <div className={`absolute bottom-full left-0 z-20 mb-1 w-56 p-2 ${POPOVER_CLS}`}>
+        <PopoverLabel className="px-0 pb-1">{title}</PopoverLabel>
         {children}
       </div>
     </>
@@ -168,7 +169,7 @@ export interface EditorSelection {
 function TypeSection({ label, children }: { label: string; children: ReactNode }): ReactElement {
   return (
     <div className="mb-1.5">
-      <div className="px-1 pb-1 text-[10px] text-slate-500">{label}</div>
+      <PopoverLabel className="px-0 pb-1">{label}</PopoverLabel>
       {children}
     </div>
   )
@@ -224,14 +225,9 @@ function TypeOptions<T extends string | number>({
   return (
     <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
       {options.map((o) => (
-        <button
-          key={String(o.value)}
-          type="button"
-          onClick={() => onPick(o.value)}
-          className={`rounded px-1 py-1 text-xs ${value === o.value ? 'bg-accent text-white' : 'text-slate-300 hover:bg-slate-700'}`}
-        >
+        <ChoiceTile key={String(o.value)} on={value === o.value} onClick={() => onPick(o.value)} className="px-1 py-1 text-xs">
           {o.label}
-        </button>
+        </ChoiceTile>
       ))}
     </div>
   )
@@ -475,12 +471,12 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
     [editor, project]
   )
 
-  if (!editor) return <div className="p-6 text-sm text-slate-500">编辑器加载中…</div>
+  if (!editor) return <div className="p-6 text-sm text-ink-dim">编辑器加载中…</div>
 
   return (
     <div className="flex h-full flex-col">
       {/* 编辑工具条：撤销/重做窄栏只留图标；整行横滚，按钮不内折（.editor-toolbar） */}
-      <div ref={toolbarRef} className="editor-toolbar flex shrink-0 items-center gap-1 border-b border-slate-800 px-3 py-1 text-xs">
+      <div ref={toolbarRef} className="editor-toolbar flex shrink-0 items-center gap-1 border-b border-panel-3 px-3 py-1 text-xs">
         <button
           type="button"
           onClick={() => editor.chain().focus().undo().run()}
@@ -501,12 +497,12 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
           <Icon name="redo" size={12} />
           {toolbarNarrow ? '' : '重做'}
         </button>
-        <div className="mx-1 h-4 w-px bg-slate-700" />
+        <div className="mx-1 h-4 w-px bg-panel-3" />
         <button
           type="button"
           onClick={() => fileInput.current?.click()}
           title="在光标处插入本地图片"
-          className="rounded px-2 py-0.5 text-slate-300 hover:bg-slate-700"
+          className="rounded px-2 py-0.5 text-ink-dim hover:bg-panel-3 hover:text-ink"
         >
           <Icon name="image" size={12} className="mr-1.5" />插入图片
         </button>
@@ -527,16 +523,16 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
             type="button"
             onClick={() => togglePop('accent')}
             title="快速修改文章强调色"
-            className="flex items-center gap-1 rounded px-2 py-0.5 text-slate-300 hover:bg-slate-700"
+            className="flex items-center gap-1 rounded px-2 py-0.5 text-ink-dim hover:bg-panel-3 hover:text-ink"
           >
             <span
-              className="inline-block h-3 w-3 rounded-full border border-slate-500"
+              className="inline-block h-3 w-3 rounded-full border border-panel-3"
               style={{ background: accent && isHexColor(accent) ? accent : '#0d9488' }}
             />
             强调色
           </button>
           {toolPop === 'accent' && (
-            <div ref={fixPanel(224)} className="fixed z-50 w-56 rounded-lg border border-slate-700 bg-slate-900 p-2 shadow-xl">
+            <div ref={fixPanel(224)} className={`fixed z-50 w-56 p-2 ${POPOVER_CLS}`}>
               <div className="grid grid-cols-8 gap-1">
                 {ACCENT_PRESETS.map((p) => (
                   <button
@@ -547,7 +543,7 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
                       onAccentChange?.(p.color)
                       setToolPop(null)
                     }}
-                    className={`h-5 w-5 rounded-full border border-slate-600 ${
+                    className={`h-5 w-5 rounded-full border border-panel-3 ${
                       (accent ?? '#0d9488').toLowerCase() === p.color ? 'ring-2 ring-accent' : ''
                     }`}
                     style={{ background: p.color }}
@@ -555,13 +551,13 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
                 ))}
               </div>
               <div className="mt-2 flex items-center gap-2">
-                <label className="flex flex-1 items-center gap-1 text-[10px] text-slate-400">
+                <label className="flex flex-1 items-center gap-1 text-[10px] text-ink-dim">
                   自定义
                   <input
                     type="color"
                     value={accent && isHexColor(accent) ? accent : '#0d9488'}
                     onChange={(e) => onAccentChange?.(e.target.value)}
-                    className="h-6 w-8 cursor-pointer rounded border border-slate-600 bg-transparent"
+                    className="h-6 w-8 cursor-pointer rounded border border-panel-3 bg-transparent"
                   />
                 </label>
                 <button
@@ -570,7 +566,7 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
                     onAccentChange?.(null)
                     setToolPop(null)
                   }}
-                  className="rounded border border-slate-600 px-2 py-1 text-[10px] text-slate-300 hover:bg-slate-700"
+                  className="rounded border border-panel-3 px-2 py-1 text-[10px] text-ink-dim hover:bg-panel-3 hover:text-ink"
                 >
                   恢复默认
                 </button>
@@ -589,16 +585,16 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
                 type="button"
                 onClick={() => togglePop('bg')}
                 title="文章背景卡片颜色（公众号夜间自动变深）"
-                className="flex items-center gap-1 rounded px-2 py-0.5 text-slate-300 hover:bg-slate-700"
+                className="flex items-center gap-1 rounded px-2 py-0.5 text-ink-dim hover:bg-panel-3 hover:text-ink"
               >
                 <span
-                  className="inline-block h-3 w-3 rounded-full border border-slate-500"
+                  className="inline-block h-3 w-3 rounded-full border border-panel-3"
                   style={{ background: effBg ?? 'transparent' }}
                 />
                 背景
               </button>
               {toolPop === 'bg' && (
-                <div ref={fixPanel(288)} className="fixed z-50 w-72 rounded-lg border border-slate-700 bg-slate-900 p-2 shadow-xl">
+                <div ref={fixPanel(288)} className={`fixed z-50 w-72 p-2 ${POPOVER_CLS}`}>
                   <div className="grid grid-cols-6 gap-1">
                     {BG_PRESETS.map((p) => (
                       <button
@@ -609,7 +605,7 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
                           onTypographyChange?.({ bodyBg: p.color })
                           setToolPop(null)
                         }}
-                        className={`h-5 w-5 rounded-full border border-slate-600 ${
+                        className={`h-5 w-5 rounded-full border border-panel-3 ${
                           String(effBg ?? '').toLowerCase() === p.color ? 'ring-2 ring-accent' : ''
                         }`}
                         style={{ background: p.color }}
@@ -617,13 +613,13 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
                     ))}
                   </div>
                   <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                    <label className="mr-auto flex items-center gap-1 text-[10px] text-slate-400">
+                    <label className="mr-auto flex items-center gap-1 text-[10px] text-ink-dim">
                       自定义
                       <input
                         type="color"
                         value={effBg && isHexColor(effBg) ? effBg : '#eef3fb'}
                         onChange={(e) => onTypographyChange?.({ bodyBg: e.target.value })}
-                        className="h-6 w-8 cursor-pointer rounded border border-slate-600 bg-transparent"
+                        className="h-6 w-8 cursor-pointer rounded border border-panel-3 bg-transparent"
                       />
                     </label>
                     <button
@@ -633,8 +629,8 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
                         onTypographyChange?.({ bodyBg: 'none' })
                         setToolPop(null)
                       }}
-                      className={`rounded border px-2 py-1 text-[10px] hover:bg-slate-700 ${
-                        bgNone ? 'border-accent text-accent' : 'border-slate-600 text-slate-300'
+                      className={`rounded border px-2 py-1 text-[10px] hover:bg-panel-3 ${
+                        bgNone ? 'border-accent text-accent' : 'border-panel-3 text-ink-dim'
                       }`}
                     >
                       无卡片
@@ -645,7 +641,7 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
                         onTypographyChange?.({ bodyBg: null })
                         setToolPop(null)
                       }}
-                      className="rounded border border-slate-600 px-2 py-1 text-[10px] text-slate-400 hover:bg-slate-700"
+                      className="rounded border border-panel-3 px-2 py-1 text-[10px] text-ink-dim hover:bg-panel-3"
                     >
                       跟随主题
                     </button>
@@ -668,16 +664,16 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
           const h2Cur = typography?.h2Style ?? t.h2Style
           const h2NumCur = typography?.h2Num ?? t.h2Num
           const h3Cur = typography?.h3Mark ?? t.h3Mark
-          const typeBtn = 'flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[11px] text-slate-300 hover:bg-slate-700'
+          const typeBtn = 'flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[11px] text-ink-dim hover:bg-panel-3 hover:text-ink'
           const typePanel =
-            'fixed z-50 w-64 rounded-lg border border-slate-700 bg-slate-900 p-2 shadow-xl'
+            `fixed z-50 w-64 p-2 ${POPOVER_CLS}`
           const typeReset =
-            'mt-0.5 block w-full rounded border border-slate-600 px-2 py-1 text-left text-[10px] text-slate-400 hover:bg-slate-700'
+            'mt-0.5 block w-full rounded border border-panel-3 px-2 py-1 text-left text-[10px] text-ink-dim hover:bg-panel-3'
           return (
             <>
               <div className="relative">
                 <button type="button" title="正文排版：字号 / 排列（覆盖主题，导出同步）" onClick={() => togglePop('body')} className={typeBtn}>
-                  正文 {bodySize} <span className="text-[8px] text-slate-500"></span>
+                  正文 {bodySize} <span className="text-[8px] text-ink-dim"></span>
                 </button>
                 {toolPop === 'body' && (
                   <div ref={fixPanel(256)} className={typePanel}>
@@ -713,7 +709,7 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
               </button>
               <div className="relative">
                 <button type="button" title="标题排版：字号 / 排列 / 装饰版式 / 序号 / 前缀（覆盖主题，导出同步）" onClick={() => togglePop('heading')} className={typeBtn}>
-                  标题 {headingSize} <span className="text-[8px] text-slate-500"></span>
+                  标题 {headingSize} <span className="text-[8px] text-ink-dim"></span>
                 </button>
                 {toolPop === 'heading' && (
                   <div ref={fixPanel(256)} className={typePanel}>

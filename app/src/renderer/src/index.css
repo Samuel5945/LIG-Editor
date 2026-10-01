@@ -163,6 +163,12 @@ textarea:focus-visible,
   outline: 2px solid rgb(var(--accent));
   outline-offset: 1px;
 }
+/* 输入框壳（primitives 的 FIELD_SHELL_CLS）自己画主色描边 + 3px 光晕：
+   壳内控件再叠一层矩形 outline 会盖掉壳的圆角，聚焦时看着像「变方了」。
+   键盘可达性没丢——环由壳承担，且 :focus-within 对键盘与鼠标一视同仁 */
+.field-shell :is(input, textarea, select):focus-visible {
+  outline: none;
+}
 
 /* ---- TipTap 正文排版（公众号阅读感）----
    排版调性变量由 ArticleEditor 按分类调性注入（--article-accent / --article-font /

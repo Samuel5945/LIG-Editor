@@ -102,6 +102,8 @@
 | 空态 | 居中图标（44px 圆角方块底）+ 两行说明 + 可选主按钮 |
 | 页签条 | 中栏顶部 `[⌂] 创作 / 选题看板 / 日历 / 主题库` + 右端字数胶囊：**与胶囊条同一条单行规则**（nowrap + 横滑隐藏滚动条 + 右缘渐隐），放不下时长标签降级短名（选题看板→看板），字数胶囊钉在条带外、不随页签滚走；单源 `ui/primitives.tsx` 的 `useFittingRow`（2026-10-01 P4 定，诊断 8） |
 | 折叠条 CollapseBar | 说明长文的收纳位：虚线描边 + `panel-3/40` 底 + 一行「是什么（顺带列出展开后有哪几条）」+ 右端 chevron；默认收起，`aria-expanded` 跟状态。标题封面步与导出步共用，禁各界面手抄（2026-10-01 P4 抽出） |
+| 浮层壳 Popover / 菜单行 MenuItem | 「点外面即关」的小浮层一律 `POPOVER_CLS`（12px 圆角 + `border-panel-3` + `bg-panel-2` + 二级阴影）+ `<Popover>` 自带遮罩；行一律 `MenuItem`（图标 12 + 文字 12/400 + `rounded-lg` 浅底 hover + `tone:'danger'` 走 st-bad 软底 + `active` 主色软底）。已收口：顶栏外观弹层、步进器步骤下拉、封面墙与左栏两套右键菜单、编辑器工具条三个弹层（2026-10-01 P5）。选项格走 `ChoiceTile`（选中主色实心），不再各处手写 `bg-slate-800 hover:bg-slate-700` |
+| 输入控件两型 | `FIELD_CLS`=控件本体自己就是可见框（8px 圆角 + `border-panel-3` + `bg-panel` + 聚焦主色描边，弹窗内输入/下拉/文本域用它）；`FIELD_SHELL_CLS`=带聚焦光晕的**外壳**（对话输入框、搜索框、行内命令条用它）。壳内控件的矩形 outline 由 `.field-shell` 规则关掉——环只由壳画，否则点进去会「变方」 |
 | 加载/流式 | 骨架行（灰条呼吸）用于列表；生成中流式渐显 + 可中断按钮 |
 
 ---
@@ -179,6 +181,7 @@
 - **确认卡**：推送确认卡统一「标题+摘要+账号徽标+取消/确认」骨架
 - **输入区整合**（标注⑥）：附件/联网/上下文并入输入框内工具胶囊行，开启态 primary-soft；输入框聚焦主色描边+3px 光晕；发送键 30px 主色方块
   - ✅ **2026-10-01 小细节批**：输入区原用 8px 内缩而头部与消息流用 12px，输入框壳比气泡往左凸 4px，胶囊 hover 底色（再内缩 8px）与正文文字（内缩 12px）也不成同一列——统一成 12px 一列后实测 `pillLeftGap 12.8 = textLeftGap 12.8 = sendRightGap 12.8`。发送/停止键从滚动区里**移出来**做同级：右栏窄时胶囊横滑（实测 202>184 仍可滑），发送键不再被挤出壳外（改前实测右缘差 -5.4px＝在壳外，改后 12.8px 且 `sendVisible: true`）
+  - ✅ **2026-10-01 P5 批（用户实测指出两处）**：① 点进输入框后出现**无圆角的矩形描边**——根因是 §6 全局 `textarea:focus-visible{outline:2px}` 打在壳内控件上（outline 跟随控件自身 radius=0）。改为「环由壳画」：壳挂 `.field-shell`，CSS 里 `.field-shell :is(input,textarea,select):focus-visible{outline:none}`，实测聚焦后 `taOutline: "none 0px"`、壳 `radius 12px` + 主色描边 `rgb(15,118,110)` + 光晕，键盘可达性不丢（`:focus-within` 对鼠标键盘一视同仁）。② 右栏压窄时「上下文」胶囊被发送键挡——胶囊行纳入 §4 长标签降级（同一只 `useFittingRow`）：右栏 260px 下实测三只胶囊退成 26×26 纯图标（`aria-label` 仍为 附件/联网/上下文），`noOverlap: true`、`sendFullyVisible: true`、行不再溢出（176=176）
 
 ### 5.10 编辑器与排版面板 ✅ 2026-10-01（浮动指令条含 AI 主/次按钮已收口；tippy 默认 350px 宽度上限会挤竖「高亮/字号」，已解除）
 
@@ -188,6 +191,7 @@
 - fig-suggest 占位：虚线框 + 插图图标 + 「处理→」按钮，样式向 FigureChecklist 行对齐（48px 占位框同规格，实测 512×81 单行）
 - TypographyPanel：34 项分组手风琴（既有分组保留），「已覆盖/跟随主题」状态徽标统一胶囊；顶部加「存为分类主题」主按钮（现藏底部）+「打开主题库」次按钮
 - 编辑工具条：撤销/重做由 ↩↪ 文本箭头改 `undo`/`redo` 线性图标（图标表新增 redo＝undo 的水平镜像），整条 29px 且不溢出（实测 689/689）
+- ✅ **2026-10-01 P5：工具条与其三个弹层（强调色 / 底色 / 排版选项）脱离 slate 原色**——28 处 `text-slate-300 / border-slate-700 / bg-slate-900 / hover:bg-slate-700` 全并回 `ink-dim / panel-3 / panel-2`，弹层壳改 `POPOVER_CLS`、分区标题改 `PopoverLabel`、选项格改 `ChoiceTile`；贴图组件（FigureGallery / FigureImage）同批清掉 17 处。渲染层 `slate-*` 现仅剩主题库样张里的两条骨架灰条（是「纸上的假正文」，不是 UI chrome，刻意保留）
 
 
 ### 5.11 弹窗体系（统一壳 + 逐个修）✅ 2026-10-01：`ui/DialogShell.tsx` 单源（12px 圆角/标题栏/内容区/右对齐底栏/Esc 即关/可选禁遮罩关闭），十个弹窗全部收进同一只壳；**内部深改已逐项做完**（下列每条后标实测结论）
@@ -200,6 +204,8 @@
 - UpdateDialog ✅：四下载入口改 2×2 卡片（图标+名称+一行说明，只渲染该源真给了链接的），「忽略此版本」收到底栏左侧幽灵位
 - IntegrationDialog ✅：三页签改 `Segmented`（并删掉与 DialogShell 头部重复的那只 ✕）；配置片段抽 `Snippet`——标题+落地路径一行，复制按钮浮在代码块右上角（实测按钮落在 pre 框内、右上偏移贴边）
 - 确认框 confirm.ts ✅：破坏性确认走主进程父窗口模态（不用 `window.confirm`，Windows 上会丢焦点），调用点一律传动词（「删除」「停用」），不用泛化「确定」
+- ✅ **2026-10-01 P5：四个弹窗内部仍是旧 IDE 观感（合计 74 处 slate-*）已并回新风格**——分类管理 / 配图三管线 / 一键接入 / 主题导入的按钮改走 `btnCls('pri'|'sec')`（与 §4 三态同一份 class，不再各存一份 `const btnPrimary`），输入/下拉/文本域改走 `FIELD_CLS`（8px 圆角 + panel-3 描边 + 聚焦主色），卡片底 `bg-slate-950/50`→`bg-panel`，徽标/分隔/说明文字并回 `panel-3 / ink-dim`。逐文件断言后写入，四窗实测 `slateLeft: 0`、`hscrollEls: 0`、按钮高 30、输入框 radius 8px
+- ⚠ 一键接入的两段配置片段 `<pre>` 原本 `overflow-auto`，长 JSON 行会顶出**横向滚动条**（实测 663>585 / 711>579）——改 `whitespace-pre-wrap break-all` + `overflow-x-hidden` 后归零（原则 1 对代码块同样成立：宁可换行，不裸露横条）
 
 ### 5.12 设置中心 ✅ 2026-10-01（左侧分组导航：模型供应商/默认模型与检索/外观/关于；外观与关于复用 App 那份主题状态；Agent 接入·Skill·推送给明面入口跳「一键接入」，未与其合并为一只弹窗——合并要搬两套独立状态，风险大于收益）
 
@@ -207,6 +213,7 @@
 - 模型供应商卡片化（拖拽排序把手 hover 显现）；「测试连接」结果内联胶囊（成功绿/失败红+原因）
 - 外观页：跟随系统/日间/夜间三分段 + 字号三档预览即时生效
 - 补「主题库」入口（与 §5.6 同一视图）
+- ✅ 2026-10-01 P5：表单控件并入 `FIELD_CLS` 单源（原 `field` 常量无描边、圆角 4px，与弹窗内其它控件不同形），实测输入框 radius 8px + `border-panel-3` + 高 30、横向溢出 0
 
 ---
 
@@ -226,6 +233,7 @@
 | **P2（主题体系）** | 主题库页签（§5.6）、TypographyPanel 入口前置、设置中心分组导航 | 稿 C；主 PRD §7.12 | ✅ **已交付 2026-10-01**（样张走 CSS 真实渲染而非离屏截图+磁盘缓存——够用且零缓存失效问题；入口前置含分类管理弹窗） |
 | **P3（打磨）** | 看板/日历/贴图面板样式对齐、动效与焦点态补齐、新手引导 Tour 视觉更新 | §5.4/5.5/5.8 | ✅ **已交付 2026-10-01**：看板+日历对齐（状态色单源扩到选题泳道）、emoji 全量扫尾（22 文件 135 处清零）、卡片 hover 浮起与 focus-visible 补齐；补完批：贴图面板分段+逐张 hover（§5.8）、编辑器浮动指令条 AI 主/次按钮与 tippy 宽度坑（§5.10）、十个弹窗内部深改（§5.11）、语义色单源清扫（`sky/red/green/amber` 原色 98 处并回 `accent/st-*`，日间兜底 CSS 随之删除）、分段控件抽 `Segmented` 单源。Tour 实测已全走 tokens（白底/10px 圆角/主色实心下一步、DOM emoji=0），无需另做 |
 | **P4（实测回归二轮）** | 页签条单行化 + ⌂ 项目库常驻入口（诊断 8/11，§5.3 页签条）、标题封面步两卡重构（诊断 9，稿 E）、导出步双栏+竖横屏切换（诊断 10，稿 F） | 2026-10-01 三张实测截图 | ✅ **已交付 2026-10-01**：页签条走 `useFittingRow`（长标签→短名→横滑渐隐三级降级）+ ⌂ `wallPinned` 回墙（墙上补「编辑中」角标与「返回创作」）；标题封面拆成三卡（标题候选 / 封面·模板直出 / 封面底图·AI 生图后裁剪），四版式改 2×2 缩略卡，说明进 `CollapseBar`；导出步左预览右操作双栏，预览按 375/720 真实宽度渲染后 `scale()` 缩放入卡 + 比例角标，窄中栏自动堆叠。实测数据见 §8 |
+| **P5（小细节与浮层统一）** | 对话输入框聚焦环「变方」与窄栏胶囊被发送键挡；中栏各步工作面内缩不统一；四个弹窗 + 编辑器工具条残留 slate-* 原色；浮层/右键菜单各写一套壳 | 用户 2026-10-01 两轮实测反馈 | ✅ **已交付 2026-10-01**：`.field-shell` 让聚焦环只由壳画（实测控件 outline `none 0px`、壳 12px 圆角）；胶囊行纳入 `useFittingRow` 降级为纯图标（右栏 260px 实测 26×26、`noOverlap`）；中栏工作面统一 16px 左缘；新增 `POPOVER_CLS`/`Popover`/`MenuItem`/`ChoiceTile`/`FIELD_CLS`/`FIELD_SHELL_CLS`/`btnCls` 七件单源，四弹窗 + 编辑器工具条 + 贴图组件共 119 处 slate 清零（仅剩主题库样张骨架条 2 处刻意保留） |
 
 
 ## 8. 验收标准
@@ -238,6 +246,15 @@
 6. 每界面 empty/loading/error 三态齐备；focus-visible 全控件可达
 7. 昼夜两模式下本文 tokens 派生正确，导出/复制与预览一致（沿主 PRD §7.6 约束）
 8. 标题封面步：版式为缩略卡可选，说明默认折叠，两路径按钮主次可辨（稿 E）；导出步：预览竖/横屏可切，操作不淹没在说明文字里（稿 F）
+
+**P5 批次实测记录（2026-10-01，重启到新构建 + CDP 真改窗口尺寸量 DOM）**：
+
+- 聚焦环：点进对话输入框后量 `getComputedStyle(textarea).outline` = `none 0px`（改前是全局 2px 主色矩形环），壳 `borderTopLeftRadius 12px` + 描边 `rgb(15,118,110)` + 光晕在位——「点进去变方」消失
+- 窄右栏：`lig-pane-right-w=260` 重载后三只工具胶囊退成 26×26 纯图标（`aria-label` 仍是 附件/联网/上下文，`title` 保留完整说明），胶囊行 `scrollWidth === clientWidth`（176=176，`data-overflow=0`），`noOverlap: true` 且 `sendFullyVisible: true`
+- 浮层壳：顶栏外观弹层与左栏右键菜单实测 `radius 12px` / `border rgb(228,234,231)` / `bg rgb(255,255,255)` / 二级阴影，菜单行 `rounded-lg` 28px 高、每行 1 只 svg；封面墙与左栏两套右键菜单现在同壳同行样式
+- 弹窗：分类管理 560×666、一键接入 620×638、导入排版 760×645、设置 820×560——四者 `hscrollEls 0`、`slateLeft 0`、按钮高 30、输入框 radius 8px + panel-3 描边；一键接入两段 `<pre>` 的横向溢出（663>585 / 711>579）改换行后归零
+- 全量：`typecheck`（node + web）零报错、`npm run build` 通过、`npm test` **507 例全绿（34 文件）**；`slate-*` 在渲染层只剩主题库样张两条骨架灰条（纸面假正文，非 UI chrome）
+- 未覆盖（诚实记账）：配图三管线（FigureDialog）内部未实开量测——进入该窗需要一个真占位卡，会走生图；它的改动与已实测的四窗同一批同一映射（`btnCls`/`FIELD_CLS`/`ChoiceTile`），且断言脚本要求该文件 slate 残留为 0 才写盘
 
 **P4 批次实测记录（2026-10-01，重启到新构建 + CDP 真改窗口尺寸量 DOM）**：
 
@@ -301,5 +318,8 @@
 - ⚠ **tippy 系浮层默认 `maxWidth: 350px`**：TipTap `BubbleMenu` / driver.js 这类挂在 tippy 上的浮层，内容变宽时会被静默压回 350px 并把中文排成竖排（构建期零报错）。指令条这类横向工具行必须显式传 `maxWidth: 'none'`，并在验收时量 `wrapped`（见 §8 实测记录）
 - ⚠ **「按容器算内容尺寸」的预览必须隔离布局**（2026-10-01 P4 补）：导出步预览的 iframe 高度 = 测量盒高 ÷ 缩放，只要它参与常规流，自己就会把盒子撑高 → RO 再量到更大的盒高 → 无限长（实测卡片 27099px）。定案：iframe 绝对定位在 `relative overflow-hidden` 盒内，外层网格行用 `grid-rows-[minmax(0,1fr)]` 把行高钉死；同类需求（贴图预览、样张预览）照此办理，别再试 `max-height` 之类的软约束
 - **横向条带一律走单源降级**（2026-10-01 P4 补）：步骤条 / 胶囊条 / 页签条同属原则 1，实现分别收敛到 `Stepper`（超窄降级「n/7 步骤名 ▾」）与 `useFittingRow` + `.chip-row`（长标签→短名→横滑渐隐）。新加横向条带不要再写第四套：直接复用 `useFittingRow`，并在验收时量 `rowTops` 唯一 + `data-overflow`
+- **聚焦环只由一层画**（2026-10-01 P5 补）：§6 的全局 `:focus-visible{outline:2px}` 打在**外壳内**的 input/textarea 上会画出无圆角的矩形环（outline 跟随控件自身 radius=0），点进去就「变方」。定案：壳用 `FIELD_SHELL_CLS`（自带 `.field-shell` 类名 + `focus-within` 描边与 3px 光晕），CSS 规则 `.field-shell :is(input,textarea,select):focus-visible{outline:none}` 关掉内层环；键盘可达性由壳承担。新壳一律复用该类名，**别**在调用点补 `outline-none` 了事（Tailwind 工具类打不过 index.css 里的非 layer 规则）
+- **浮层与选项格只认一套**（2026-10-01 P5 补）：点外面即关的小浮层一律 `POPOVER_CLS` / `<Popover>`，菜单行 `MenuItem`，分区标题 `PopoverLabel`，选项格 `ChoiceTile`；弹窗内按钮用 `btnCls(variant,size)` 拿字符串形态（与 `<Button>` 同一份 class），输入控件用 `FIELD_CLS`。`POPOVER_CLS` 刻意不含 padding——同权重的 `p-1`/`p-2` 互相覆盖不可预测，内边距由调用方给
+- **代码块不许裸露横向滚动条**（2026-10-01 P5 补）：`<pre>` 类展示内容（配置片段、JSON）用 `whitespace-pre-wrap break-all` + `overflow-x-hidden`，宁可换行也不顶出横条——原则 1 对代码块同样成立
 - 每完成一批次，回写本文对应章节状态（✅/进行中），并同步主 PRD §11.3；**文档债在主 PRD §14 已立过规矩，本文同样适用**
 

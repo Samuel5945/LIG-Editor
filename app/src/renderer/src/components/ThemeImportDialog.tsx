@@ -3,6 +3,7 @@ import { Icon } from '../ui/Icon'
 import { parseThemeFromHtml, type ParsedTheme } from '@shared/themeParse'
 import { shouldSubmitOnEnter } from '@shared/imeEnter'
 import { DialogShell } from '../ui/DialogShell'
+import { btnCls, FIELD_CLS } from '../ui/primitives'
 import { mdToDoc } from '@shared/markdown'
 import { docToExportHtml } from '@shared/exportHtml'
 import type { ArticleTheme } from '@shared/types'
@@ -32,12 +33,9 @@ const SAMPLE = `# 导入排版预览
 收尾：**排版即气质**。
 `
 
-const btnPrimary =
-  'rounded bg-accent px-3 py-1.5 text-xs text-white hover:brightness-110 disabled:opacity-40 whitespace-nowrap'
-const btnGhost =
-  'rounded border border-slate-600 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-700 disabled:opacity-40 whitespace-nowrap'
-const inputCls =
-  'w-full rounded border border-slate-700 bg-slate-800 px-2 py-1 text-xs text-slate-200 outline-none focus:border-accent'
+const btnPrimary = btnCls('pri')
+const btnGhost = btnCls('sec')
+const inputCls = `w-full ${FIELD_CLS} py-1`
 
 export default function ThemeImportDialog({ onClose, onSaved, onToast }: Props): ReactElement {
   const [html, setHtml] = useState('')
@@ -131,7 +129,7 @@ export default function ThemeImportDialog({ onClose, onSaved, onToast }: Props):
               value={html}
               onChange={(e) => setHtml(e.target.value)}
               placeholder="把公众号文章的 HTML 源码粘贴到这里（微信编辑器里选「复制」→ 粘贴到文本文件后复制源码，或直接用网页另存）&#10;&#10;也可以直接粘贴链接抓取。"
-              className="min-h-0 flex-1 resize-none rounded border border-slate-700 bg-slate-800 p-2 font-mono text-[11px] leading-relaxed text-slate-300 outline-none focus:border-accent"
+              className="min-h-0 flex-1 resize-none rounded-lg border border-panel-3 bg-panel p-2 font-mono text-[11px] leading-relaxed text-ink outline-none focus:border-accent"
             />
             <div className="flex gap-2">
               <button onClick={parse} disabled={!html.trim() || busy} className={btnPrimary}>
@@ -152,14 +150,14 @@ export default function ThemeImportDialog({ onClose, onSaved, onToast }: Props):
               )}
             </div>
             {parsed && (
-              <div className="shrink-0 rounded border border-slate-700 bg-slate-800/60 p-2 text-[11px] leading-relaxed text-slate-300">
-                <p className="mb-1 text-slate-400">识别到的排版：</p>
+              <div className="shrink-0 rounded-lg border border-panel-3 bg-panel p-2 text-[11px] leading-relaxed text-ink-dim">
+                <p className="mb-1 text-ink-dim">识别到的排版：</p>
                 {parsed.summary.map((s) => (
-                  <p key={s} className="text-slate-300">
+                  <p key={s} className="text-ink">
                     · {s}
                   </p>
                 ))}
-                <p className="mt-1 text-slate-500">保存后自动建同名分类，把工程切到该分类即套用（也可在对话里让 AI 直接导入）。</p>
+                <p className="mt-1 text-ink-dim">保存后自动建同名分类，把工程切到该分类即套用（也可在对话里让 AI 直接导入）。</p>
               </div>
             )}
           </div>
