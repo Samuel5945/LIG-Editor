@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { parseThemeFromHtml, trimHtmlForTheme } from '../themeParse'
-import { contrastText, isDarkColor, resolveEditorTheme, wechatDarkColor, CATEGORY_THEMES, DEFAULT_THEME } from '../categoryThemes'
+import { contrastRatio, contrastText, isBrandColor, isDarkColor, readableOn, resolveEditorTheme, wechatDarkColor, CATEGORY_THEMES, DEFAULT_THEME } from '../categoryThemes'
 
 describe('parseThemeFromHtml（公众号 HTML → 排版调性）', () => {
   const HTML = `<!DOCTYPE html><html><head><title>科技美学：深空黑</title></head>
@@ -126,7 +126,8 @@ describe('resolveEditorTheme（日间基础色 / 夜间公众号逻辑自动变�
     expect(night.bodyBg).toBe('#1e2126') // 无日间卡可翻 → 默认夜底
     expect(night.darkBg).toBe(true)
     expect(night.bodyText).toBe('#cbd5e1') // 无卡主题的夜间浅字兜底（不经浅卡翻转那条路）
-    expect(night.headingColor).toBe('#eef2f7') // 青绿自身亮度也判深，深底上被换成默认浅字
+    expect(night.headingColor).toBe('#0d9488') // 强调档：品牌色在深底上原样留，不再被刷成灰白
+    expect(contrastRatio(night.headingColor, night.bodyBg as string)).toBeGreaterThanOrEqual(3)
   })
 
   it('生活常识：日间保持暖白卡深字；夜间自动变深（深暖卡 + 浅字）', () => {
@@ -169,6 +170,47 @@ describe('resolveEditorTheme（日间基础色 / 夜间公众号逻辑自动变�
     const dirty = { ...DEFAULT_THEME, bodyBg: '#fff0f0', bodyText: '#cbd5e1' }
     const c = resolveEditorTheme(dirty, false)
     expect(c.bodyText).toBe('#333')
+  })
+})
+
+describe('readableOn / isBrandColor（分档判色：强调档不换灰，文字档照旧兜底）', () => {
+  it('有彩度的中调色认作强调档；近中性色与极浅灰彩算文字档', () => {
+    expect(isBrandColor('#0d9488')).toBe(true) // 科技绿
+    expect(isBrandColor('#22d3ee')).toBe(true) // 荧光青
+    expect(isBrandColor('#f59e0b')).toBe(true) // 橙
+    expect(isBrandColor('#8b5cf6')).toBe(true) // 紫
+    expect(isBrandColor('#333')).toBe(false) // 正文深字
+    expect(isBrandColor('#eef2f7')).toBe(false) // 夜间默认浅标题
+    expect(isBrandColor('#cbd5e1')).toBe(false) // 夜间默认浅字：极浅灰蓝，算文字档
+    expect(isBrandColor('red')).toBe(false) // 非法色不许冒充品牌色
+  })
+
+  it('强调档在这个底上读得清就原样留（昼夜同源，白底也不换灰）', () => {
+    expect(readableOn('#0d9488', '#1e2126', '#eef2f7')).toBe('#0d9488')
+    expect(readableOn('#0d9488', '#ffffff', '#333')).toBe('#0d9488')
+  })
+
+  it('强调档但读不清（对比 <3:1）→ 退回文字档默认色，不硬留品牌色', () => {
+    expect(readableOn('#1c1c7c', '#1e2126', '#eef2f7')).toBe('#eef2f7')
+  })
+
+  it('文字档：亮度与底撞车就换默认色；无卡片底不参与', () => {
+    expect(readableOn('#333', '#1e2126', '#eef2f7')).toBe('#eef2f7') // 深底深字
+    expect(readableOn('#cbd5e1', '#fff0f0', '#333')).toBe('#333') // 浅底浅字（导入脏数据）
+    expect(readableOn('#eef2f7', '#1e2126', '#eef2f7')).toBe('#eef2f7') // 本来就配，别动
+    expect(readableOn('#0d9488', undefined, '#333')).toBe('#0d9488')
+  })
+
+  it('夜间翻转也只动文字档：品牌标题不被翻成褪色浅彩', () => {
+    // 浅蓝白卡 + 青绿标题：卡片要变深，标题保持那口青绿
+    const techCard = { ...DEFAULT_THEME, bodyBg: '#eef3fb', headingColor: '#0d9488' }
+    const night = resolveEditorTheme(techCard, true)
+    expect(night.darkBg).toBe(true)
+    expect(night.headingColor).toBe('#0d9488')
+    // 手调深暖字仍走公众号翻转（文字档行为不变）
+    expect(resolveEditorTheme(CATEGORY_THEMES['生活常识'], true).bodyText).toBe(
+      wechatDarkColor('#3d3a34', 'text')
+    )
   })
 })
 

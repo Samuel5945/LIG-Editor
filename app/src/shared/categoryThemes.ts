@@ -27,21 +27,65 @@ export type { ArticleTheme, H1Style, H2Style, H2Num, H3Mark, QuoteStyle, HrStyle
 const SANS = '"Microsoft YaHei", "PingFang SC", system-ui, sans-serif'
 const SERIF = '"Source Han Serif SC", "Noto Serif SC", "STSong", "SimSun", serif'
 
+/** 6 位 hex → [r,g,b]（0..1，含 3 位缩写展开）；非法返回 undefined */
+function rgbOf(color: string): [number, number, number] | undefined {
+  const m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(color.trim())
+  if (!m) return undefined
+  const hex = m[1].length === 3 ? m[1].replace(/./g, (c) => c + c) : m[1]
+  const n = parseInt(hex, 16)
+  return [((n >> 16) & 0xff) / 255, ((n >> 8) & 0xff) / 255, (n & 0xff) / 255]
+}
+
+/** WCAG 相对亮度（0 黑 / 1 白）；非法色按黑处理 */
+function relLuminance(color: string): number {
+  const rgb = rgbOf(color)
+  if (!rgb) return 0
+  const lin = (v: number) => (v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4))
+  return 0.2126 * lin(rgb[0]) + 0.7152 * lin(rgb[1]) + 0.0722 * lin(rgb[2])
+}
+
+/** 两色 WCAG 对比度（1..21）；读不清的脏数据自然拿低分 */
+export function contrastRatio(a: string, b: string): number {
+  const la = relLuminance(a)
+  const lb = relLuminance(b)
+  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05)
+}
+
+/** hex → HSL（h 角度，s/l 0..1）；非法返回 undefined */
+function hslOf(color: string): { h: number; s: number; l: number } | undefined {
+  const rgb = rgbOf(color)
+  if (!rgb) return undefined
+  const [r, g, b] = rgb
+  const max = Math.max(r, g, b)
+  const min = Math.min(r, g, b)
+  const l = (max + min) / 2
+  const d = max - min
+  if (d === 0) return { h: 0, s: 0, l }
+  const s = d / (1 - Math.abs(2 * l - 1))
+  const raw = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4
+  const h = raw * 60
+  return { h: h < 0 ? h + 360 : h, s, l }
+}
+
+/**
+ * 是否「强调档」颜色：作者点名要看得见的品牌/装饰色——有彩度且属中调亮度
+ * （科技绿 #0d9488、荧光青 #22d3ee、橙 #f59e0b、紫 #8b5cf6 这类）。
+ * 近中性（#333 / #1a1a1a / #eef2f7）与极浅的灰彩（夜间默认浅字 #cbd5e1）都归文字档。
+ */
+export function isBrandColor(color: string): boolean {
+  const hsl = hslOf(color)
+  if (!hsl) return false
+  return hsl.s >= 0.2 && hsl.l >= 0.15 && hsl.l <= 0.7
+}
+
 /**
  * 背景色是否偏深（用于选前景色/引用文字色）。WCAG 相对亮度 < 0.35 视为深色。
  * 非法输入按浅色处理（导出默认白底、编辑器默认深底由调用方按场景兜底）。
  */
 export function isDarkColor(bg: string): boolean {
-  const m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(bg.trim())
-  if (!m) return false
-  // 3 位缩写（#333）展开为 6 位再判
-  const hex = m[1].length === 3 ? m[1].replace(/./g, (c) => c + c) : m[1]
-  const n = parseInt(hex, 16)
-  const r = ((n >> 16) & 0xff) / 255
-  const g = ((n >> 8) & 0xff) / 255
-  const b = (n & 0xff) / 255
-  const lin = (v: number) => (v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4))
-  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b) < 0.35
+  if (!rgbOf(bg)) return false
+  // 3 位缩写（#333）在 rgbOf 里已展开为 6 位再判
+  return relLuminance(bg) < 0.35
 }
 
 /**
@@ -61,7 +105,9 @@ export function contrastText(bg: string): string {
  *   浅蓝白卡→深蓝黑卡）；
  * - 文字（深字→浅字）：贴近日间反色的「近白」观感——线性翻转 #333 只会得到 #ccc 偏灰
  *   看不清，公众号实际反色接近白，故夹在 [0.88, 0.94]（#333→#e0e0e0），S' = S × 0.5。
- * 强调色不走此函数（微信夜间对中亮度色基本保持原样）。非法输入原样返回，
+ * 强调色不走此函数（微信夜间对中亮度色基本保持原样）——这条现在由代码保证：
+ * resolveEditorTheme / readableOn 的强调档把品牌色挡在翻转与换灰之外，
+ * 只有它在当前底上读不清（<3:1）时才退回默认文字色。非法输入原样返回，
  * 由调用方的深浅兜底修正。
  */
 export function wechatDarkColor(hex: string, kind: 'bg' | 'text' = 'bg'): string {
@@ -123,12 +169,29 @@ export interface EditorThemeColors {
 export const DEFAULT_NIGHT_BG = '#1e2126'
 
 /**
+ * 文字色落到 bg 上的最终值（分档规则唯一来源，resolveEditorTheme 与导出 buildStyles 共用）：
+ * - 强调档：有彩度且在这个底上读得清（≥3:1）→ 原样保留（微信夜间不动中亮度品牌色）
+ * - 文字档：亮度与底撞车（深底深字 / 浅底浅字）→ 换给定的默认色
+ * bg 为 undefined（无卡片透明白底）时不参与判断，原样返回。
+ */
+export function readableOn(color: string, bg: string | undefined, fallback: string): string {
+  if (!bg) return color
+  if (isBrandColor(color) && contrastRatio(color, bg) >= 3) return color
+  return isDarkColor(color) === isDarkColor(bg) ? fallback : color
+}
+
+/**
  * 编辑器昼夜配色解析（纯函数，ArticleEditor 注入 CSS 变量用）：
  * - 日间 = 主题基础色（浅卡保持浅卡、自定义深卡保持深卡、无卡片透明白底）
  * - 夜间 = 公众号逻辑：不再有手调深色排版，把日间基础色经 wechatDarkColor
  *   自动变深（浅底→深底、深字→浅字）；深色基础色保持原样；无卡片主题给
  *   默认深底 DEFAULT_NIGHT_BG，避免「白底浅字」不可读
- * - 深浅兜底：背景与文字亮度不匹配（浅底浅字/深底深字，历史导入脏数据）时强制修正
+ * - 深浅兜底分两档判：
+ *   文字档（近中性的正文/标题色）亮度与底不匹配就换默认浅/深字——历史导入的脏数据
+ *   （浅粉底配浅灰字等）靠这条活着；
+ *   强调档（isBrandColor：有彩度的中调品牌色，如科技绿 #0d9488）既不翻转也不换灰，
+ *   只要在当前底上还读得清（≥3:1）就原样保留，与微信夜间「对中亮度色保持原样」一致。
+ *   没做分档前，科技绿的标题会被判「同暗度」直接刷成 #eef2f7，夜间丢掉那口绿。
  * 导出/公众号同源：buildStyles 传 uiDark 时走同一解析，预览/复制/推送与编辑器一致。
  */
 export function resolveEditorTheme(theme: ArticleTheme, uiDark: boolean): EditorThemeColors {
@@ -141,13 +204,15 @@ export function resolveEditorTheme(theme: ArticleTheme, uiDark: boolean): Editor
         : wechatDarkColor(baseBg)
     : baseBg
   const darkBg = bg ? isDarkColor(bg) : uiDark
-  const bodyTv = theme.bodyText ?? (darkBg ? '#cbd5e1' : '#333')
-  // 夜间把日间卡片的深字翻转成近白浅字（公众号反色观感）；无卡片主题用兜底浅字，不翻转
-  const bodyInverted = uiDark && baseBg && isDarkColor(bodyTv) ? wechatDarkColor(bodyTv, 'text') : bodyTv
-  const bodyText = bg && isDarkColor(bodyInverted) === darkBg ? (darkBg ? '#cbd5e1' : '#333') : bodyInverted
-  const headTv = theme.headingColor ?? (darkBg ? '#eef2f7' : '#1a1a1a')
-  const headInverted = uiDark && baseBg && isDarkColor(headTv) ? wechatDarkColor(headTv, 'text') : headTv
-  const headingColor = bg && isDarkColor(headInverted) === darkBg ? (darkBg ? '#eef2f7' : '#1a1a1a') : headInverted
+  /** 落到 bg 上的最终色：夜间先把文字档的深字翻成近白浅字（强调档不翻，翻了就褪色），
+   *  再由 readableOn 决定要不要换成默认色 */
+  const laneColor = (value: string, fallback: string): string => {
+    const inverted =
+      uiDark && baseBg && !isBrandColor(value) && isDarkColor(value) ? wechatDarkColor(value, 'text') : value
+    return readableOn(inverted, bg, fallback)
+  }
+  const bodyText = laneColor(theme.bodyText ?? (darkBg ? '#cbd5e1' : '#333'), darkBg ? '#cbd5e1' : '#333')
+  const headingColor = laneColor(theme.headingColor ?? (darkBg ? '#eef2f7' : '#1a1a1a'), darkBg ? '#eef2f7' : '#1a1a1a')
   return { bodyBg: bg, bodyText, headingColor, darkBg }
 }
 

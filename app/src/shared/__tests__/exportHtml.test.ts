@@ -318,6 +318,15 @@ describe('docToExportHtml 分类排版调性（爆款范式）', () => {
     expect(out).toContain('border-top:2px solid #e8e8e8;width:64px') // 短居中的分隔线
   })
 
+  it('科技数码 夜间：卡片落默认深底，标题与下划线仍保持科技绿（分档判色）', () => {
+    const out = docToExportHtml(mdToDoc(MD), (src) => src, CATEGORY_THEMES['科技数码'], true)
+    expect(out).toContain('background-color:#1e2126') // 无卡片主题 → 夜间默认深底
+    expect(out).toContain('color:#cbd5e1') // 正文走夜间浅字
+    const h2 = /<h2 style="([^"]*)">/.exec(out)?.[1] ?? ''
+    expect(h2).toContain('color:#0d9488') // 品牌色不被换成 #eef2f7 灰白
+    expect(h2).not.toContain('#eef2f7')
+  })
+
   it('生活常识：暖白卡片 + 胶囊 H1 + 高亮加粗', () => {
     const out = docToExportHtml(mdToDoc(MD), (src) => src, CATEGORY_THEMES['生活常识'])
     expect(out).toContain('background-color:#fffaf2')

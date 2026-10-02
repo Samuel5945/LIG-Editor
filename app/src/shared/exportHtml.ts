@@ -1,6 +1,6 @@
 import type { ArticleDoc, BlockNode, FigureGalleryAttrs, InlineNode, ParagraphNode } from './markdown'
 import { isHexColor } from './cards'
-import { DEFAULT_NIGHT_BG, DEFAULT_THEME, contrastText, isDarkColor, resolveEditorTheme, type ArticleTheme } from './categoryThemes'
+import { DEFAULT_NIGHT_BG, DEFAULT_THEME, contrastText, isDarkColor, readableOn, resolveEditorTheme, type ArticleTheme } from './categoryThemes'
 
 /**
  * article.md → 公众号可粘贴 HTML（M7 导出）
@@ -92,13 +92,13 @@ function buildStyles(theme?: ArticleTheme, uiDark?: boolean): Styles {
   const lh = t.lineHeight || 2.13
   // 按背景卡片实际亮度判断深/浅（不能用「有无卡片」——暖白卡也是浅色）
   const dark = !!t.bodyBg && isDarkColor(t.bodyBg)
-  // 深浅兜底：背景与正文/标题亮度不匹配时强制修正（浅底必须深字、深底必须浅字）。
-  // 兜底对象含历史导入产生的脏数据（浅粉底 #fff0f0 配浅灰字 #cbd5e1 等跨元素误配）
+  // 深浅兜底分两档判（与 resolveEditorTheme 同一个 readableOn）：
+  // 文字档亮度撞底就换默认色（历史导入的脏数据——浅粉底 #fff0f0 配浅灰字 #cbd5e1 等跨元素误配——靠这条），
+  // 强调档（有彩度且读得清，如科技绿 #0d9488）原样保留，不再被刷成灰白
   const bodyTv = t.bodyText ?? (dark ? '#cbd5e1' : '#333')
-  const textColor = t.bodyBg && isDarkColor(bodyTv) === dark ? (dark ? '#cbd5e1' : '#333') : bodyTv
+  const textColor = readableOn(bodyTv, t.bodyBg, dark ? '#cbd5e1' : '#333')
   const headTv = t.headingColor ?? (dark ? '#eef2f7' : '#1a1a1a')
-  const headingColor =
-    t.bodyBg && isDarkColor(headTv) === dark ? (dark ? '#eef2f7' : '#1a1a1a') : headTv
+  const headingColor = readableOn(headTv, t.bodyBg, dark ? '#eef2f7' : '#1a1a1a')
   const subColor = headingColor
   // 引用/图注/提示不再用灰字：浅底深字、深底亮字，与正文同系靠背景块区分层次
   const quoteColor =
