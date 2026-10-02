@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactElement } from 'react'
 import { Icon } from '../ui/Icon'
 import { DialogShell } from '../ui/DialogShell'
-import { Segmented } from '../ui/primitives'
+import { btnCls, FIELD_CLS, Segmented } from '../ui/primitives'
 import {
   applyCutoutMasked,
   createCutoutMask,
@@ -49,14 +49,10 @@ const PIPELINE_TITLE: Record<FigPipeline, string> = {
   import: ' 导入图片'
 }
 
-const btnPrimary =
-  'rounded bg-accent px-3 py-1.5 text-xs text-white hover:brightness-110 disabled:opacity-40 whitespace-nowrap'
-const btnGhost =
-  'rounded border border-slate-600 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-700 disabled:opacity-40 whitespace-nowrap'
-const inputCls =
-  'w-full rounded border border-slate-700 bg-slate-800 px-2 py-1.5 text-xs text-slate-200 outline-none focus:border-accent'
-const selectCls =
-  'rounded border border-slate-700 bg-slate-800 px-2 py-1.5 text-xs text-slate-200 outline-none focus:border-accent'
+const btnPrimary = btnCls('pri')
+const btnGhost = btnCls('sec')
+const inputCls = `w-full ${FIELD_CLS}`
+const selectCls = FIELD_CLS
 
 export default function FigureDialog({
   project,
@@ -185,7 +181,7 @@ function AiPane({
 
   return (
     <div className="flex flex-col gap-3">
-      <label className="text-xs text-slate-400">画面描述（生图提示词）</label>
+      <label className="text-xs text-ink-dim">画面描述（生图提示词）</label>
       <textarea
         value={prompt}
         onChange={(e) => setPrompt(e.target.value)}
@@ -195,7 +191,7 @@ function AiPane({
         placeholder="想要一张什么样的配图…可先写一句话再点「AI 优化描述」扩写成详细提示词"
       />
       <div className="flex flex-wrap items-center gap-2">
-        <label className="text-xs text-slate-400">{spec.sizeLabel}</label>
+        <label className="text-xs text-ink-dim">{spec.sizeLabel}</label>
         <select value={size} onChange={(e) => setSize(e.target.value)} className={selectCls}>
           {spec.sizes.map((o) => (
             <option key={o.value} value={o.value}>
@@ -205,7 +201,7 @@ function AiPane({
         </select>
         {spec.ratios.length > 0 && (
           <>
-            <label className="text-xs text-slate-400">比例</label>
+            <label className="text-xs text-ink-dim">比例</label>
             <select value={ratio} onChange={(e) => setRatio(e.target.value)} className={selectCls}>
               {spec.ratios.map((o) => (
                 <option key={o.value} value={o.value}>
@@ -227,17 +223,17 @@ function AiPane({
           {busy ? `生成中…（${spec.waitHint}）` : b64 ? ' 重新生成' : ' 生成图片'}
         </button>
       </div>
-      <p className="text-[11px] text-slate-500">{spec.hint}</p>
+      <p className="text-[11px] text-ink-dim">{spec.hint}</p>
       {error && <div className="rounded bg-st-bad/10 px-3 py-2 text-xs text-st-bad">{error}</div>}
       {b64 && (
         <>
           <img
             src={`data:image/png;base64,${b64}`}
             alt="生成预览"
-            className="max-h-[340px] self-center rounded border border-slate-700"
+            className="max-h-[340px] self-center rounded border border-panel-3"
           />
           <div className="flex items-center gap-2">
-            <label className="shrink-0 text-xs text-slate-400">图注</label>
+            <label className="shrink-0 text-xs text-ink-dim">图注</label>
             <input
               value={caption}
               onChange={(e) => setCaption(e.target.value)}
@@ -337,7 +333,7 @@ function CodePane({
 
   return (
     <div className="flex flex-col gap-3">
-      <label className="text-xs text-slate-400">
+      <label className="text-xs text-ink-dim">
         {editMode ? '修改要求（AI 改写源码，也可直接手改下方代码）' : '图表描述（AI 生成自包含 HTML）'}
       </label>
       <textarea
@@ -354,7 +350,7 @@ function CodePane({
         }
       />
       {editMode && (
-        <label className="flex cursor-pointer items-center gap-1.5 text-xs text-slate-400">
+        <label className="flex cursor-pointer items-center gap-1.5 text-xs text-ink-dim">
           <input
             type="checkbox"
             checked={rewrite}
@@ -391,7 +387,7 @@ function CodePane({
         <img
           src={`${assetUrl(pngRel)}?v=${previewV}`}
           alt="渲染预览"
-          className="max-h-[300px] self-center rounded border border-slate-700"
+          className="max-h-[300px] self-center rounded border border-panel-3"
         />
       )}
     </div>
@@ -681,15 +677,15 @@ function ImportPane({ project, request }: { project: string; request: FigureRequ
                 <img
                   src={it.url}
                   alt={`第 ${k + 1} 张`}
-                  className="h-20 rounded border border-slate-700 object-cover"
+                  className="h-20 rounded border border-panel-3 object-cover"
                 />
-                <span className="absolute bottom-0.5 left-0.5 rounded bg-black/60 px-1 text-[10px] tabular-nums text-slate-300">
+                <span className="absolute bottom-0.5 left-0.5 rounded bg-black/60 px-1 text-[10px] tabular-nums text-ink">
                   {it.ratio >= 1 ? `横 ${it.ratio.toFixed(2)}` : `竖 ${it.ratio.toFixed(2)}`}
                 </span>
                 <button
                   onClick={() => setMulti((p) => p.filter((_, i) => i !== k))}
                   title="移除这张"
-                  className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-slate-700 text-[10px] text-slate-300 hover:bg-st-bad hover:text-white"
+                  className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-panel-3 text-[10px] text-ink hover:bg-st-bad hover:text-white"
                 >
                   <Icon name="x" size={12} className="mr-1.5" />
                 </button>
@@ -706,12 +702,12 @@ function ImportPane({ project, request }: { project: string; request: FigureRequ
             )}
           </div>
           <div className="flex flex-wrap items-center gap-2 text-xs">
-            <span className="whitespace-nowrap text-slate-400">布局</span>
+            <span className="whitespace-nowrap text-ink-dim">布局</span>
             <select value={layout} onChange={(e) => setLayout(e.target.value)} className={selectCls}>
               <option value="swipe-h">左右滑动轮播</option>
               <option value="grid">拼图同时展示</option>
             </select>
-            <span className="whitespace-nowrap text-slate-400">取景框</span>
+            <span className="whitespace-nowrap text-ink-dim">取景框</span>
             <select value={frame} onChange={(e) => setFrame(e.target.value)} className={selectCls}>
               <option value="">自适应</option>
               {['3:4', '1:1', '4:3', '16:9'].map((f) => (
@@ -748,14 +744,14 @@ function ImportPane({ project, request }: { project: string; request: FigureRequ
               清空重选
             </button>
           </div>
-          <p className="text-[11px] text-slate-500">
+          <p className="text-[11px] text-ink-dim">
             图集支持 2-6 张，插入后可在正文内滑动预览、切换轮播/拼图布局；多图不做抠图，需要抠图请单张导入。
           </p>
         </>
       ) : gifRaw ? (
         <>
-          <p className="text-[11px] text-slate-500">GIF 动图将按原字节插入正文（动画保留，不做抠图/重编码）</p>
-          <img src={gifRaw.url} alt="GIF 预览" className="max-h-[340px] self-center rounded border border-slate-700" />
+          <p className="text-[11px] text-ink-dim">GIF 动图将按原字节插入正文（动画保留，不做抠图/重编码）</p>
+          <img src={gifRaw.url} alt="GIF 预览" className="max-h-[340px] self-center rounded border border-panel-3" />
           <div className="flex flex-wrap items-center gap-2">
             <button onClick={insertGif} className={btnPrimary}>
               <Icon name="check" size={12} className="mr-1.5" />保存并插入正文
@@ -773,21 +769,21 @@ function ImportPane({ project, request }: { project: string; request: FigureRequ
             e.preventDefault()
             void loadFiles(Array.from(e.dataTransfer.files))
           }}
-          className="flex h-40 cursor-pointer items-center justify-center rounded-lg border-2 border-dashed border-slate-700 text-xs text-slate-500 hover:border-accent hover:text-accent"
+          className="flex h-40 cursor-pointer items-center justify-center rounded-lg border-2 border-dashed border-panel-3 text-xs text-ink-dim hover:border-accent hover:text-accent"
         >
           点击选择或拖入图片（PNG/JPG/WebP/GIF）；多选 2-6 张自动生成轮播
         </div>
       ) : (
         <>
           <div className="flex flex-wrap items-center gap-1.5 text-xs">
-            <span className="text-slate-400">抠图算法：</span>
+            <span className="text-ink-dim">抠图算法：</span>
             {CUTOUT_ALGOS.map((a) => (
               <button
                 key={a.id}
                 onClick={() => pickAlgo(a.id)}
                 title={a.label}
                 className={`whitespace-nowrap rounded px-2 py-1 ${
-                  algo === a.id ? 'bg-accent text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                  algo === a.id ? 'bg-accent text-white' : 'bg-panel text-ink-dim hover:bg-panel-3 hover:text-ink'
                 }`}
               >
                 {a.label}
@@ -795,7 +791,7 @@ function ImportPane({ project, request }: { project: string; request: FigureRequ
             ))}
           </div>
           {algo !== 'none' && (
-            <label className="flex items-center gap-2 text-xs text-slate-400">
+            <label className="flex items-center gap-2 text-xs text-ink-dim">
               <span className="whitespace-nowrap">{algoMeta.paramLabel}</span>
               <input
                 type="range"
@@ -806,17 +802,17 @@ function ImportPane({ project, request }: { project: string; request: FigureRequ
                 onChange={(e) => setParam(Number(e.target.value))}
                 className="flex-1 accent-accent"
               />
-              <span className="w-10 text-right tabular-nums text-slate-300">{param.toFixed(2)}</span>
+              <span className="w-10 text-right tabular-nums text-ink">{param.toFixed(2)}</span>
             </label>
           )}
           {/* 手工精修：叠在算法结果之上的涂抹层（只覆盖 alpha，不动算法参数） */}
           <div className="flex flex-wrap items-center gap-2 text-xs">
-            <span className="whitespace-nowrap text-slate-400">手工精修：</span>
+            <span className="whitespace-nowrap text-ink-dim">手工精修：</span>
             <button
               onClick={() => setBrush('keep')}
               title="涂抹补回算法误删的前景（颜色取原图）"
               className={`whitespace-nowrap rounded px-2 py-1 ${
-                brush === 'keep' ? 'bg-accent text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                brush === 'keep' ? 'bg-accent text-white' : 'bg-panel text-ink-dim hover:bg-panel-3 hover:text-ink'
               }`}
             >
               保留画笔
@@ -825,12 +821,12 @@ function ImportPane({ project, request }: { project: string; request: FigureRequ
               onClick={() => setBrush('erase')}
               title="涂抹去掉算法误留的背景"
               className={`whitespace-nowrap rounded px-2 py-1 ${
-                brush === 'erase' ? 'bg-accent text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                brush === 'erase' ? 'bg-accent text-white' : 'bg-panel text-ink-dim hover:bg-panel-3 hover:text-ink'
               }`}
             >
               擦除画笔
             </button>
-            <label className="flex items-center gap-1.5 text-slate-400">
+            <label className="flex items-center gap-1.5 text-ink-dim">
               <span className="whitespace-nowrap">笔刷</span>
               <input
                 type="range"
@@ -840,19 +836,19 @@ function ImportPane({ project, request }: { project: string; request: FigureRequ
                 onChange={(e) => setBrushRadius(Number(e.target.value))}
                 className="w-24 accent-accent"
               />
-              <span className="w-9 text-right font-mono text-[10.5px] tabular-nums text-slate-300">{brushRadius}px</span>
+              <span className="w-9 text-right font-mono text-[10.5px] tabular-nums text-ink">{brushRadius}px</span>
             </label>
             <button onClick={clearMask} disabled={!maskPainted} className={btnGhost}>
               清除涂抹
             </button>
-            {maskPainted && <span className="text-slate-500">涂抹已生效</span>}
+            {maskPainted && <span className="text-ink-dim">涂抹已生效</span>}
           </div>
-          <p className="text-[11px] text-slate-500">
+          <p className="text-[11px] text-ink-dim">
             在预览图上按住拖动即可涂抹；涂抹只覆盖 alpha、不改算法参数，换算法继续涂也成立。放大后用细笔处理边缘更准。
           </p>
           {/* 棋盘格底：透明区可视化 */}
           <div
-            className="self-center rounded border border-slate-700 p-1"
+            className="self-center rounded border border-panel-3 p-1"
             style={{
               background:
                 'repeating-conic-gradient(#2a2e39 0% 25%, #1b1d23 0% 50%) 0 0 / 16px 16px'

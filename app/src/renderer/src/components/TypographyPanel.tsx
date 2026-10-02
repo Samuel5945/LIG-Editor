@@ -86,7 +86,7 @@ export default function TypographyPanel({
       onClose={onClose}
     >
 
-        <div className="selectable min-h-0 flex-1 overflow-y-auto px-4 py-3 text-xs">
+        <div className="selectable thin-scroll min-h-0 flex-1 overflow-y-auto px-4 py-3 text-xs">
           <div className="grid grid-cols-2 gap-x-5 gap-y-4">
             {byGroup.map((g) => (
               <section key={g.id}>

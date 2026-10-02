@@ -2,7 +2,7 @@ import { useMemo, useState, type ReactElement } from 'react'
 import type { ArticleTheme } from '@shared/types'
 import { CATEGORY_THEMES } from '@shared/categoryThemes'
 import { Icon } from '../ui/Icon'
-import { Button, Chip, ChipGroup } from '../ui/primitives'
+import { Button, Chip, FIELD_SHELL_CLS, PickerButton, useFittingRow } from '../ui/primitives'
 
 /**
  * 主题库（主 PRD §7.12 / UI/UX PRD §5.6，稿 C）：中栏第四页签。
@@ -128,6 +128,9 @@ export default function ThemeLibrary({
 }: ThemeLibraryProps): ReactElement {
   const [q, setQ] = useState('')
   const [filter, setFilter] = useState<string>('all')
+  /** 顶条与筛选胶囊行的单行测量（降级与「全部筛选」入口的触发条件） */
+  const bar = useFittingRow<HTMLDivElement>()
+  const chips = useFittingRow<HTMLDivElement>()
   const [previewing, setPreviewing] = useState<string | null>(null)
 
   /** 内置 + 自定义合并成一张表：同名时自定义覆盖内置（与 resolveArticleTheme 同口径） */
@@ -171,23 +174,29 @@ export default function ThemeLibrary({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* 顶条：搜索 + 两个来源入口（导入 / 从当前工程沉淀）——三条来源在此集中可见 */}
-      <div className="flex shrink-0 flex-nowrap items-center gap-2 px-4 pt-3">
-        <span className="inline-flex items-baseline gap-1.5 text-[13.5px] font-bold text-ink">
+      {/* 顶条：搜索 + 两个来源入口（导入 / 从当前工程沉淀）——三条来源在此集中可见。
+          字号「大」+ 中栏窄时按 §4 降级：搜索框收窄、两只按钮退成纯图标（名称留 title 与 aria-label） */}
+      <div ref={bar.ref} data-overflow={bar.overflow ? '1' : '0'} className="flex shrink-0 flex-nowrap items-center gap-2 px-4 pt-3">
+        <span className="inline-flex shrink-0 items-baseline gap-1.5 text-[13.5px] font-bold text-ink">
           主题库
           <span className="text-[11.5px] font-normal text-ink-dim">{entries.length} 套</span>
         </span>
-        <label className="ml-auto inline-flex h-[30px] w-[180px] items-center gap-1.5 rounded-lg border border-panel-3 bg-panel-2 px-2.5 text-[12px] text-ink-dim focus-within:border-accent">
+        <label
+          className={`ml-auto inline-flex h-[30px] shrink-0 items-center gap-1.5 rounded-lg ${FIELD_SHELL_CLS} px-2.5 text-[12px] text-ink-dim ${
+            bar.narrow ? 'w-[104px]' : 'w-[132px]'
+          }`}
+        >
           <Icon name="search" size={12} />
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="搜索主题名"
+            aria-label="搜索主题名"
             className="min-w-0 flex-1 bg-transparent text-ink outline-none placeholder:text-ink-dim"
           />
         </label>
-        <Button size="sm" variant="sec" icon="download" onClick={onImport} title="粘贴公众号 HTML 或链接，复用它的排版">
-          从文章导入
+        <Button size="sm" variant="sec" icon="download" onClick={onImport} title="从文章导入：粘贴公众号 HTML 或链接，复用它的排版">
+          {bar.narrow ? '' : '从文章导入'}
         </Button>
         <Button
           size="sm"
@@ -197,11 +206,11 @@ export default function ThemeLibrary({
           disabled={!project}
           title={project ? '把当前工程的排版覆盖存成该分类的主题' : '先打开一个工程'}
         >
-          从当前工程沉淀
+          {bar.narrow ? '' : '从当前工程沉淀'}
         </Button>
       </div>
-      <div className="shrink-0 px-4 py-2">
-        <ChipGroup>
+      <div className="flex shrink-0 flex-nowrap items-center gap-2 px-4 py-2">
+        <div ref={chips.ref} data-overflow={chips.overflow ? '1' : '0'} className="chip-row flex min-w-0 flex-1 flex-nowrap items-center gap-1.5">
           <Chip on={filter === 'all'} onClick={() => setFilter('all')} icon="layers">
             全部 {entries.length}
           </Chip>
@@ -216,7 +225,22 @@ export default function ThemeLibrary({
               {c}
             </Chip>
           ))}
-        </ChipGroup>
+        </div>
+        {chips.overflow && (
+          <PickerButton
+            value={filter}
+            label="全部筛选"
+            icon="filter"
+            align="right"
+            onSelect={setFilter}
+            items={[
+              { value: 'all', label: `全部 ${entries.length}` },
+              { value: 'builtin', label: `内置 ${entries.filter((e) => e.source === 'builtin').length}` },
+              { value: 'custom', label: `自定义 ${entries.filter((e) => e.source !== 'builtin').length}` },
+              ...categories.map((c) => ({ value: c, label: c, hint: `绑定到分类「${c}」的主题` }))
+            ]}
+          />
+        )}
       </div>
 
       {previewing && (
@@ -229,7 +253,7 @@ export default function ThemeLibrary({
         </div>
       )}
 
-      <div className="thin-scroll min-h-0 flex-1 overflow-y-auto px-4 pb-4">
+      <div className="thin-scroll min-h-0 flex-1 overflow-y-auto px-4 pt-2 pb-4">
         {shown.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
             <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-panel-3 text-ink-dim">

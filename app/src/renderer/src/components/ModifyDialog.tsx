@@ -4,7 +4,7 @@ import { shouldSubmitOnEnter } from '@shared/imeEnter'
 import { chatOnce } from '../copilot/llm'
 import { modifyMessages } from '../copilot/prompts'
 import { DialogShell } from '../ui/DialogShell'
-import { Button, Chip } from '../ui/primitives'
+import { Button, Chip, FIELD_SHELL_CLS } from '../ui/primitives'
 import { Icon } from '../ui/Icon'
 
 interface ModifyDialogProps {
@@ -89,7 +89,7 @@ export default function ModifyDialog({ selection, skill, onConfirm, onClose }: M
       </div>
 
       <div className="mb-3 flex gap-2">
-        <span className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-panel-3 bg-panel-2 px-2.5 transition-[border-color,box-shadow] focus-within:border-accent focus-within:shadow-[0_0_0_3px_rgb(var(--accent)/.18)]">
+        <span className={`flex min-w-0 flex-1 items-center gap-2 rounded-lg ${FIELD_SHELL_CLS} px-2.5`}>
           <Icon name="sparkles" size={13} className="text-accent" />
           <input
             autoFocus

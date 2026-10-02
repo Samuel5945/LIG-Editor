@@ -4,6 +4,7 @@ import { PLATFORM_LABELS } from '@shared/platformHtml'
 import { shouldSubmitOnEnter } from '@shared/imeEnter'
 import type { WechatConfig } from '@shared/wechatIpc'
 import { DialogShell } from '../ui/DialogShell'
+import { btnCls, FIELD_CLS } from '../ui/primitives'
 import { Icon } from '../ui/Icon'
 
 /**
@@ -28,11 +29,9 @@ interface Props {
   onOpenThemeLibrary?: () => void
 }
 
-const btn =
-  'rounded border border-slate-600 px-2 py-0.5 text-[11px] text-slate-300 hover:bg-slate-700 disabled:opacity-40 whitespace-nowrap'
+const btn = btnCls('sec')
 const btnDanger = 'rounded px-2 py-0.5 text-[11px] text-st-bad hover:bg-st-bad/10 disabled:opacity-40 whitespace-nowrap'
-const inputCls =
-  'min-w-0 flex-1 rounded border border-slate-600 bg-slate-800 px-1.5 py-0.5 text-[11px] text-slate-200 outline-none focus:border-accent'
+const inputCls = `min-w-0 flex-1 ${FIELD_CLS} py-1 text-[11.5px]`
 
 export default function CategoryManageDialog({
   categories,
@@ -132,7 +131,7 @@ export default function CategoryManageDialog({
         {/* 内容区自己滚（面板 overflow-hidden + 内层 min-h-0 flex-1）：
             整块面板自己滚时，长分类名/账号预设会把内容撑宽，
             纵向滚动条便画在可视区右侧之外——这里保证只在面板内滚 */}
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-2 pb-4">
           {onOpenThemeLibrary && (
             <button
               onClick={onOpenThemeLibrary}

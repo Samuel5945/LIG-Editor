@@ -6,7 +6,7 @@ import { groupProjectsByCategory } from '@shared/workTree'
 import { shouldSubmitOnEnter } from '@shared/imeEnter'
 import HoverScrollName from './HoverScrollName'
 import { Icon, type IconName } from '../ui/Icon'
-import { StatusDot, StatusLegend } from '../ui/primitives'
+import { MenuItem, Popover, StatusDot, StatusLegend } from '../ui/primitives'
 import { dotOfStatus } from '../ui/status'
 import { useTreeFlags } from '../ui/useTreeFlags'
 import IdeaLibrary from './IdeaLibrary'
@@ -677,7 +677,7 @@ export default function Sidebar(props: SidebarProps): ReactElement {
       {leftTab === 'ideas' ? (
         <IdeaLibrary version={ideasVersion} onMakeOutline={onMakeOutline} onToast={onToast} />
       ) : (
-        <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-2 text-xs">
+        <div className="thin-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-2 text-xs">
         {/* 钉住：Skill 库（skills/ 目录，轻量启停；导入走设置弹窗） */}
         <div className={rowBase} onClick={() => setSkillsOpen((v) => !v)}>
           <Chevron open={skillsOpen} />
@@ -902,51 +902,43 @@ export default function Sidebar(props: SidebarProps): ReactElement {
         )}
         </div>
       )}
-      {/* 工程右键菜单：打开工程目录 / 置顶（点击遮罩或再次右键关闭） */}
+      {/* 工程右键菜单：打开工程目录 / 置顶（点击遮罩或再次右键关闭）——与封面墙同一只浮层壳 */}
       {menu && (
-        <>
-          <div
-            className="fixed inset-0 z-40"
-            onClick={() => setMenu(null)}
-            onContextMenu={(e) => {
-              e.preventDefault()
+        <Popover
+          onClose={() => setMenu(null)}
+          dismissOnContextMenu
+          className="fixed min-w-36 p-1 text-xs"
+          style={{ left: menu.x, top: Math.min(menu.y, window.innerHeight - 140) }}
+        >
+          <MenuItem
+            icon="folderOpen"
+            onClick={() => {
+              const p = projects.find((x) => x.name === menu.name)
+              if (p) openPath(p.dir, null, onToast)
               setMenu(null)
             }}
-          />
-          <div
-            className="fixed z-50 min-w-36 rounded border border-panel-3 bg-panel-2 py-1 text-xs shadow-lg"
-            style={{ left: menu.x, top: Math.min(menu.y, window.innerHeight - 140) }}
           >
-            <button
-              onClick={() => {
-                const p = projects.find((x) => x.name === menu.name)
-                if (p) openPath(p.dir, null, onToast)
-                setMenu(null)
-              }}
-              className="block w-full px-3 py-1.5 text-left text-ink hover:bg-panel-3"
-            >
-              <Icon name="folderOpen" size={12} className="mr-1.5" />打开工程目录
-            </button>
-            <button
-              onClick={() => {
-                togglePin(menu.name)
-                setMenu(null)
-              }}
-              className="block w-full px-3 py-1.5 text-left text-ink hover:bg-panel-3"
-            >
-              <Icon name="pin" size={12} /> {pinned.includes(menu.name) ? '取消置顶' : '置顶'}
-            </button>
-            <button
-              onClick={() => {
-                toggleArchive(menu.name)
-                setMenu(null)
-              }}
-              className="block w-full px-3 py-1.5 text-left text-ink hover:bg-panel-3"
-            >
-              <Icon name="archive" size={12} /> {archived.includes(menu.name) ? '取消归档' : '归档'}
-            </button>
-          </div>
-        </>
+            打开工程目录
+          </MenuItem>
+          <MenuItem
+            icon="pin"
+            onClick={() => {
+              togglePin(menu.name)
+              setMenu(null)
+            }}
+          >
+            {pinned.includes(menu.name) ? '取消置顶' : '置顶'}
+          </MenuItem>
+          <MenuItem
+            icon="archive"
+            onClick={() => {
+              toggleArchive(menu.name)
+              setMenu(null)
+            }}
+          >
+            {archived.includes(menu.name) ? '取消归档' : '归档'}
+          </MenuItem>
+        </Popover>
       )}
       {/* 左栏底部常驻状态图例（§5.2）：工作区路径已上移到窗口底部状态栏，这里不再重复占行 */}
       <StatusLegend className="shrink-0 border-t border-panel-3 py-2" />

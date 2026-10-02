@@ -31,7 +31,7 @@ import Sidebar from './components/Sidebar'
 import ProjectWall from './components/ProjectWall'
 import ThemeLibrary, { type ThemeEntry } from './components/ThemeLibrary'
 import { Icon, type IconName } from './ui/Icon'
-import { Segmented, StatusDot, useFittingRow } from './ui/primitives'
+import { Popover, PopoverLabel, Segmented, StatusDot, useFittingRow } from './ui/primitives'
 import ArticleEditor, { type ArticleEditorHandle, type EditorSelection } from './editor/ArticleEditor'
 import type { FigPipeline } from './editor/FigSuggest'
 import { shouldAutoStart, startTour } from './components/onboardingTour'
@@ -925,36 +925,33 @@ export default function App(): JSX.Element {
               <Icon name="palette" size={13} className="mr-1" />外观
             </button>
             {showAppearance && (
-              <>
-                <div className="fixed inset-0 z-40" onClick={() => setShowAppearance(false)} />
-                <div className="no-drag absolute right-0 top-full z-50 mt-1 w-48 rounded border border-panel-3 bg-panel-2 p-2 shadow-lg">
-                  <p className="mb-1 text-[10px] text-ink-dim">主题</p>
-                  <Segmented
-                    className="mb-2"
-                    size="sm"
-                    ariaLabel="主题模式"
-                    value={themeMode}
-                    onChange={setThemeMode}
-                    items={[
-                      { value: 'system', label: '跟随系统' },
-                      { value: 'light', label: '日间' },
-                      { value: 'dark', label: '夜间' }
-                    ]}
-                  />
-                  <p className="mb-1 text-[10px] text-ink-dim">界面字号</p>
-                  <Segmented
-                    size="sm"
-                    ariaLabel="界面字号"
-                    value={uiScale}
-                    onChange={setUiScale}
-                    items={[
-                      { value: 's', label: '小' },
-                      { value: 'm', label: '中' },
-                      { value: 'l', label: '大' }
-                    ]}
-                  />
-                </div>
-              </>
+              <Popover onClose={() => setShowAppearance(false)} className="no-drag absolute right-0 top-full mt-1 w-48 p-2">
+                <PopoverLabel>主题</PopoverLabel>
+                <Segmented
+                  className="mb-2"
+                  size="sm"
+                  ariaLabel="主题模式"
+                  value={themeMode}
+                  onChange={setThemeMode}
+                  items={[
+                    { value: 'system', label: '跟随系统' },
+                    { value: 'light', label: '日间' },
+                    { value: 'dark', label: '夜间' }
+                  ]}
+                />
+                <PopoverLabel className="px-0">界面字号</PopoverLabel>
+                <Segmented
+                  size="sm"
+                  ariaLabel="界面字号"
+                  value={uiScale}
+                  onChange={setUiScale}
+                  items={[
+                    { value: 's', label: '小' },
+                    { value: 'm', label: '中' },
+                    { value: 'l', label: '大' }
+                  ]}
+                />
+              </Popover>
             )}
           </div>
           <button onClick={() => setShowSettings(true)} className="rounded px-2 py-1 hover:bg-panel-3">

@@ -2,7 +2,7 @@ import { useMemo, useState, type ReactElement } from 'react'
 import type { ProjectSummary } from '@shared/types'
 import { UNCATEGORIZED } from '@shared/categories'
 import { Icon } from '../ui/Icon'
-import { Button, Chip, ChipGroup, Segmented, StatusDot } from '../ui/primitives'
+import { Button, Chip, FIELD_SHELL_CLS, MenuItem, PickerButton, Popover, Segmented, StatusDot, useFittingRow } from '../ui/primitives'
 import { dotOfStatus, PROJECT_STATUS_TEXT } from '../ui/status'
 import { useTreeFlags } from '../ui/useTreeFlags'
 
@@ -38,9 +38,10 @@ export interface ProjectWallProps {
 
 type SortKey = 'updated' | 'planned'
 
-const SORTS: { id: SortKey; label: string }[] = [
-  { id: 'updated', label: '最近编辑' },
-  { id: 'planned', label: '排期先后' }
+/** `short` 只在顶条放不下时使用（§4 长标签降级；title 里保留完整说法） */
+const SORTS: { id: SortKey; label: string; short: string }[] = [
+  { id: 'updated', label: '最近编辑', short: '更新' },
+  { id: 'planned', label: '排期先后', short: '排期' }
 ]
 
 function assetUrl(dir: string, rel: string): string {
@@ -79,6 +80,9 @@ export default function ProjectWall({
   const [cat, setCat] = useState(initialCat && initialCat !== 'all' ? initialCat : 'all')
   const [sort, setSort] = useState<SortKey>('updated')
   const [menu, setMenu] = useState<{ x: number; y: number; name: string } | null>(null)
+  /** 顶条两行的单行测量：bar.narrow=第一行放不下（降级短名/纯图标），chips.overflow=分类胶囊放不下（补「全部分类」入口） */
+  const bar = useFittingRow<HTMLDivElement>()
+  const chips = useFittingRow<HTMLDivElement>()
   // 空态即入口：新建工程的名字在墙上内联收，不把人赶回左栏找按钮
   const [creating, setCreating] = useState(false)
   const [draft, setDraft] = useState('')
@@ -111,31 +115,40 @@ export default function ProjectWall({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* 顶条第一行：搜索 + 排序（2026-09-30 定案：标题与排序一行，分类胶囊独立一行） */}
-      <div className="flex shrink-0 flex-nowrap items-center gap-2 px-4 pt-3">
+      {/* 顶条第一行：搜索 + 排序（2026-09-30 定案：标题与排序一行，分类胶囊独立一行）。
+          字号「大」+ 中栏窄时整行放不下，原先「脑暴新选题」会画到右栏上去（实测 right 1007 > main 929）：
+          这里按 §4 逐级降级——搜索框收窄、排序换短名、两只按钮退成纯图标（名称留 title） */}
+      <div ref={bar.ref} data-overflow={bar.overflow ? '1' : '0'} className="flex shrink-0 flex-nowrap items-center gap-2 px-4 pt-3">
         <span className="inline-flex shrink-0 items-baseline gap-1.5 text-[13.5px] font-bold text-ink">
           工程封面墙
           <span className="text-[11.5px] font-normal text-ink-dim">{visible.length} 篇</span>
         </span>
         {onClose && (
           <Button size="sm" variant="ghost" icon="compass" onClick={onClose} title="回到当前工程的创作向导">
-            返回创作
+            {bar.narrow ? '' : '返回创作'}
           </Button>
         )}
-        <label className="ml-auto inline-flex h-[30px] w-[190px] items-center gap-1.5 rounded-lg border border-panel-3 bg-panel-2 px-2.5 text-[12px] text-ink-dim focus-within:border-accent">
-          <Icon name="search" size={12} />
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="搜索标题"
-            className="min-w-0 flex-1 bg-transparent text-ink outline-none placeholder:text-ink-dim"
-          />
-        </label>
+        {!creating && (
+          <label
+            className={`ml-auto inline-flex h-[30px] shrink-0 items-center gap-1.5 rounded-lg ${FIELD_SHELL_CLS} px-2.5 text-[12px] text-ink-dim ${
+              bar.narrow ? 'w-[104px]' : 'w-[132px]'
+            }`}
+          >
+            <Icon name="search" size={12} />
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="搜索标题"
+              aria-label="搜索工程标题"
+              className="min-w-0 flex-1 bg-transparent text-ink outline-none placeholder:text-ink-dim"
+            />
+          </label>
+        )}
         <Segmented
           ariaLabel="排序方式"
           value={sort}
           onChange={setSort}
-          items={SORTS.map((s) => ({ value: s.id, label: s.label }))}
+          items={SORTS.map((s) => ({ value: s.id, label: bar.narrow ? s.short : s.label, title: s.label }))}
         />
         {creating ? (
           <span className="inline-flex shrink-0 items-center gap-1">
@@ -154,24 +167,28 @@ export default function ProjectWall({
                 }
               }}
               placeholder="工程名，Enter 创建"
-              className="h-[30px] w-[180px] rounded-lg border border-panel-3 bg-panel-2 px-2.5 text-[12px] text-ink outline-none focus:border-accent"
+              aria-label="新工程名"
+              className={`h-[30px] shrink-0 rounded-lg border border-panel-3 bg-panel-2 px-2.5 text-[12px] text-ink outline-none focus:border-accent ${
+                bar.narrow ? 'w-[132px]' : 'w-[180px]'
+              }`}
             />
             <Button size="sm" variant="sec" onClick={() => { setCreating(false); setDraft('') }}>取消</Button>
           </span>
         ) : (
           <>
-            <Button size="sm" variant="sec" icon="plus" onClick={() => setCreating(true)} title="直接建一个空工程开写">
-              新建工程
+            <Button size="sm" variant="sec" icon="plus" onClick={() => setCreating(true)} title="新建图文工程">
+              {bar.narrow ? '' : '新建工程'}
             </Button>
             <Button size="sm" variant="pri" icon="brain" onClick={onBrainstorm} title="投喂素材脑暴选题，或直接出大纲">
-              脑暴新选题
+              {bar.narrow ? '' : '脑暴新选题'}
             </Button>
           </>
         )}
       </div>
-      {/* 顶条第二行：分类胶囊，强制单行（窄栏横滑 + 边缘渐隐，不折行堆叠） */}
-      <div className="shrink-0 px-4 py-2">
-        <ChipGroup>
+      {/* 顶条第二行：分类胶囊，强制单行（窄栏横滑 + 边缘渐隐，不折行堆叠）。
+          放不下时补一只「全部分类」下拉——横滑只解决看得见，被滑出去的项得能选到 */}
+      <div className="flex shrink-0 flex-nowrap items-center gap-2 px-4 py-2">
+        <div ref={chips.ref} data-overflow={chips.overflow ? '1' : '0'} className="chip-row flex min-w-0 flex-1 flex-nowrap items-center gap-1.5">
           <Chip on={cat === 'all'} onClick={() => setCat('all')} icon="layers">
             全部 {projects.length - archived.length}
           </Chip>
@@ -180,10 +197,23 @@ export default function ProjectWall({
               {c} {catCounts.get(c) ?? 0}
             </Chip>
           ))}
-        </ChipGroup>
+        </div>
+        {chips.overflow && (
+          <PickerButton
+            value={cat}
+            label="全部分类"
+            icon="filter"
+            align="right"
+            onSelect={setCat}
+            items={[
+              { value: 'all', label: `全部 ${projects.length - archived.length}`, hint: '显示所有未归档工程' },
+              ...categories.map((c) => ({ value: c, label: `${c} ${catCounts.get(c) ?? 0}`, hint: `分类「${c}」` }))
+            ]}
+          />
+        )}
       </div>
 
-      <div className="thin-scroll min-h-0 flex-1 overflow-y-auto px-4 pb-4">
+      <div className="thin-scroll min-h-0 flex-1 overflow-y-auto px-4 pt-2 pb-4">
         {visible.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center gap-2.5 text-center">
             <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-panel-3 text-ink-dim">
@@ -270,47 +300,44 @@ export default function ProjectWall({
         )}
       </div>
 
-      {/* 右键菜单：与左栏工程行菜单同三项（目录 / 置顶 / 归档） */}
+      {/* 右键菜单：与左栏工程行菜单同三项（目录 / 置顶 / 归档），同一只浮层壳 */}
       {menu && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={() => setMenu(null)} onContextMenu={(e) => { e.preventDefault(); setMenu(null) }} />
-          <div
-            className="fixed z-50 w-44 rounded-xl border border-panel-3 bg-panel-2 py-1 shadow-[0_4px_16px_rgba(0,0,0,.28)]"
-            style={{ left: Math.min(menu.x, window.innerWidth - 190), top: Math.min(menu.y, window.innerHeight - 130) }}
+        <Popover
+          onClose={() => setMenu(null)}
+          dismissOnContextMenu
+          className="fixed w-44 p-1"
+          style={{ left: Math.min(menu.x, window.innerWidth - 190), top: Math.min(menu.y, window.innerHeight - 130) }}
+        >
+          <MenuItem
+            icon="external"
+            onClick={() => {
+              const p = projects.find((x) => x.name === menu.name)
+              if (p) void window.api.invoke('export:openFile', p.dir).catch(() => onToast('目录不存在或已被移除'))
+              setMenu(null)
+            }}
           >
-            {[
-              {
-                icon: 'external' as const,
-                label: '打开工程目录',
-                run: () => {
-                  const p = projects.find((x) => x.name === menu.name)
-                  if (p) void window.api.invoke('export:openFile', p.dir).catch(() => onToast('目录不存在或已被移除'))
-                }
-              },
-              { icon: 'pin' as const, label: pinned.includes(menu.name) ? '取消置顶' : '置顶', run: () => togglePin(menu.name) },
-              {
-                icon: 'archive' as const,
-                label: archived.includes(menu.name) ? '取消归档' : '归档',
-                run: () => {
-                  toggleArchive(menu.name)
-                  onToast(archived.includes(menu.name) ? '已恢复到封面墙' : '已归档——左栏树尾「已归档」区可找回')
-                }
-              }
-            ].map((it) => (
-              <button
-                key={it.label}
-                onClick={() => {
-                  it.run()
-                  setMenu(null)
-                }}
-                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[12px] text-ink hover:bg-panel-3"
-              >
-                <Icon name={it.icon} size={12} />
-                {it.label}
-              </button>
-            ))}
-          </div>
-        </>
+            打开工程目录
+          </MenuItem>
+          <MenuItem
+            icon="pin"
+            onClick={() => {
+              togglePin(menu.name)
+              setMenu(null)
+            }}
+          >
+            {pinned.includes(menu.name) ? '取消置顶' : '置顶'}
+          </MenuItem>
+          <MenuItem
+            icon="archive"
+            onClick={() => {
+              toggleArchive(menu.name)
+              onToast(archived.includes(menu.name) ? '已恢复到封面墙' : '已归档——左栏树尾「已归档」区可找回')
+              setMenu(null)
+            }}
+          >
+            {archived.includes(menu.name) ? '取消归档' : '归档'}
+          </MenuItem>
+        </Popover>
       )}
     </div>
   )

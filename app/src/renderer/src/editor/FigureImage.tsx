@@ -55,7 +55,7 @@ function FigureImageView({ node, selected, updateAttributes, editor, getPos }: N
     })
 
   const opBtn =
-    'whitespace-nowrap rounded border border-slate-700 px-1.5 py-0.5 text-slate-400 hover:border-accent hover:text-accent'
+    'whitespace-nowrap rounded border border-panel-3 px-1.5 py-0.5 text-ink-dim hover:border-accent hover:text-accent'
 
   return (
     <NodeViewWrapper className="my-4" data-drag-handle>
@@ -65,7 +65,7 @@ function FigureImageView({ node, selected, updateAttributes, editor, getPos }: N
         }`}
       >
         {broken ? (
-          <div className="flex h-32 items-center justify-center rounded bg-slate-800 text-xs text-slate-500">
+          <div className="flex h-32 items-center justify-center rounded bg-panel-3 text-xs text-ink-dim">
             图片未找到：{src}
           </div>
         ) : (
@@ -83,12 +83,12 @@ function FigureImageView({ node, selected, updateAttributes, editor, getPos }: N
             value={caption}
             placeholder="点击添加图注…"
             onChange={(e) => updateAttributes({ caption: e.target.value })}
-            className="w-full bg-transparent text-center text-xs text-slate-400 outline-none placeholder:text-slate-600"
+            className="w-full bg-transparent text-center text-xs text-ink-dim outline-none placeholder:text-ink-dim"
           />
         </figcaption>
         {figureSource ? (
-          <div className="mt-1 flex flex-wrap items-center justify-center gap-2 text-[11px] text-slate-500">
-            <span className="rounded bg-slate-800 px-1.5 py-0.5">源码图 {figureSource}</span>
+          <div className="mt-1 flex flex-wrap items-center justify-center gap-2 text-[11px] text-ink-dim">
+            <span className="rounded bg-panel-3 px-1.5 py-0.5">源码图 {figureSource}</span>
             <button
               type="button"
               onClick={() => storage.onEditSource(figureSource, alt || caption)}

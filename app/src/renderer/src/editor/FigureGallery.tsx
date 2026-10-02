@@ -81,7 +81,7 @@ function GalleryView({ node, selected, updateAttributes, editor, getPos }: NodeV
   }
 
   const opBtn =
-    'whitespace-nowrap rounded border border-slate-700 px-1.5 py-0.5 text-slate-400 hover:border-accent hover:text-accent'
+    'whitespace-nowrap rounded border border-panel-3 px-1.5 py-0.5 text-ink-dim hover:border-accent hover:text-accent'
 
   return (
     <NodeViewWrapper className="my-4" data-drag-handle>
@@ -93,7 +93,7 @@ function GalleryView({ node, selected, updateAttributes, editor, getPos }: NodeV
         {isGrid ? (
           /* 拼图：全部同时展示的等宽网格，统一取景裁切 */
           <div
-            className="grid gap-1.5 rounded-lg bg-slate-800/30 p-2"
+            className="grid gap-1.5 rounded-lg bg-panel-3/40 p-2"
             style={{ gridTemplateColumns: `repeat(${gridCols}, 1fr)` }}
           >
             {images.map((im, k) => (
@@ -111,7 +111,7 @@ function GalleryView({ node, selected, updateAttributes, editor, getPos }: NodeV
           <div
             ref={scrollRef}
             onScroll={onScroll}
-            className="flex snap-x snap-mandatory gap-2 overflow-x-auto rounded-lg bg-slate-800/30 p-2"
+            className="flex snap-x snap-mandatory gap-2 overflow-x-auto rounded-lg bg-panel-3/40 p-2"
           >
             {images.map((im, k) => (
               <div key={k} className="w-[78%] shrink-0 snap-center">
@@ -127,12 +127,12 @@ function GalleryView({ node, selected, updateAttributes, editor, getPos }: NodeV
         )}
         {/* 页码圆点 + 滑动提示（拼图全部可见，无需页码） */}
         {!isGrid && (
-          <div className="mt-1.5 flex items-center justify-center gap-2 text-[11px] text-slate-500">
+          <div className="mt-1.5 flex items-center justify-center gap-2 text-[11px] text-ink-dim">
             <span className="flex items-center gap-1">
               {images.map((_, k) => (
                 <span
                   key={k}
-                  className={`inline-block h-1.5 w-1.5 rounded-full ${k === index ? 'bg-accent' : 'bg-slate-600'}`}
+                  className={`inline-block h-1.5 w-1.5 rounded-full ${k === index ? 'bg-accent' : 'bg-panel-3'}`}
                 />
               ))}
             </span>
@@ -142,12 +142,12 @@ function GalleryView({ node, selected, updateAttributes, editor, getPos }: NodeV
             <span>左右滑动</span>
           </div>
         )}
-        <figcaption className="mt-1 text-center text-xs text-slate-400">
+        <figcaption className="mt-1 text-center text-xs text-ink-dim">
           <input
             value={caption}
             onChange={(e) => updateAttributes({ caption: e.target.value })}
             placeholder="点击输入图注…"
-            className="w-full bg-transparent text-center outline-none placeholder:text-slate-600"
+            className="w-full bg-transparent text-center outline-none placeholder:text-ink-dim"
           />
         </figcaption>
         {selected && (
@@ -196,7 +196,7 @@ function GalleryView({ node, selected, updateAttributes, editor, getPos }: NodeV
                   <img
                     src={resolve(im.src)}
                     alt={im.alt}
-                    className={`h-12 rounded border object-cover ${k === index ? 'border-accent' : 'border-slate-700'}`}
+                    className={`h-12 rounded border object-cover ${k === index ? 'border-accent' : 'border-panel-3'}`}
                   />
                   <div className="flex items-center gap-0.5 text-[11px]">
                     <button

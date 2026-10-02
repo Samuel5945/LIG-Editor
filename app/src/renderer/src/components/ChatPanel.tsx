@@ -3,7 +3,7 @@ import { confirmAction } from '../confirm'
 import { ToolLogCard, type ToolCardState } from './ToolLogCard'
 import { TOOL_LABELS } from '../copilot/toolLabels'
 import { Icon, type IconName } from '../ui/Icon'
-import { Button, Chip, IconButton } from '../ui/primitives'
+import { Button, Chip, FIELD_SHELL_CLS, IconButton, useFittingRow } from '../ui/primitives'
 import type {
   ChatMessage,
   ChatSessionMeta,
@@ -157,11 +157,16 @@ async function runToolCall(tc: ToolCallInfo): Promise<string> {
   return summarizeToolResult(r)
 }
 
-/** 输入框内的工具胶囊（§5.9 输入区整合）：开启态主色软底 */
+/**
+ * 输入框内的工具胶囊（§5.9 输入区整合）：开启态主色软底。
+ * `compact` 由胶囊行的单行测量给出——右栏窄到放不下「图标+文字」时退成纯图标胶囊
+ * （名称留在 title 里），这样最后一只胶囊不会被右缘的发送键切掉一半。
+ */
 function ToolPill({
   icon,
   on,
   disabled,
+  compact,
   onClick,
   title,
   children
@@ -169,6 +174,7 @@ function ToolPill({
   icon: IconName
   on?: boolean
   disabled?: boolean
+  compact?: boolean
   onClick: () => void
   title?: string
   children: ReactNode
@@ -178,12 +184,13 @@ function ToolPill({
       onClick={onClick}
       disabled={disabled}
       title={title}
-      className={`inline-flex h-[26px] shrink-0 items-center gap-1.5 rounded-md px-2.5 text-[11.5px] transition-colors disabled:opacity-40 ${
-        on ? 'bg-accent/20 font-semibold text-accent' : 'text-ink-dim hover:bg-panel-3 hover:text-ink'
-      }`}
+      aria-label={typeof children === 'string' ? children : undefined}
+      className={`inline-flex h-[26px] shrink-0 items-center justify-center gap-1.5 rounded-md text-[11.5px] transition-colors disabled:opacity-40 ${
+        compact ? 'w-[26px]' : 'px-2.5'
+      } ${on ? 'bg-accent/20 font-semibold text-accent' : 'text-ink-dim hover:bg-panel-3 hover:text-ink'}`}
     >
       <Icon name={icon} size={12} />
-      {children}
+      {!compact && children}
     </button>
   )
 }
@@ -248,6 +255,8 @@ export default function ChatPanel({
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
+  /** 输入框内工具胶囊行的单行测量：narrow=右栏太窄，胶囊退成纯图标（§4 长标签降级） */
+  const pillsRow = useFittingRow<HTMLDivElement>()
   const [streaming, setStreaming] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [webOn, setWebOn] = useState(false)
@@ -880,7 +889,7 @@ export default function ChatPanel({
 
       {/* 消息区：min-h-0 是必须的——flex 项默认 min-height:auto 不肯缩到内容以下，
           长会话会把下方输入区顶出右栏（外层 overflow-hidden 直接裁掉），表现就是「切换会话后对话框点不动」 */}
-      <div ref={listRef} className="selectable min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-3 text-xs">
+      <div ref={listRef} className="selectable thin-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-3 text-xs">
         {messages.length === 0 && (
           <div>
             <p className="mb-2 text-ink-dim">
@@ -1181,7 +1190,7 @@ export default function ChatPanel({
           </div>
         )}
         {/* 输入框壳（稿 A 标注⑥）：附件/联网/上下文并进框内工具胶囊行，聚焦主色描边 + 3px 光晕 */}
-        <div className="rounded-xl border border-panel-3 bg-panel-2 transition-[border-color,box-shadow] focus-within:border-accent focus-within:shadow-[0_0_0_3px_rgb(var(--accent)/.18)]">
+        <div className={`rounded-xl ${FIELD_SHELL_CLS} bg-panel-2`}>
         <textarea
           rows={2}
           value={input}
@@ -1204,58 +1213,72 @@ export default function ChatPanel({
           className="hidden"
           onChange={(e) => { void addAttachments(e.target.files); e.target.value = '' }}
         />
-        <div className="no-scrollbar flex min-w-0 items-center gap-1 overflow-x-auto px-2 pb-2">
-          {(() => {
-            // 能力徽章：模型目录有声明才显示（上下文/读图/思考）
-            const badges = [contextBadge(cap), hasImageInput(cap) ? '读图' : '', cap.reasoning ? '思考' : ''].filter(Boolean)
-            if (!badges.length) return null
-            return (
-              <span
-                className="inline-flex h-[26px] shrink-0 items-center whitespace-nowrap text-[10.5px] text-ink-dim"
-                title={`${textProvider?.name ?? ''} · ${textProvider?.textModel ?? ''}（按模型目录声明展示）`}
-              >
-                {badges.join('·')}
-              </span>
-            )
-          })()}
-          <ToolPill
-            icon="clip"
-            onClick={() => attachRef.current?.click()}
-            title={
-              cap.inputModalities && !hasImageInput(cap)
-                ? '当前模型不支持读图（vision），仅可附带文档（提取文本）'
-                : '附带图片（走 vision）或文档（提取文本）'
-            }
-          >
-            附件
-          </ToolPill>
-          {cap.reasoning && (
+        {/* 工具胶囊行与上方文字同一 12px 列；发送/停止键在滚动区外面，永远点得到。
+            右栏窄到放不下「图标+文字」时整行退成纯图标胶囊（§4 长标签降级同一套规则），
+            名称留在 title 与 aria-label 里——这样最后一只「上下文」不会再被发送键切掉一半。
+            行首是模型目录能力徽章（上下文/读图/思考），有声明才显示 */}
+        <div className="flex min-w-0 items-center gap-1 px-3 pb-2.5">
+          <div ref={pillsRow.ref} data-overflow={pillsRow.overflow ? '1' : '0'} className="chip-row flex min-w-0 flex-1 items-center gap-1">
+            {(() => {
+              const badges = [contextBadge(cap), hasImageInput(cap) ? '读图' : '', cap.reasoning ? '思考' : ''].filter(Boolean)
+              if (!badges.length) return null
+              return (
+                <span
+                  className="inline-flex h-[26px] shrink-0 items-center whitespace-nowrap text-[10.5px] text-ink-dim"
+                  title={`${textProvider?.name ?? ''} · ${textProvider?.textModel ?? ''}（按模型目录声明展示）`}
+                >
+                  {badges.join('·')}
+                </span>
+              )
+            })()}
             <ToolPill
-              on={thinkOn ?? cap.reasoning.defaultOn}
-              icon="brain"
-              onClick={() => setThinkOn(!(thinkOn ?? cap.reasoning!.defaultOn))}
-              title={`模型思考：${(thinkOn ?? cap.reasoning.defaultOn) ? '已开启' : '已关闭'}，开启后模型先推理再回答，耗时略增`}
+              compact={pillsRow.narrow}
+              icon="clip"
+              onClick={() => attachRef.current?.click()}
+              title={
+                cap.inputModalities && !hasImageInput(cap)
+                  ? '当前模型不支持读图（vision），仅可附带文档（提取文本）'
+                  : '附带图片（走 vision）或文档（提取文本）'
+              }
             >
-              思考
+              附件
             </ToolPill>
-          )}
-          <ToolPill on={webOn} icon="globe" onClick={() => setWebOn((v) => !v)} title="联网搜索：开启后每轮先搜索再回答（时效性问题建议开）">
-            联网
-          </ToolPill>
-          <ToolPill
-            on={ctxOn && !!project}
-            disabled={!project}
-            icon="book"
-            onClick={() => setCtxOn((v) => !v)}
-            title="工程上下文：开启后每轮自动附带当前正文/贴图文案，AI 能直接回答内容相关问题"
-          >
-            上下文
-          </ToolPill>
+            <ToolPill
+              compact={pillsRow.narrow}
+              on={webOn}
+              icon="globe"
+              onClick={() => setWebOn((v) => !v)}
+              title="联网搜索：开启后每轮先搜索再回答（时效性问题建议开）"
+            >
+              联网
+            </ToolPill>
+            <ToolPill
+              compact={pillsRow.narrow}
+              on={ctxOn && !!project}
+              disabled={!project}
+              icon="book"
+              onClick={() => setCtxOn((v) => !v)}
+              title="工程上下文：开启后每轮自动附带当前正文/贴图文案，AI 能直接回答内容相关问题"
+            >
+              上下文
+            </ToolPill>
+            {cap.reasoning && (
+              <ToolPill
+                compact={pillsRow.narrow}
+                on={thinkOn ?? cap.reasoning.defaultOn}
+                icon="brain"
+                onClick={() => setThinkOn(!(thinkOn ?? cap.reasoning!.defaultOn))}
+                title={`模型思考：${(thinkOn ?? cap.reasoning.defaultOn) ? '已开启' : '已关闭'}，开启后模型先推理再回答，耗时略增`}
+              >
+                思考
+              </ToolPill>
+            )}
+          </div>
           {streaming ? (
             <button
               onClick={abort}
               title="停止生成"
-              className="ml-auto inline-flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-lg bg-panel-3 text-st-bad hover:bg-panel"
+              className="inline-flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-lg bg-panel-3 text-st-bad hover:bg-panel"
             >
               <Icon name="square" size={13} />
             </button>
@@ -1264,7 +1287,7 @@ export default function ChatPanel({
               onClick={() => void send()}
               disabled={!input.trim() && attachImages.length === 0 && attachDocs.length === 0}
               title="发送（Enter）"
-              className="ml-auto inline-flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-lg bg-accent text-white hover:brightness-110 disabled:opacity-40"
+              className="inline-flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-lg bg-accent text-white hover:brightness-110 disabled:opacity-40"
             >
               <Icon name="send" size={14} />
             </button>

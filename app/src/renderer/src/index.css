@@ -13,7 +13,9 @@
   --ink: 226 228 234; /* #e2e4ea */
   --ink-dim: 154 160 173; /* #9aa0ad */
   --accent: 79 140 255; /* #4f8cff */
-  --scrollbar: 58 63 75; /* #3a3f4b */
+  --scrollbar: 170 178 192; /* 夜间：深底上必须用浅灰（原来那支 128 中灰压在 #22252d 上几乎看不见） */
+  --sb-a: 0.16; /* 静置：极淡，不跟内容抢视线 */
+  --sb-a-hover: 0.34; /* 拖动 / hover：比原来的 .72 淡一半 */
   /* 状态色（UI/UX PRD §3.1）：语义固定 黄=草稿 / 蓝=进行中 / 绿=已成稿或已发布，
      深色底上取高亮度版本保证可读，日间取 PRD 原值；圆点与文字共用同一变量 */
   --st-draft: 251 191 36; /* amber-400 */
@@ -44,7 +46,7 @@
   --ink: 28 32 40;
   --ink-dim: 103 112 127;
   --accent: 15 118 110; /* #0f766e 青绿强调，白底对比 4.9:1 */
-  --scrollbar: 191 204 199;
+  --scrollbar: 104 112 124; /* 日间：白底上的中性灰；alpha 沿用 :root 的 --sb-a 两档 */
   /* 状态色日间值 = PRD tokens（黄 #E8A13A / 蓝 #4C88FF / 绿 #22A06B / 红 #E5484D）；
      草稿黄在白底上做文字对比不足时由 .text-st-draft 的调用方配文字标签，色相不另起 */
   --st-draft: 217 130 30; /* #d9821e，日间可读的琥珀（原 #E8A13A 白底对比 2.2:1 不达标） */
@@ -112,16 +114,36 @@ select,
   -webkit-app-region: no-drag;
 }
 
+/* ---- 全局滚动条规范（2026-10-01 专项；四修：静置极淡、拖动才提亮）----
+   内嵌胶囊式：轨道与四角全透明，thumb 用透明描边 + padding-box 裁切压成 ~3px 细胶囊。
+   静置 alpha .16（几乎只剩一条浅痕），hover / active .34（比旧值 .72 淡一半）。
+   昼夜各一支底色：夜间必须浅灰，日间深灰——alpha 两档共用。
+   ⚠ 刻意不写 scrollbar-width / scrollbar-color：Chromium 一旦在根上见到标准属性，
+   就整个文档停用 ::-webkit-scrollbar 自定义（实测：写了 html 上那两条，规范里的
+   8px/6px 全退回默认 17 物理 px 粗灰条；清掉立刻恢复 8/6）。本应用只跑 Chromium，
+   Firefox 兜底没有收益，留着只会静默废掉整套规范。 */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
-::-webkit-scrollbar-thumb {
-  background: rgb(var(--scrollbar));
-  border-radius: 4px;
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
 }
-::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in srgb, rgb(var(--scrollbar)) 78%, rgb(var(--ink)) 22%);
+::-webkit-scrollbar-thumb {
+  background: rgb(var(--scrollbar) / var(--sb-a));
+  border: 2.5px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover,
+::-webkit-scrollbar-thumb:active {
+  background: rgb(var(--scrollbar) / var(--sb-a-hover));
+  border: 2.5px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-button {
+  display: none;
 }
 
 /* ---- 横向条带规范（UI/UX PRD §2 原则 1 / §4 chip）----
@@ -146,10 +168,11 @@ select,
   mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent);
 }
 
-/* 细纵向滚动条场景（对话流、树）：6px */
-.thin-scroll::-webkit-scrollbar {
-  width: 6px;
-}
+/* 细纵向滚动条场景（对话流、树、卡片网格面板）：宽高同细，内嵌胶囊更深一号 */
+/* .thin-scroll 三修起不再是「更细的一档」——历史上它压到 6px + 1.5px 描边，
+   呼吸缝比预览小、颜色又另走一套，主题库/封面墙/选题面板看着就比预览粗。
+   现在全局只此一款（8px 轨 + 2.5px 透明描边 = 视觉 3px 胶囊），类名保留当语义标记，
+   新代码不必再加尺寸覆盖；要真隐藏滚动条用 .no-scrollbar。 */
 
 /* 焦点可见（§6）：所有可点控件 focus-visible 主色描边，Tab 顺序 = 视觉顺序 */
 button:focus-visible,
@@ -162,6 +185,12 @@ textarea:focus-visible,
 [contenteditable='true']:focus-visible {
   outline: 2px solid rgb(var(--accent));
   outline-offset: 1px;
+}
+/* 输入框壳（primitives 的 FIELD_SHELL_CLS）自己画主色描边 + 3px 光晕：
+   壳内控件再叠一层矩形 outline 会盖掉壳的圆角，聚焦时看着像「变方了」。
+   键盘可达性没丢——环由壳承担，且 :focus-within 对键盘与鼠标一视同仁 */
+.field-shell :is(input, textarea, select):focus-visible {
+  outline: none;
 }
 
 /* ---- TipTap 正文排版（公众号阅读感）----

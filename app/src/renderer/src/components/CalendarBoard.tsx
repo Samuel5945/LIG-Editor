@@ -375,7 +375,7 @@ export default function CalendarBoard({
               <Icon name="bulb" size={12} className="mr-1.5" />选题库 {ideas.length}
             </button>
           </div>
-          <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto p-2">
+          <div className="thin-scroll min-h-0 flex-1 space-y-1.5 overflow-y-auto p-2">
             {asideTab === 'unscheduled' ? (
               <>
                 {unscheduled.length === 0 && (

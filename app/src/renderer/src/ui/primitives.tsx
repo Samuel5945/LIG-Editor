@@ -1,4 +1,13 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ButtonHTMLAttributes, type ReactElement, type ReactNode } from 'react'
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ButtonHTMLAttributes,
+  type CSSProperties,
+  type ReactElement,
+  type ReactNode
+} from 'react'
 import { Icon, type IconName } from './Icon'
 
 /**
@@ -112,8 +121,20 @@ export function Button({ variant = 'sec', size = 'md', icon, className = '', chi
   )
 }
 
-/** 顶栏/工具行里的紧凑图标按钮（图标 13px，高 26） */
-export function IconButton({ icon, className = '', title, ...rest }: ButtonHTMLAttributes<HTMLButtonElement> & { icon: IconName }): ReactElement {
+/**
+ * 三态按钮的**字符串**形态：弹窗里成片的 `className={btnGhost}` 直接拿这一份，
+ * 不再各自手抄一套 rounded/border/hover（§4 按钮三态只有一套）。
+ */
+export const btnCls = (variant: BtnVariant = 'sec', size: BtnSize = 'sm'): string =>
+  `${BTN_BASE} ${BTN_SIZE[size]} ${BTN_VARIANT[variant]}`
+
+/**
+ * 弹窗内单行输入 / 下拉的同一形态。跟 `FIELD_SHELL_CLS` 的分工：
+ * 壳类是「带聚焦光晕的外壳」（里面装控件），这个是控件本体自己就是可见框。
+ */
+export const FIELD_CLS = 'rounded-lg border border-panel-3 bg-panel px-2.5 py-1.5 text-xs text-ink outline-none focus:border-accent'
+
+/** 顶栏/工具行里的紧凑图标按钮（图标 13px，高 26） */export function IconButton({ icon, className = '', title, ...rest }: ButtonHTMLAttributes<HTMLButtonElement> & { icon: IconName }): ReactElement {
   return (
     <button
       {...rest}
@@ -371,7 +392,7 @@ export function Stepper({ items, activeId, onSelect, busyId, className = '' }: S
           {pickOpen && (
             <>
               <div className="fixed inset-0 z-40" onClick={() => setPickOpen(false)} />
-              <div className="absolute left-0 top-full z-50 mt-1 w-40 rounded-lg border border-panel-3 bg-panel-2 p-1 shadow-lg">
+              <div className={`${POPOVER_CLS} absolute left-0 top-full z-50 mt-1 w-40 p-1`}>
                 {items.map((s, i) => (
                   <button
                     key={s.id}
@@ -432,6 +453,170 @@ export function Stepper({ items, activeId, onSelect, busyId, className = '' }: S
     </div>
   )
 }
+
+// ---------------- 浮层壳（选项弹窗 / 右键菜单 / 工具条下拉） ----------------
+
+/**
+ * 浮层壳单源（§4 阴影两级 + §3.3 圆角 12）：所有「点外面即关」的小浮层——
+ * 顶栏外观弹层、步进器步骤下拉、右键菜单、编辑器工具条下拉——共用同一只壳。
+ * 定位与内边距（absolute/fixed + top/left + p-1/p-2）由调用方 className/style 传，
+ * 壳本身只管圆角/描边/底色/阴影——避免 p-1 与 p-2 同权重互相覆盖。
+ */
+export const POPOVER_CLS = 'rounded-xl border border-panel-3 bg-panel-2 shadow-[0_4px_16px_rgba(0,0,0,.28)]'
+
+export interface PopoverProps {
+  children: ReactNode
+  /** 点遮罩（含遮罩上右键）即关 */
+  onClose: () => void
+  /** 追加定位与宽度，如 `absolute right-0 top-full mt-1 w-48` */
+  className?: string
+  style?: CSSProperties
+  /** 浮层自身右键也关掉（右键菜单场景：再点一次别处重开） */
+  dismissOnContextMenu?: boolean
+}
+
+export function Popover({ children, onClose, className = '', style, dismissOnContextMenu }: PopoverProps): ReactElement {
+  return (
+    <>
+      <div
+        className="fixed inset-0 z-40"
+        onClick={onClose}
+        onContextMenu={
+          dismissOnContextMenu
+            ? (e) => {
+                e.preventDefault()
+                onClose()
+              }
+            : undefined
+        }
+      />
+      <div style={style} className={`${POPOVER_CLS} z-50 ${className}`}>
+        {children}
+      </div>
+    </>
+  )
+}
+
+/** 浮层内分区小标题（10.5px 灰字，与菜单行同一左缘） */
+export function PopoverLabel({ children, className = '' }: { children: ReactNode; className?: string }): ReactElement {
+  return <p className={`px-2.5 pb-1 pt-1.5 text-[10.5px] text-ink-dim ${className}`}>{children}</p>
+}
+
+export interface MenuItemProps {
+  icon?: IconName
+  children: ReactNode
+  onClick: () => void
+  title?: string
+  /** danger=破坏性动作（删除/归档），底色走 st-bad 软底 */
+  tone?: 'default' | 'danger'
+  /** 当前项：主色软底 + 600 字重（单选菜单用） */
+  active?: boolean
+}
+
+/** 菜单行单源：图标 12 + 文字 12/400，hover 浅底，禁各菜单再手写一套 px-3 py-1.5 */
+export function MenuItem({ icon, children, onClick, title, tone = 'default', active }: MenuItemProps): ReactElement {
+  const cls = active
+    ? 'bg-accent/15 font-semibold text-accent'
+    : tone === 'danger'
+      ? 'text-st-bad hover:bg-st-bad/10'
+      : 'text-ink hover:bg-panel-3'
+  return (
+    <button
+      type="button"
+      title={title}
+      onClick={onClick}
+      className={`flex w-full items-center gap-2 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-left text-[12px] transition-colors ${cls}`}
+    >
+      {icon ? <Icon name={icon} size={12} className="shrink-0 opacity-80" /> : <span className="w-3 shrink-0" />}
+      <span className="min-w-0 flex-1 truncate">{children}</span>
+    </button>
+  )
+}
+
+/** 选项格（编辑器工具条下拉这类「点一个值」的格子）：选中主色实心，未选灰字浅底 hover */export function ChoiceTile({
+  on,
+  children,
+  onClick,
+  title,
+  className = ''
+}: {
+  on: boolean
+  children: ReactNode
+  onClick: () => void
+  title?: string
+  className?: string
+}): ReactElement {
+  return (
+    <button
+      type="button"
+      title={title}
+      onClick={onClick}
+      className={`rounded-md px-2 py-1 text-[11.5px] transition-colors ${
+        on ? 'bg-accent font-semibold text-white' : 'text-ink-dim hover:bg-panel-3 hover:text-ink'
+      } ${className}`}
+    >
+      {children}
+    </button>
+  )
+}
+
+/**
+ * 单行胶囊条溢出时的「还有别的可选」入口：横滑与渐隐只解决「看得见」，
+ * 被滑出视区的项仍要有地方能选到——所以补一只下拉，列全量项并标当前项。
+ * 调用方在条带 `data-overflow=1` 时才渲染它（放得下就不加噪音）。
+ */
+export function PickerButton<T extends string>({
+  value,
+  items,
+  onSelect,
+  label = '全部',
+  icon = 'filter',
+  align = 'left'
+}: {
+  value: T
+  items: { value: T; label: string; hint?: string }[]
+  onSelect: (v: T) => void
+  label?: string
+  icon?: IconName
+  /** 触发按钮贴在条带右端时传 'right'，让浮层向左长，不越出中栏压到邻栏 */
+  align?: 'left' | 'right'
+}): ReactElement {
+  const [open, setOpen] = useState(false)
+  return (
+    <span className="relative shrink-0">
+      <Button
+        size="sm"
+        variant="sec"
+        icon={icon}
+        title={`共 ${items.length} 项，条带里放不下时用这个选`}
+        onClick={() => setOpen((v) => !v)}
+      >
+        {label}
+      </Button>
+      {open && (
+        <Popover
+          onClose={() => setOpen(false)}
+          className={`absolute top-full mt-1 max-h-[300px] w-52 overflow-y-auto p-1 ${align === 'right' ? 'right-0' : 'left-0'}`}
+        >
+          {items.map((it) => (
+            <MenuItem key={it.value} title={it.hint} active={it.value === value} onClick={() => { onSelect(it.value); setOpen(false) }}>
+              {it.label}
+            </MenuItem>
+          ))}
+        </Popover>
+      )}
+    </span>
+  )
+}
+
+// ---------------- 输入框壳 / 卡片壳 ----------------
+
+/**
+ * 输入框壳单源：描边 + 聚焦主色 3px 光晕。`field-shell` 这个类名同时是 CSS 的开关——
+ * 壳已经画了聚焦环，壳内控件就不该再叠一层**无圆角**的矩形 outline（点进去会「变方」）。
+ */
+export const FIELD_SHELL_CLS =
+  'field-shell border border-panel-3 bg-panel-2 transition-[border-color,box-shadow] focus-within:border-accent focus-within:shadow-[0_0_0_3px_rgb(var(--accent)/.18)]'
 
 // ---------------- 卡片壳 ----------------
 

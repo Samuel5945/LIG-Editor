@@ -7,6 +7,7 @@ import type { PlatformId } from '@shared/types'
 import type { PushDraftResult } from '@shared/wechatIpc'
 import { Icon } from '../../ui/Icon'
 import { Segmented, Button, Card, CollapseBar, Switch, useElementBox } from '../../ui/primitives'
+import { withPreviewScrollCss } from '../../ui/previewScrollCss'
 
 /**
  * 导出步工作面（创作向导「导出」步；自 ExportDialog 抽出，原弹窗壳已随页签体系退役）。
@@ -83,11 +84,23 @@ export default function ExportPanel({ project, projectDir, markdown, theme, cate
     if (platform === 'wechat') {
       const fragment = docToExportHtml(doc, resolveAsset, theme, pubVariant === 'night')
       // 页面外壳背景跟随所选配色变体：夜间深底、日间白底/浅卡（与正文片段同源，整页一体）
-      return wrapExportPage(fragment, extractTitle(doc, project), exportPageBg(theme, pubVariant === 'night'))
+      // 夜间配色 = 深底预览，注入的滚动条要跟着换成浅灰（否则压在夜读底上看不见）
+      return withPreviewScrollCss(wrapExportPage(fragment, extractTitle(doc, project), exportPageBg(theme, pubVariant === 'night')), pubVariant === 'night')
     }
     const fragment = docToPlatformHtml(doc, resolveAsset, theme, platform)
-    return wrapPlatformPage(fragment, extractTitle(doc, project))
+    // 平台预览页固定白底
+    return withPreviewScrollCss(wrapPlatformPage(fragment, extractTitle(doc, project)), false)
   }, [markdown, projectDir, project, theme, pubVariant, platform])
+
+  /**
+   * 预览页自己的底色（iframe 元素必须跟着上这个色）：
+   * 注入的滚动条轨道是透明的，轨道那条缝会透出 **iframe 元素自身**的背景——
+   * 原来写死 bg-white，夜间配色预览（深底）里就变成一条扎眼的亮白带子。
+   */
+  const previewBg = useMemo(
+    () => (platform === 'wechat' ? exportPageBg(theme, pubVariant === 'night') : '#fff'),
+    [platform, theme, pubVariant]
+  )
 
   const copyRich = useCallback(async () => {
     if (busy) return
@@ -235,9 +248,6 @@ export default function ExportPanel({ project, projectDir, markdown, theme, cate
           />
         </div>
         <div ref={previewRef} className="relative mt-2.5 min-h-0 flex-1 overflow-hidden rounded-lg bg-panel-3/40">
-          <span className="absolute right-2 top-2 z-10 rounded-full bg-black/45 px-2 py-0.5 text-[10px] tabular-nums text-white">
-            {targetW} × {shotH}
-          </span>
           {/* 绝对定位：iframe 的高度由框子算出来，若让它参与常规流就会「框子撑高 → iframe 再撑高」无限长 */}
           <div className="absolute inset-0 flex justify-center">
             <div style={{ width: targetW * shot, height: previewBox.h }}>
@@ -245,20 +255,25 @@ export default function ExportPanel({ project, projectDir, markdown, theme, cate
                 title="导出预览"
                 srcDoc={previewHtml}
                 sandbox=""
-                className="rounded-md border border-panel-3 bg-white"
+                className="rounded-md border border-panel-3"
                 style={{
                   width: targetW,
                   height: shotH,
                   transform: `scale(${shot})`,
                   transformOrigin: 'top left',
-                  display: 'block'
+                  display: 'block',
+                  // 与预览页同底：透明轨道缝里透出来的就是这一层，夜间预览不再是白带子
+                  background: previewBg
                 }}
               />
             </div>
           </div>
         </div>
-        <p className="mt-1.5 shrink-0 text-center text-[10.5px] text-ink-dim">
-          竖屏 = 手机阅读宽度 · 横屏 = 桌面宽度 · 缩放只为放下，折行仍是真实宽度
+        <p
+          className="mt-1.5 shrink-0 text-center text-[10.5px] text-ink-dim [text-wrap:balance]"
+          title="缩放只为了放得下，行宽与折行仍等于该形态下的真实宽度"
+        >
+          竖屏 = 手机宽度 · 横屏 = 桌面宽度
         </p>
       </Card>
 
