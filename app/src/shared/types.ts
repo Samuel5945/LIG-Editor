@@ -287,6 +287,31 @@ export interface ProviderConfig {
   imageModel: string
   /** 图像调用格式：标准 OpenAI images / Agnes images 变体 / APIMart 异步任务制（gpt-image-2、nano-banana） */
   imageApi: 'openai-images' | 'agnes-images' | 'apimart-images'
+  /** 文本对话协议：OpenAI 兼容 chat/completions（缺省）或 Anthropic 兼容 messages。
+   * 商汤等双协议供应商两个端点共用同一 baseUrl 与 Key；生图始终走 OpenAI images */
+  api?: 'openai-chat-completions' | 'anthropic-messages'
+  /** 已拉取的模型列表分类缓存（启动自动刷新与手动刷新共用，随 llm.json 落盘） */
+  models?: ProviderModelCache
+}
+
+/** 每供应商模型列表缓存：文本/生图模型分列 */
+export interface ProviderModelCache {
+  text: ModelInfo[]
+  image: ModelInfo[]
+  /** 最近一次成功拉取时间（ISO 字符串），用于展示「上次拉取 xx 前」 */
+  updatedAt?: string
+}
+
+/** 按协议分类后的模型列表（llm:fetchModels 返回；失败时 text/image 为回退的旧缓存） */
+export interface ProviderModelsResult {
+  ok: boolean
+  text: ModelInfo[]
+  image: ModelInfo[]
+  /** 本次是否新拉取成功（false = 返回的是缓存或失败） */
+  refreshed: boolean
+  /** 缓存时间（ISO），来自落盘的 provider.models.updatedAt */
+  updatedAt?: string
+  error?: string
 }
 
 /** AI 生图可选参数。size/ratio 的语义随图像协议不同（UI 选项由 shared/imageFormats.ts 统一定义）：
@@ -342,10 +367,18 @@ export interface ChatToolSchema {
   function: { name: string; description: string; parameters: unknown }
 }
 
+/** 一次流式对话的请求选项：tools 非空走 function calling；thinking 控制思考开关（缺省按模型目录默认） */
+export interface ChatStartOptions {
+  tools?: ChatToolSchema[]
+  thinking?: boolean
+}
+
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant' | 'tool'
   /** 纯文本 或 多模态片段数组（含图片时走 OpenAI vision 格式） */
   content: string | ContentPart[]
+  /** assistant 消息的思考过程（reasoning/reasoning_content/thinking_delta 归一），随会话落盘 */
+  reasoning?: string
   /** assistant 消息携带的工具调用；对应结果以 role:'tool' 消息回填（chat-tools v1） */
   tool_calls?: { id: string; type: 'function'; function: { name: string; arguments: string } }[]
   /** role='tool' 消息对应的 tool_calls 项 id */
@@ -416,6 +449,16 @@ export interface SkillInstallDirective {
   content?: string
 }
 
+/** 对话安装 Skill：合集仓库里的单个 SKILL.md 候选（仓库引用探测出多个时由用户挑选） */
+export interface SkillInstallCandidate {
+  /** 候选展示名：SKILL.md 上级目录名（仓库根 SKILL.md 用仓库名） */
+  name: string
+  /** 仓库内相对路径（正斜杠，如 skills/xxx/SKILL.md） */
+  path: string
+  /** 点选后重新 resolve 用的引用：该候选的 GitHub blob 链接（走既有单文件解析链路） */
+  ref: string
+}
+
 /** 对话安装 Skill：预览结果（只取内容不落盘，确认后才安装） */
 export interface SkillResolveResult {
   name: string
@@ -427,6 +470,9 @@ export interface SkillResolveResult {
   exists: boolean
   /** 非空=检出脚本执行依赖（命中描述），本应用无法执行此类 Skill，卡片阻断安装 */
   scriptDep: string | null
+  /** 非空=仓库引用探测出多个 SKILL.md（合集仓库），此时 content 为空串，
+   *  渲染层转候选选择态，点选候选拿其 ref 重新 resolve */
+  candidates?: SkillInstallCandidate[]
 }
 
 /** MCP 一键接入卡片（M8）：给外部 Agent 的注册配置片段 */
@@ -597,11 +643,11 @@ export interface IpcApi {
   'settings:setLlm': (settings: LlmSettings) => void
   /** 用给定配置试连（不要求先保存） */
   'llm:test': (provider: ProviderConfig) => LlmTestResult
-  /** 发起流式对话；增量通过 llm:stream 事件推送。options.tools 非空时走 function calling */
-  'llm:chatStart': (requestId: string, messages: ChatMessage[], options?: { tools?: ChatToolSchema[] }) => void
+  /** 发起流式对话；增量通过 llm:stream 事件推送。options.tools 非空时走 function calling；thinking 控制思考开关 */
+  'llm:chatStart': (requestId: string, messages: ChatMessage[], options?: ChatStartOptions) => void
   'llm:abort': (requestId: string) => void
-  /** 拉取供应商可用模型列表（GET /v1/models） */
-  'llm:fetchModels': (provider: ProviderConfig) => FetchModelsResult
+  /** 拉取供应商模型列表（GET /v1/models）→ 按文本/生图分类 → 落盘缓存；失败时返回旧缓存 */
+  'llm:fetchModels': (provider: ProviderConfig) => ProviderModelsResult
   // ---- 副驾驶（M5）----
   'chat:list': (project: string) => ChatSessionMeta[]
   'chat:read': (project: string, id: string) => ChatSession
@@ -716,10 +762,12 @@ export interface IpcEvents {
   'file:external-change': { project: string; file: string }
   /** workspace 顶层有工程新增/删除 */
   'workspace:changed': null
+  /** 模型接入设置已保存（渲染层各面板即时重拉供应商/模型能力声明） */
+  'settings:llmChanged': null
   /** 用户把 .md 拖到应用图标 / 双击关联文件，应用已在运行：absPath 为文件绝对路径 */
   'md:open-request': { absPath: string }
   /** 流式对话增量片段 */
-  'llm:stream': { requestId: string; delta: string }
+  'llm:stream': { requestId: string; delta: string; reasoning?: string }
   /** 流式对话结束；error 非空表示异常终止。toolCalls 非空 = 模型发起了工具调用，等待渲染层执行后回填下一轮 */
   'llm:done': { requestId: string; error?: string; toolCalls?: ToolCallInfo[] }
   /** figures/*.html 被外部修改后自动重渲染完成；png 为新图相对路径 */

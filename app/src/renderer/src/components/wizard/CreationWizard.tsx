@@ -437,7 +437,7 @@ export default function CreationWizard({
       {/* 步进器（步骤即导航：点哪步去哪步，完成态由工程事实推导）
           紧凑 Stepper：单步定宽 + 连接线 flex 均分，任意窗口宽度零横向滚动条；
           放不下时降级为「n/7 步骤名 ▾」下拉。字数/保存状态已挪到中栏页签行与底部状态栏。 */}
-      <div data-tour="wizard-stepper" className="shrink-0 border-b border-panel-3 px-3">
+      <div data-tour="wizard-stepper" className="shrink-0 border-b border-panel-3 px-2">
         <Stepper
           items={steps.map((s) => ({ id: s.id, label: s.label, done: s.done }))}
           activeId={activeId}
@@ -448,7 +448,7 @@ export default function CreationWizard({
 
       {/* 流式横幅（writing 阶段全局可见，切步不断流） */}
       {writing && (
-        <div className="flex shrink-0 items-center gap-2 border-b border-panel-3 bg-panel-2 px-4 py-1.5 text-xs">
+        <div className="flex shrink-0 items-center gap-2 border-b border-panel-3 bg-panel-2 px-3 py-1.5 text-xs">
           <span className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap text-ink">
             <Icon name={cardsFormat ? 'image' : 'file'} size={13} />
             {cardsFormat ? `${CARD_FORMAT_LABEL[cardsFormat]}卡片生成中…` : '正文生成中，正在流式写入…'}
@@ -462,7 +462,7 @@ export default function CreationWizard({
 
       {/* 步 1 选题（常驻挂载保活） */}
       <div className={`min-h-0 flex-1 flex-col ${activeId === 'ideas' ? 'flex' : 'hidden'}`}>
-        <div ref={scrollIdeasRef} className="selectable min-h-0 flex-1 overflow-auto p-4 text-xs">
+        <div ref={scrollIdeasRef} className="selectable min-h-0 flex-1 overflow-auto p-3 text-xs">
           {phase === 'input' || phase === 'brainstorming' ? (
             <BrainstormIdeas
               phase={phase === 'brainstorming' ? 'brainstorming' : 'input'}
@@ -514,7 +514,7 @@ export default function CreationWizard({
 
       {/* 步 2 大纲（常驻挂载保活） */}
       <div className={`min-h-0 flex-1 flex-col ${activeId === 'outline' ? 'flex' : 'hidden'}`}>
-        <div ref={scrollOutlineRef} className="selectable min-h-0 flex-1 overflow-auto p-4 text-xs">
+        <div ref={scrollOutlineRef} className="selectable min-h-0 flex-1 overflow-auto p-3 text-xs">
           {phase === 'outlining' || phase === 'outline' ? (
             <OutlineStep
               phase={phase === 'outlining' ? 'outlining' : 'outline'}
@@ -551,7 +551,7 @@ export default function CreationWizard({
       {/* 步 4 配图（贴图工程无此步） */}
       {!isCards && (
         <div className={`min-h-0 flex-1 flex-col ${activeId === 'figures' ? 'flex' : 'hidden'}`}>
-          <div className="selectable min-h-0 flex-1 overflow-auto p-4 text-xs">
+          <div className="selectable min-h-0 flex-1 overflow-auto p-3 text-xs">
             {project ? (
               <FigureChecklist
                 suggestions={figSuggestions}

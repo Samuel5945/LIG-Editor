@@ -1,6 +1,8 @@
 import { net } from 'electron'
 import type { ImageGenOptions, ProviderConfig } from '@shared/types'
+import { isSenseNovaProvider } from '@shared/providerSites'
 import { getImageProvider } from './settingsStore'
+import { apiUserAgent } from './apiUa'
 
 /**
  * AI 生图（M6 管线一）：返回 PNG/JPEG 的 base64（不落盘，预览确认后经 project:saveAsset 入 assets/）
@@ -22,8 +24,9 @@ export async function generateImage(prompt: string, opts: ImageGenOptions = {}):
   return generateViaImagesApi(provider, prompt, opts)
 }
 
+/** UA 覆盖为纯 ASCII：中文 UA 会被商汤 gRPC 网关 500（见 apiUa.ts） */
 function headers(apiKey: string): Record<string, string> {
-  const h: Record<string, string> = { 'Content-Type': 'application/json' }
+  const h: Record<string, string> = { 'Content-Type': 'application/json', 'User-Agent': apiUserAgent() }
   if (apiKey) h.Authorization = `Bearer ${apiKey}`
   return h
 }
@@ -40,7 +43,9 @@ async function generateViaImagesApi(provider: ProviderConfig, prompt: string, op
       prompt,
       n: 1,
       size,
-      response_format: 'b64_json'
+      response_format: 'b64_json',
+      // 商汤 images 端点的扩展参数：关闭右下角水印（其他 OpenAI 兼容网关会忽略未知字段）
+      ...(isSenseNovaProvider(provider) ? { watermark: false } : {})
     }),
     signal: AbortSignal.timeout(180_000)
   })

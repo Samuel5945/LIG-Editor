@@ -47,6 +47,7 @@ export function freeChatSystemPrompt(
 规则：
 - source 四选一：github（GitHub 仓库名或链接）/ url（指向 .md 文件的直链）/ path（用户给的本地绝对路径）/ inline（用户把 SKILL.md 内容直接粘在对话里）
 - inline 时必须给 name（英文短横线小写）且不要复述粘贴内容，系统会直接取用户消息原文；其余来源必须给 ref
+- 多 Skill 合集仓库（一个仓库装了多个 skill）给仓库引用即可，应用会自动列出仓库内的 SKILL.md 让作者挑选；知道具体路径时优先给该 SKILL.md 的 blob 链接更快
 - 只在用户明确请求安装时输出指令块；闲聊提到某个 skill 不算；一次只输出一个指令块
 - 输出指令块后不要再跟任何文字，系统会在界面上展示确认卡片由用户点击安装
 

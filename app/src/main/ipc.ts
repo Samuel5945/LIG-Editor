@@ -6,7 +6,7 @@ import { getAppPaths } from './paths'
 import * as store from './projectStore'
 import { watchProject, stopProjectWatch, setWatchedProjects, unwatchProjectAssets } from './watcher'
 import { getLlmSettings, setLlmSettings } from './settingsStore'
-import { testProvider, chatStart, abortChat, fetchModels } from './llm'
+import { testProvider, chatStart, abortChat, refreshProviderModels } from './llm'
 import { listSkills, readSkill, importSkill, setSkillEnabled, saveSkill, removeSkill } from './skillStore'
 import { resolveSkillInstall } from './skillFetch'
 import { webResearch, webSearch } from './webSearch'
@@ -189,14 +189,19 @@ export function registerIpc(): void {
 
   // ---- 模型接入（M4）----
   handle('settings:getLlm', () => getLlmSettings())
-  handle('settings:setLlm', (settings) => setLlmSettings(settings))
+  handle('settings:setLlm', (settings) => {
+    setLlmSettings(settings)
+    // 通知各面板重拉供应商信息（能力声明/模型缓存可能已变）
+    broadcast('settings:llmChanged', null)
+  })
   handle('llm:test', (provider) => testProvider(provider))
-  handle('llm:chatStart', (requestId, messages) => {
-    // 不 await：立即返回，增量走 llm:stream 事件
-    void chatStart(requestId, messages)
+  handle('llm:chatStart', (requestId, messages, options) => {
+    // 不 await：立即返回，增量走 llm:stream 事件（思考过程在 reasoning 字段）
+    void chatStart(requestId, messages, options)
   })
   handle('llm:abort', (requestId) => abortChat(requestId))
-  handle('llm:fetchModels', (provider) => fetchModels(provider))
+  // 拉取并按文本/生图分类落盘缓存；失败回退旧缓存
+  handle('llm:fetchModels', (provider) => refreshProviderModels(provider))
 
   // ---- 副驾驶（M5）----
   handle('chat:list', (project) => store.listChatSessions(project))

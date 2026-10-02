@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useState, type ReactElement } from 'react'
-import type { LlmSettings, LlmTestResult, ModelInfo, ProviderConfig } from '@shared/types'
+import type { LlmSettings, LlmTestResult, ProviderConfig } from '@shared/types'
 import { imageFormatFor } from '@shared/imageFormats'
-import { isRhythmProvider, providerSiteLinks } from '@shared/providerSites'
+import {
+  DASHSCOPE_PROVIDER_SEED,
+  SENSENOVA_PROVIDER_SEED,
+  isRhythmProvider,
+  providerSiteLinks
+} from '@shared/providerSites'
+import { contextBadge, hasImageInput, modelCapability } from '@shared/modelCatalog'
 import { DialogShell } from '../ui/DialogShell'
 import { Button, Segmented } from '../ui/primitives'
 import { Icon, type IconName } from '../ui/Icon'
@@ -44,7 +50,6 @@ export default function SettingsDialog({ onClose, appearance, onOpenIntegration 
   const [testResult, setTestResult] = useState<LlmTestResult | null>(null)
   const [savedFlash, setSavedFlash] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
-  const [models, setModels] = useState<ModelInfo[]>([])
   const [fetchingModels, setFetchingModels] = useState(false)
   const [modelsError, setModelsError] = useState<string | null>(null)
 
@@ -198,19 +203,22 @@ export default function SettingsDialog({ onClose, appearance, onOpenIntegration 
     setTesting(false)
   }, [provider])
 
+  /** 拉取模型列表：主进程拉取 → 按文本/生图分类 → 落盘缓存；结果同步进本地状态（保存时随设置落盘）。
+   * 失败时主进程返回旧缓存（refreshed=false），界面保留上次列表并显示错误 */
   const runFetchModels = useCallback(async () => {
     if (!provider) return
     setFetchingModels(true)
     setModelsError(null)
-    setModels([])
     const result = await window.api.invoke('llm:fetchModels', provider)
     if (result.ok) {
-      setModels(result.models)
+      patchProviderById(provider.id, {
+        models: { text: result.text, image: result.image, updatedAt: result.updatedAt }
+      })
     } else {
       setModelsError(result.error ?? '未知错误')
     }
     setFetchingModels(false)
-  }, [provider])
+  }, [provider, patchProviderById])
 
   const save = useCallback(async () => {
     if (!settings) return
@@ -231,6 +239,32 @@ export default function SettingsDialog({ onClose, appearance, onOpenIntegration 
   const label = 'mb-1 mt-3 block text-[11px] text-ink-dim'
   const tabCls = (active: boolean) =>
     `rounded px-3 py-1 text-xs ${active ? 'bg-panel-3 text-ink' : 'text-ink-dim hover:bg-panel-3'}`
+
+  /** 模型选项后的能力徽章（目录有声明才显示） */
+  const capLabel = (id: string): string => {
+    if (!provider) return ''
+    const c = modelCapability(provider, id)
+    const parts = [contextBadge(c), hasImageInput(c) ? '读图' : '', c.reasoning ? '思考' : ''].filter(Boolean)
+    return parts.length ? `（${parts.join('·')}）` : ''
+  }
+
+  /** 「上次拉取 xx 前」（模型列表缓存时间） */
+  const relativeTime = (iso: string): string => {
+    const ms = Date.now() - new Date(iso).getTime()
+    if (Number.isNaN(ms)) return ''
+    const min = Math.floor(ms / 60_000)
+    if (min < 1) return '刚刚'
+    if (min < 60) return `${min} 分钟前`
+    const h = Math.floor(min / 60)
+    if (h < 24) return `${h} 小时前`
+    return `${Math.floor(h / 24)} 天前`
+  }
+
+  // 预设模板：一键填充内置供应商的接入参数（Key 需用户自行粘贴；商汤 key 已随预置从 ZCode 配置读取）
+  const PRESETS = [
+    { label: '商汤日日新', seed: SENSENOVA_PROVIDER_SEED },
+    { label: '阿里云百炼', seed: DASHSCOPE_PROVIDER_SEED }
+  ]
 
   // 默认模型页：未指定默认供应商时与主进程一致回退到列表第一个
   const textProvider = settings.providers.find((p) => p.id === settings.textProviderId) ?? settings.providers[0] ?? null
@@ -320,7 +354,6 @@ export default function SettingsDialog({ onClose, appearance, onOpenIntegration 
                         onClick={() => {
                           setSelectedId(p.id)
                           setTestResult(null)
-                          setModels([])
                           setModelsError(null)
                         }}
                         draggable
@@ -389,6 +422,28 @@ export default function SettingsDialog({ onClose, appearance, onOpenIntegration 
             <div className="flex min-w-0 flex-1 flex-col p-4">
               {provider && (
                 <div className="mt-1 min-h-0 flex-1 overflow-auto pr-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[11px] text-ink-dim">预设模板：</span>
+                    {PRESETS.map(({ label: pl, seed }) => (
+                      <button
+                        key={seed.name}
+                        onClick={() =>
+                          patchProviderById(provider.id, {
+                            name: seed.name,
+                            baseUrl: seed.baseUrl,
+                            api: seed.api,
+                            textModel: seed.textModel,
+                            imageModel: seed.imageModel,
+                            imageApi: seed.imageApi
+                          })
+                        }
+                        className="rounded border border-panel-3 px-2 py-0.5 text-[11px] text-ink-dim hover:border-accent hover:text-accent"
+                      >
+                        {pl}
+                      </button>
+                    ))}
+                  </div>
+
                   <label className={label}>名称</label>
                   <input
                     className={field}
@@ -418,6 +473,19 @@ export default function SettingsDialog({ onClose, appearance, onOpenIntegration 
                     placeholder="https://apihub.agnes-ai.com/v1"
                   />
 
+                  <label className={label}>对话协议</label>
+                  <select
+                    className={field}
+                    value={provider.api ?? 'openai-chat-completions'}
+                    onChange={(e) => patchProviderById(provider.id, { api: e.target.value as ProviderConfig['api'] })}
+                  >
+                    <option value="openai-chat-completions">OpenAI 兼容（POST /chat/completions）</option>
+                    <option value="anthropic-messages">Anthropic 兼容（POST /messages，思考参数标准化）</option>
+                  </select>
+                  <p className="mt-1 text-[11px] text-ink-dim">
+                    商汤等双协议供应商两个端点共用同一 Base URL 与 Key；生图始终走 OpenAI images
+                  </p>
+
                   <label className={label}>API Key</label>
                   <input
                     className={field}
@@ -446,57 +514,74 @@ export default function SettingsDialog({ onClose, appearance, onOpenIntegration 
                     </div>
                   </div>
 
-                  <div className="mt-2 flex items-center gap-2">
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
                     <button
                       onClick={runFetchModels}
                       disabled={fetchingModels}
                       className="rounded border border-panel-3 px-2.5 py-1 text-[11px] text-ink-dim hover:border-accent hover:text-accent disabled:opacity-50"
                     >
-                      {fetchingModels ? '拉取中…' : '↓ 拉取可用模型'}
+                      {fetchingModels ? '拉取中…' : '↓ 刷新模型列表'}
                     </button>
-                    {modelsError && <span className="text-[11px] text-st-bad"><Icon name="x" size={12} className="mr-1.5" />{modelsError}</span>}
+                    {provider.models?.updatedAt && (
+                      <span className="text-[11px] text-ink-dim">
+                        上次拉取：{relativeTime(provider.models.updatedAt)}（每次启动自动刷新）
+                      </span>
+                    )}
+                    {modelsError && (
+                      <span className="text-[11px] text-st-bad">
+                        <Icon name="x" size={12} className="mr-1.5" />
+                        {modelsError}
+                      </span>
+                    )}
                   </div>
 
-                  {models.length > 0 && (
-                    <div className="mt-2 flex gap-3">
-                      <div className="flex-1">
-                        <label className="mb-1 block text-[11px] text-ink-dim">
-                          从列表选文本模型（{models.length} 个）
-                        </label>
-                        <select
-                          className={field}
-                          value=""
-                          onChange={(e) => {
-                            if (e.target.value) patchProviderById(provider.id, { textModel: e.target.value })
-                          }}
-                        >
-                          <option value="">选择模型…</option>
-                          {models.map((m) => (
-                            <option key={m.id} value={m.id}>
-                              {m.id}
-                            </option>
-                          ))}
-                        </select>
+                  {(() => {
+                    const cached = provider.models
+                    if (!cached || (cached.text.length === 0 && cached.image.length === 0)) return null
+                    return (
+                      <div className="mt-2 flex gap-3">
+                        <div className="flex-1">
+                          <label className="mb-1 block text-[11px] text-ink-dim">
+                            从列表选文本模型（{cached.text.length} 个）
+                          </label>
+                          <select
+                            className={field}
+                            value=""
+                            onChange={(e) => {
+                              if (e.target.value) patchProviderById(provider.id, { textModel: e.target.value })
+                            }}
+                          >
+                            <option value="">选择模型…</option>
+                            {cached.text.map((m) => (
+                              <option key={m.id} value={m.id}>
+                                {m.id}
+                                {capLabel(m.id)}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="flex-1">
+                          <label className="mb-1 block text-[11px] text-ink-dim">
+                            从列表选图像模型（{cached.image.length} 个）
+                          </label>
+                          <select
+                            className={field}
+                            value=""
+                            onChange={(e) => {
+                              if (e.target.value) patchProviderById(provider.id, { imageModel: e.target.value })
+                            }}
+                          >
+                            <option value="">选择模型…</option>
+                            {cached.image.map((m) => (
+                              <option key={m.id} value={m.id}>
+                                {m.id}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
                       </div>
-                      <div className="flex-1">
-                        <label className="mb-1 block text-[11px] text-ink-dim">从列表选图像模型</label>
-                        <select
-                          className={field}
-                          value=""
-                          onChange={(e) => {
-                            if (e.target.value) patchProviderById(provider.id, { imageModel: e.target.value })
-                          }}
-                        >
-                          <option value="">选择模型…</option>
-                          {models.map((m) => (
-                            <option key={m.id} value={m.id}>
-                              {m.id}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-                  )}
+                    )
+                  })()}
 
                   <label className={label}>图像调用格式</label>
                   <select

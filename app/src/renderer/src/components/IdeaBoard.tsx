@@ -98,7 +98,7 @@ export default function IdeaBoard({
           选题库是空的。去右栏「脑暴创作」产出选题并点「入库」，这里就会长出来。
         </p>
       ) : (
-        <div className="flex min-h-0 flex-1 gap-2 overflow-x-auto p-4">
+        <div className="flex min-h-0 flex-1 gap-2 overflow-x-auto p-3">
           {IDEA_STAGES.map((meta) => {
             const items = lanes.get(meta.id) ?? []
             return (

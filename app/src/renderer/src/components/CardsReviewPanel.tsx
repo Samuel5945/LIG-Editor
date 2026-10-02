@@ -169,7 +169,7 @@ export default function CardsReviewPanel({
         </div>
       </div>
 
-      <div ref={scrollRef} className="selectable min-h-0 flex-1 overflow-auto p-4 text-xs leading-5">
+      <div ref={scrollRef} className="selectable min-h-0 flex-1 overflow-auto p-3 text-xs leading-5">
         {error && (
           <p className="mb-2 break-all text-st-bad">
             <Icon name="xCircle" size={12} className="mr-1.5" />

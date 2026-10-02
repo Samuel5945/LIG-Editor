@@ -2,6 +2,7 @@ import { app, BrowserWindow, Menu, net, protocol, shell } from 'electron'
 import { join, normalize } from 'path'
 import { pathToFileURL } from 'url'
 import { registerIpc, extractMdPaths, queueOrBroadcastMd } from './ipc'
+import { refreshAllProviderModels } from './llm'
 import { watchWorkspace } from './watcher'
 import { getAppPaths } from './paths'
 import { startBridge, stopBridge } from './bridge'
@@ -117,6 +118,8 @@ app.whenReady().then(() => {
   }
   registerAssetProtocol()
   registerIpc()
+  // 后台刷新各供应商模型列表缓存（拉取→文本/生图分类→落盘；失败静默保留旧缓存）
+  void refreshAllProviderModels()
   watchWorkspace()
   startBridge()
   // 只保留编辑/视图菜单的快捷键（菜单栏不显示）：复制粘贴、撤销、开发者工具等照常可用

@@ -16,6 +16,7 @@ import type {
   WebSearchResult
 } from '@shared/types'
 import { buildToolSchemas, inventoryFor, parseTextToolCalls } from '@shared/llmText'
+import { contextBadge, estimateTokens, hasImageInput, modelCapability, type ModelCapability } from '@shared/modelCatalog'
 import { expandWrapperCalls, normalizeToolArgs } from '@shared/toolArgs'
 import { extractInlineContent, parseSkillDirective } from '@shared/skillInstall'
 import { cardsPlainText, parseAccentDirective } from '@shared/cards'
@@ -30,6 +31,24 @@ import { shouldSubmitOnEnter } from '@shared/imeEnter'
 function contentText(content: string | ContentPart[]): string {
   if (typeof content === 'string') return content
   return content.filter((p) => p.type === 'text').map((p) => (p as { type: 'text'; text: string }).text).join('')
+}
+
+/** 按模型上下文窗口裁剪历史（预算取窗口一半，给回复和系统提示留空间）：
+ * 只在 user 消息边界落刀——assistant(tool_calls) 与其后 tool 结果成组，从中间截断会被 API 拒收。
+ * 无目录声明的模型（未知窗口）不裁剪，保持引入目录前的行为 */
+function trimHistory(msgs: ChatMessage[], cap: ModelCapability): ChatMessage[] {
+  if (!cap.contextWindow) return msgs
+  const budget = cap.contextWindow * 0.5
+  const hasSystem = msgs.length > 0 && msgs[0].role === 'system'
+  const head = hasSystem ? msgs.slice(0, 1) : []
+  const body = hasSystem ? msgs.slice(1) : msgs
+  const suffix: number[] = new Array(body.length + 1).fill(0)
+  for (let i = body.length - 1; i >= 0; i--) suffix[i] = suffix[i + 1] + estimateTokens(body[i].content)
+  if (suffix[0] <= budget) return msgs
+  for (let i = 0; i < body.length; i++) {
+    if (body[i].role === 'user' && suffix[i] <= budget) return [...head, ...body.slice(i)]
+  }
+  return msgs
 }
 
 // ---- chat-tools v1：对话副驾驶工具调用 ----
@@ -201,7 +220,7 @@ const PRESET_TAGS =
 
 /** 对话安装 Skill 确认卡片的状态机（按 assistant 消息索引挂卡） */
 interface InstallCard {
-  status: 'resolving' | 'ready' | 'installing' | 'done' | 'error'
+  status: 'resolving' | 'candidates' | 'ready' | 'installing' | 'done' | 'error'
   directive: SkillInstallDirective
   result?: SkillResolveResult
   error?: string
@@ -253,6 +272,31 @@ export default function ChatPanel({
   const abortRef = useRef<(() => void) | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const sessionCreatedRef = useRef<string | null>(null)
+  // 当前文本供应商：思考开关/读图 gating/能力徽章/上下文裁剪都按它的模型目录声明走
+  const [textProvider, setTextProvider] = useState<{ name: string; baseUrl: string; textModel: string } | null>(null)
+  // 思考开关：null = 跟随模型目录默认；仅模型声明了思考能力时显示
+  const [thinkOn, setThinkOn] = useState<boolean | null>(null)
+  // 当前回复的流式思考过程（完成后随消息落盘，历史渲染走 m.reasoning）
+  const [streamReasoning, setStreamReasoning] = useState('')
+  const cap: ModelCapability = textProvider ? modelCapability(textProvider, textProvider.textModel) : {}
+  // addAttachments 的 useCallback 依赖里不放 cap（对象每次渲染重建），经 ref 取最新值
+  const capRef = useRef(cap)
+  capRef.current = cap
+
+  // 供应商变化（设置里改模型/换 Key 后）即时刷新能力声明
+  useEffect(() => {
+    const load = (): void => {
+      void window.api
+        .invoke('settings:getLlm')
+        .then((s) => {
+          const p = s.providers.find((x) => x.id === s.textProviderId) ?? s.providers[0] ?? null
+          setTextProvider(p ? { name: p.name, baseUrl: p.baseUrl, textModel: p.textModel } : null)
+        })
+        .catch(() => {})
+    }
+    load()
+    return window.api.on('settings:llmChanged', load)
+  }, [])
 
   // ---- 会话列表 / 切换 ----
 
@@ -395,13 +439,33 @@ export default function ChatPanel({
     setCards((prev) => ({ ...prev, [idx]: { status: 'resolving', directive: d } }))
     try {
       const result = await window.api.invoke('skill:resolve', d)
-      setCards((prev) => ({ ...prev, [idx]: { status: 'ready', directive: d, result } }))
+      // 合集仓库：resolve 返回候选列表（content 为空），转候选选择态，点选后拿候选 ref 重走 resolve
+      setCards((prev) => ({
+        ...prev,
+        [idx]: { status: result.candidates?.length ? 'candidates' : 'ready', directive: d, result }
+      }))
     } catch (err) {
       setCards((prev) => ({
         ...prev,
         [idx]: { status: 'error', directive: d, error: err instanceof Error ? err.message : String(err) }
       }))
     }
+  }, [])
+
+  /** 候选选择态点选：用该候选的 blob 链接重新 resolve（走单文件解析链路出预览） */
+  const pickCandidate = useCallback(
+    (idx: number, card: InstallCard, ref: string) => {
+      void resolveCard(idx, { ...card.directive, ref }, '')
+    },
+    [resolveCard]
+  )
+
+  const cancelCard = useCallback((idx: number) => {
+    setCards((prev) => {
+      const next = { ...prev }
+      delete next[idx]
+      return next
+    })
   }, [])
 
   const installCard = useCallback(
@@ -463,18 +527,22 @@ export default function ChatPanel({
 
   // ---- 发送一轮 ----
 
-  /** 当轮自动附带的工程上下文：贴图工程喂卡片文案，否则喂正文（只拼 API 请求，不进可见历史） */
-  const buildContext = useCallback(async (): Promise<string> => {
-    if (!ctxOn || !project) return ''
-    if (format === 'cards') {
-      const deck = await window.api.invoke('cards:read', project)
-      if (!deck?.cards.length) return ''
-      const label = deck.format === 'xhs' ? '小红书' : '公众号'
-      return chatContext('cards', `格式：${label}贴图，共 ${deck.cards.length} 张\n${cardsPlainText(deck.cards)}`)
-    }
-    // 正文过长时截断，避免每轮都把超长文章全量塞进请求
-    return chatContext('article', article.slice(0, 8000))
-  }, [ctxOn, project, format, article])
+  /** 当轮自动附带的工程上下文：贴图工程喂卡片文案，否则喂正文（只拼 API 请求，不进可见历史）。
+   *  正文按模型上下文窗口截断（窗口 60% 折算字符数，中文 1 token≈1.6 字符）；未知窗口保持 8000 字符现状 */
+  const buildContext = useCallback(
+    async (cap: ModelCapability): Promise<string> => {
+      if (!ctxOn || !project) return ''
+      if (format === 'cards') {
+        const deck = await window.api.invoke('cards:read', project)
+        if (!deck?.cards.length) return ''
+        const label = deck.format === 'xhs' ? '小红书' : '公众号'
+        return chatContext('cards', `格式：${label}贴图，共 ${deck.cards.length} 张\n${cardsPlainText(deck.cards)}`)
+      }
+      const maxChars = cap.contextWindow ? Math.max(8000, Math.floor((cap.contextWindow * 0.6) / 1.6)) : 8000
+      return chatContext('article', article.slice(0, maxChars))
+    },
+    [ctxOn, project, format, article]
+  )
 
   // ---- 附件处理 ----
   const addAttachments = useCallback(
@@ -482,6 +550,12 @@ export default function ChatPanel({
       if (!files) return
       for (const f of Array.from(files)) {
         if (f.type.startsWith('image/')) {
+          // 模型目录声明了输入模态但不带 image：直接拦下，免得请求发出去才报错
+          const c = capRef.current
+          if (c.inputModalities && !hasImageInput(c)) {
+            onToast(`当前模型不支持读图（vision），已跳过：${f.name}`)
+            continue
+          }
           const dataUrl = await new Promise<string>((res) => {
             const r = new FileReader()
             r.onload = () => res(r.result as string)
@@ -532,6 +606,7 @@ export default function ChatPanel({
       if (!preset) setInput('')
       setError(null)
       setStreaming(true)
+      setStreamReasoning('')
       // 开了联网：先搜再喂——结果只拼进当轮 API 请求，不进可见历史/落盘会话
       let web: WebSearchResult[] = []
       if (webOn) {
@@ -544,7 +619,7 @@ export default function ChatPanel({
           setSearching(false)
         }
       }
-      const ctx = await buildContext()
+      const ctx = await buildContext(cap)
       // 文档附件：提取文本拼入上下文
       const docCtx = attachDocs.length > 0
         ? `<附件文档>\n${attachDocs.map((d) => `【${d.name}】\n${d.text}`).join('\n\n---\n\n')}\n</附件文档>\n`
@@ -587,12 +662,15 @@ export default function ChatPanel({
         ...messages,
         apiUser
       ]
+      // 思考开关（null=模型目录默认）与历史裁剪：超窗口的旧消息按 user 边界成段丢弃
+      const thinkingOn = thinkOn ?? cap.reasoning?.defaultOn ?? false
+      const history = [...trimHistory(api, cap)]
       // 工具循环（chat-tools v1）：读类静默 / 写类结果卡 / 推送确认卡；最多 TOOL_ROUNDS_MAX 轮
       const bubbleIdx = display.length
-      const history = [...api]
       const onDelta = (full: string): void => {
         setMessages([...display, { role: 'assistant', content: full } as ChatMessage])
       }
+      const onReasoning = (full: string): void => setStreamReasoning(full)
       const addToolCard = (tc: ToolCallInfo): number => {
         const list = toolCardsRef.current[bubbleIdx] ?? []
         const idx = list.length
@@ -617,8 +695,9 @@ export default function ChatPanel({
         })
 
       abortRef.current = null
-      // 最后一轮的文本提升到 try 外：失败落盘（保留现场）时 catch 里也能拿到
+      // 最后一轮的文本/思考提升到 try 外：失败落盘（保留现场）时 catch 里也能拿到
       let lastText = ''
+      let lastReasoning = ''
       try {
         let forceTextOnly = false
         let toolFails = 0
@@ -629,7 +708,12 @@ export default function ChatPanel({
           // 最后一轮不给工具：到达上限时模型只能文字总结；连续失败后也强制文字收尾
           const useTools = native.length > 0 && !forceTextOnly && round < TOOL_ROUNDS_MAX - 1
           const ask = (withTools: boolean): Promise<ChatRoundResult> => {
-            const r = chatOnceWithTools(history, { tools: withTools ? native : undefined, onDelta })
+            const r = chatOnceWithTools(history, {
+              tools: withTools ? native : undefined,
+              thinking: thinkingOn,
+              onDelta,
+              onReasoning
+            })
             abortRef.current = r.abort
             return r.promise
           }
@@ -648,6 +732,7 @@ export default function ChatPanel({
             ? { calls: [] as ToolCallInfo[], cleaned: res.text }
             : parseTextToolCalls(res.text)
           if (res.toolCalls?.length && !nativeProven(modelKey)) markNativeProven(modelKey)
+          if (res.reasoning) lastReasoning = res.reasoning
           // 入参统一归一后再入历史与执行（原生与文本协议两条路同一口径）：
           // 模型爱写 line_height / 把数组写成 JSON 字符串，不归一的表现是工具报成功而 meta 没写
           const roundCalls: ToolCallInfo[] = expandWrapperCalls(
@@ -720,7 +805,10 @@ export default function ChatPanel({
         else if (claimsWrite && outcomes.size === 0 && !emittedBlock)
           notes.push('注意：本轮没有执行任何工具，也没有产出修改稿卡片——上述「已完成」不可信，内容并未落到工程。')
         const note = notes.length ? `${lastText.trim() ? '\n\n' : ''}${notes.join('\n')}` : ''
-        const all = [...display, { role: 'assistant', content: lastText + note } as ChatMessage]
+        const all = [
+          ...display,
+          { role: 'assistant', content: lastText + note, ...(lastReasoning ? { reasoning: lastReasoning } : {}) } as ChatMessage
+        ]
         setMessages(all)
         await persist(all)
         // 回复尾部带 skill-install 指令：自动发起预览，弹确认卡片（降级路径的围栏协议照常生效）
@@ -731,10 +819,13 @@ export default function ChatPanel({
         setError(msg)
         // 供应商拒收 tools 参数（报错带 tool 字样）：只记当前这个模型，工具转文本协议
         if (/tool/i.test(msg)) markNativeToolsRejected(modelKey)
-        // 失败也落盘：保留现场供取证 + 已生成的部分文本
-        if (lastText) {
+        // 失败也落盘：保留现场供取证 + 已生成的部分文本与思考
+        if (lastText || lastReasoning) {
           try {
-            await persist([...display, { role: 'assistant', content: lastText } as ChatMessage])
+            await persist([
+              ...display,
+              { role: 'assistant', content: lastText, ...(lastReasoning ? { reasoning: lastReasoning } : {}) } as ChatMessage
+            ])
           } catch {
             // 落盘失败不掩盖原错误
           }
@@ -744,7 +835,7 @@ export default function ChatPanel({
         abortRef.current = null
       }
     },
-    [input, streaming, messages, skill, webOn, onToast, persist, resolveCard, buildContext, attachImages, attachDocs, format, onApplyAccent, onApplyArticleAccent, onCustomThemesChanged]
+    [input, streaming, messages, skill, webOn, onToast, persist, resolveCard, buildContext, attachImages, attachDocs, format, onApplyAccent, onApplyArticleAccent, onCustomThemesChanged, cap, thinkOn]
   )
 
   const abort = useCallback(() => abortRef.current?.(), [])
@@ -842,6 +933,17 @@ export default function ChatPanel({
           const articleState = articleCards[i]
           return (
             <div key={i} className={`mb-2 flex flex-col ${m.role === 'user' ? 'items-end' : 'items-start'}`}>
+              {m.role === 'assistant' &&
+                (m.reasoning || (streaming && i === messages.length - 1 && streamReasoning)) && (
+                  <details className="max-w-[92%] rounded-lg border border-panel-3 bg-panel-2 px-2.5 py-1.5 text-[11px] text-ink-dim">
+                    <summary className="cursor-pointer select-none">
+                      {streaming && i === messages.length - 1 && !mText ? '思考中…' : '思考过程'}
+                    </summary>
+                    <div className="mt-1 max-h-48 overflow-y-auto whitespace-pre-wrap break-words leading-relaxed">
+                      {m.reasoning || streamReasoning}
+                    </div>
+                  </details>
+                )}
               <div
                 className={`max-w-[92%] break-words whitespace-pre-wrap px-3 py-2 text-[12.5px] leading-relaxed ${
                   m.role === 'user' ? 'rounded-[12px_4px_12px_12px] bg-accent/15 text-ink' : 'rounded-[4px_12px_12px_12px] bg-panel-3 text-ink'
@@ -936,6 +1038,31 @@ export default function ChatPanel({
                     </button>
                   )}
                   {card?.status === 'resolving' && <p className="flex items-center gap-1.5 text-ink-dim"><Icon name="spinner" size={12} className="mr-0 animate-spin" />正在获取 Skill…</p>}
+                  {card?.status === 'candidates' && card.result?.candidates && (
+                    <>
+                      <p className="flex items-center gap-1.5 font-semibold text-ink"><Icon name="package" size={12} className="" />合集仓库发现 {card.result.candidates.length} 个 Skill，选择要安装的：</p>
+                      <div className="mt-1 max-h-56 space-y-1 overflow-y-auto pr-1">
+                        {card.result.candidates.map((c) => (
+                          <button
+                            key={c.ref}
+                            onClick={() => pickCandidate(i, card, c.ref)}
+                            className="block w-full rounded bg-panel-3 px-2 py-1 text-left text-ink hover:bg-panel"
+                          >
+                            {c.name}
+                            <span className="ml-1.5 break-all text-[11px] text-ink-dim">{c.path}</span>
+                          </button>
+                        ))}
+                      </div>
+                      <div className="mt-1.5 flex gap-2">
+                        <button
+                          onClick={() => cancelCard(i)}
+                          className="rounded bg-panel-3 px-3 py-1 text-ink-dim hover:bg-panel"
+                        >
+                          取消
+                        </button>
+                      </div>
+                    </>
+                  )}
                   {(card?.status === 'ready' || card?.status === 'installing') && card.result && (
                     <>
                       <p className="flex items-center gap-1.5 font-semibold text-ink"><Icon name="package" size={12} className="" />安装 Skill：{card.result.name}</p>
@@ -963,13 +1090,7 @@ export default function ChatPanel({
                           </button>
                         )}
                         <button
-                          onClick={() =>
-                            setCards((prev) => {
-                              const next = { ...prev }
-                              delete next[i]
-                              return next
-                            })
-                          }
+                          onClick={() => cancelCard(i)}
                           disabled={card.status === 'installing'}
                           className="rounded bg-panel-3 px-3 py-1 text-ink-dim hover:bg-panel disabled:opacity-40"
                         >
@@ -1035,9 +1156,8 @@ export default function ChatPanel({
         </div>
       )}
 
-      {/* 输入区（shrink-0：附件预览条再高也不许被压，消息区该让的是自己那一份高度）
-          内缩一律 12px（p-3）——与头部、消息流同一列，输入框壳不再比气泡往左凸 4px */}
-      <div className="shrink-0 border-t border-panel-3 p-3">
+      {/* 输入区（shrink-0：附件预览条再高也不许被压，消息区该让的是自己那一份高度） */}
+      <div className="shrink-0 border-t border-panel-3 p-2">
         {/* 附件预览条 */}
         {(attachImages.length > 0 || attachDocs.length > 0) && (
           <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
@@ -1084,31 +1204,58 @@ export default function ChatPanel({
           className="hidden"
           onChange={(e) => { void addAttachments(e.target.files); e.target.value = '' }}
         />
-        {/* 工具胶囊行与上方文字同一 12px 列：hover 底色左缘不再比正文凸出 4px。
-            发送/停止键放在滚动区**外面**——右栏窄时胶囊横滑，但发送键永远在右下角点得到 */}
-        <div className="flex min-w-0 items-center gap-1 px-3 pb-2.5">
-          <div className="no-scrollbar flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
-            <ToolPill icon="clip" onClick={() => attachRef.current?.click()} title="附带图片（走 vision）或文档（提取文本）">
-              附件
-            </ToolPill>
-            <ToolPill on={webOn} icon="globe" onClick={() => setWebOn((v) => !v)} title="联网搜索：开启后每轮先搜索再回答（时效性问题建议开）">
-              联网
-            </ToolPill>
+        <div className="no-scrollbar flex min-w-0 items-center gap-1 overflow-x-auto px-2 pb-2">
+          {(() => {
+            // 能力徽章：模型目录有声明才显示（上下文/读图/思考）
+            const badges = [contextBadge(cap), hasImageInput(cap) ? '读图' : '', cap.reasoning ? '思考' : ''].filter(Boolean)
+            if (!badges.length) return null
+            return (
+              <span
+                className="inline-flex h-[26px] shrink-0 items-center whitespace-nowrap text-[10.5px] text-ink-dim"
+                title={`${textProvider?.name ?? ''} · ${textProvider?.textModel ?? ''}（按模型目录声明展示）`}
+              >
+                {badges.join('·')}
+              </span>
+            )
+          })()}
+          <ToolPill
+            icon="clip"
+            onClick={() => attachRef.current?.click()}
+            title={
+              cap.inputModalities && !hasImageInput(cap)
+                ? '当前模型不支持读图（vision），仅可附带文档（提取文本）'
+                : '附带图片（走 vision）或文档（提取文本）'
+            }
+          >
+            附件
+          </ToolPill>
+          {cap.reasoning && (
             <ToolPill
-              on={ctxOn && !!project}
-              disabled={!project}
-              icon="book"
-              onClick={() => setCtxOn((v) => !v)}
-              title="工程上下文：开启后每轮自动附带当前正文/贴图文案，AI 能直接回答内容相关问题"
+              on={thinkOn ?? cap.reasoning.defaultOn}
+              icon="brain"
+              onClick={() => setThinkOn(!(thinkOn ?? cap.reasoning!.defaultOn))}
+              title={`模型思考：${(thinkOn ?? cap.reasoning.defaultOn) ? '已开启' : '已关闭'}，开启后模型先推理再回答，耗时略增`}
             >
-              上下文
+              思考
             </ToolPill>
-          </div>
+          )}
+          <ToolPill on={webOn} icon="globe" onClick={() => setWebOn((v) => !v)} title="联网搜索：开启后每轮先搜索再回答（时效性问题建议开）">
+            联网
+          </ToolPill>
+          <ToolPill
+            on={ctxOn && !!project}
+            disabled={!project}
+            icon="book"
+            onClick={() => setCtxOn((v) => !v)}
+            title="工程上下文：开启后每轮自动附带当前正文/贴图文案，AI 能直接回答内容相关问题"
+          >
+            上下文
+          </ToolPill>
           {streaming ? (
             <button
               onClick={abort}
               title="停止生成"
-              className="inline-flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-lg bg-panel-3 text-st-bad hover:bg-panel"
+              className="ml-auto inline-flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-lg bg-panel-3 text-st-bad hover:bg-panel"
             >
               <Icon name="square" size={13} />
             </button>
@@ -1117,7 +1264,7 @@ export default function ChatPanel({
               onClick={() => void send()}
               disabled={!input.trim() && attachImages.length === 0 && attachDocs.length === 0}
               title="发送（Enter）"
-              className="inline-flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-lg bg-accent text-white hover:brightness-110 disabled:opacity-40"
+              className="ml-auto inline-flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-lg bg-accent text-white hover:brightness-110 disabled:opacity-40"
             >
               <Icon name="send" size={14} />
             </button>

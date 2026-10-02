@@ -247,9 +247,9 @@ C:\Users\PC\Desktop\tuwen-editor\workspace\<分类>\<项目名>\
 
 - **格式**：兼容 SKILL.md（frontmatter: name/description + Markdown 正文），与 `.agents/skills` 生态一致
 - **导入**：本地目录导入到 `skills\`；左栏 Skill 管理页可启用/停用/查看
-- **在线导入**：支持四种来源 `inline`（直接粘正文）/ `path` / `url` / `github`，GitHub 源走**多镜像并发竞速**并尝试多个候选路径，墙内可直连
+- **在线导入**：支持四种来源 `inline`（直接粘正文）/ `path` / `url` / `github`，GitHub 源走**多镜像并发竞速**（ghproxy 双镜像 + jsdelivr CDN 变体）并尝试多个候选路径，墙内可直连；仓库引用落空时自动**探测合集仓库内的全部 SKILL.md**（GitHub Trees API 优先，403 限额/被墙时退 jsdelivr 文件清单），确认卡片转候选选择态，点选单个 SKILL.md 后走单文件解析链路出预览安装
 - **挂载**：副驾驶按任务类型自动推荐挂载（脑暴→选题类 Skill；生成→风格类 Skill），也可手动指定；挂载即注入系统提示
-- **预装**：`wechat-viral-topic`（选题方法论）、`khazix-writer`（个人写作风格），以"预装可删"方式放入 `skills\`
+- **预装**：6 个创作链路 Skill，以"预装可删"方式放入 `skills\`（打包源在 `app/resources/skills/`，首启种子复制不覆盖已存在目录）。按创作向导七步对应：`wechat-viral-topic`（选题：爆款选题/标题/全形态方案，自包含 12 心法与 8 维打分卡）、`outline-architect`（大纲：结构骨架 + 素材位标注大纲卡）、`khazix-writer`（成文：个人写作风格方法论）、`figure-card-copy`（配图：三管线选型 + 贴图卡片文案 + 生图提示词）、`title-cover-polish`（标题封面：8 公式 + 多平台字数红线 + A/B）、`publish-precheck`（审阅：五层检查 + 违禁词分级报告）。所有预装 Skill 均为自包含单文件（应用仅注入 SKILL.md 全文，模型无文件读取通道，禁止 @references 外链写法）
 - **账号绑定**：分类级预设可指定新工程默认挂载的写作 Skill（§4.1）
 
 > 注：**「发布前合规审查」不在应用代码内**，它是外部 Skill（`lig-publish-precheck`），通过本应用的 `read_article` / `patch_article` / `save_review` 三个 MCP 工具落地。这正是 §10.2 采用"返回提示词"设计的收益之一。

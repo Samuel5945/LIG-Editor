@@ -3,6 +3,9 @@ import {
   parseSkillDirective,
   extractInlineContent,
   githubCandidates,
+  githubRepoInfo,
+  pickSkillMdPaths,
+  skillNameFromPath,
   withMirrors,
   nameFromRef,
   detectScriptDep
@@ -89,14 +92,67 @@ describe('githubCandidates', () => {
 })
 
 describe('withMirrors', () => {
-  it('github 域名追加镜像变体', () => {
+  it('github 域名追加镜像变体，raw 直链（具体分支）额外加 jsdelivr CDN 变体', () => {
     const r = withMirrors('https://raw.githubusercontent.com/a/b/main/SKILL.md')
-    expect(r).toHaveLength(3)
+    expect(r).toHaveLength(4)
     expect(r[1]).toMatch(/^https:\/\/ghproxy\.net\/https:\/\//)
+    expect(r).toContain('https://cdn.jsdelivr.net/gh/a/b@main/SKILL.md')
+  })
+
+  it('HEAD 游标不加 jsdelivr 变体（jsdelivr 不认 HEAD）', () => {
+    const r = withMirrors('https://raw.githubusercontent.com/a/b/HEAD/SKILL.md')
+    expect(r).toHaveLength(3)
+    expect(r.every((u) => !u.includes('jsdelivr'))).toBe(true)
   })
 
   it('非 github 域名不加镜像', () => {
     expect(withMirrors('https://example.com/s.md')).toEqual(['https://example.com/s.md'])
+  })
+})
+
+describe('githubRepoInfo', () => {
+  it('owner/repo 短引用与仓库链接提取 owner/repo', () => {
+    expect(githubRepoInfo('alchaincyf/huashu-skills')).toEqual({ owner: 'alchaincyf', repo: 'huashu-skills' })
+    expect(githubRepoInfo('https://github.com/a/b/')).toEqual({ owner: 'a', repo: 'b' })
+    expect(githubRepoInfo('https://github.com/a/b.git')).toEqual({ owner: 'a', repo: 'b' })
+  })
+
+  it('文件级引用（blob/raw/raw 直链）返回 null，无需目录探测', () => {
+    expect(githubRepoInfo('https://github.com/a/b/blob/main/SKILL.md')).toBeNull()
+    expect(githubRepoInfo('https://raw.githubusercontent.com/a/b/main/SKILL.md')).toBeNull()
+    expect(githubRepoInfo('https://example.com/x')).toBeNull()
+  })
+})
+
+describe('pickSkillMdPaths', () => {
+  it('只留 SKILL.md，过滤 node_modules/点目录，浅层在前', () => {
+    const picked = pickSkillMdPaths([
+      'skills/deep/SKILL.md',
+      'huashu-topic-gen/SKILL.md',
+      'SKILL.md',
+      'node_modules/pkg/SKILL.md',
+      '.github/templates/SKILL.md',
+      '.obsidian/SKILL.md',
+      'README.md',
+      'docs/SKILL.md.bak'
+    ])
+    expect(picked).toEqual(['SKILL.md', 'huashu-topic-gen/SKILL.md', 'skills/deep/SKILL.md'])
+  })
+
+  it('同名目录浅层优先，同层按名称排', () => {
+    const picked = pickSkillMdPaths(['z/SKILL.md', 'a/b/SKILL.md', 'a/SKILL.md'])
+    expect(picked).toEqual(['a/SKILL.md', 'z/SKILL.md', 'a/b/SKILL.md'])
+  })
+})
+
+describe('skillNameFromPath', () => {
+  it('取 SKILL.md 上级目录名', () => {
+    expect(skillNameFromPath('huashu-topic-gen/SKILL.md', 'huashu-skills')).toBe('huashu-topic-gen')
+    expect(skillNameFromPath('skills/xxx/SKILL.md', 'repo')).toBe('xxx')
+  })
+
+  it('仓库根 SKILL.md 用仓库名', () => {
+    expect(skillNameFromPath('SKILL.md', 'my-repo')).toBe('my-repo')
   })
 })
 

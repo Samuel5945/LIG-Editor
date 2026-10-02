@@ -49,12 +49,17 @@ export function extractInlineContent(userText: string): string {
   return blocks.reduce((a, b) => (b.length > a.length ? b : a)).trim()
 }
 
-/** github.com 域名直连墙内不稳：每个候选 URL 追加加速镜像变体 */
+/** github.com 域名直连墙内不稳：每个候选 URL 追加加速镜像变体。
+ *  raw 直链（分支为具体分支名时）额外追加 jsdelivr CDN 变体——墙内可达且不经 GitHub 限额 */
 const GH_MIRRORS = ['https://ghproxy.net/', 'https://gh-proxy.com/']
 
 export function withMirrors(url: string): string[] {
   if (!/^https:\/\/(raw\.)?github(usercontent)?\.com\//.test(url)) return [url]
-  return [url, ...GH_MIRRORS.map((m) => m + url)]
+  const extra: string[] = []
+  const raw = url.match(/^https:\/\/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/([^/]+)\/(.+)$/)
+  // jsdelivr 不认 HEAD 之类的游标，只认具体分支/标签，命中不了就少一个变体（竞速容错）
+  if (raw && raw[3] !== 'HEAD') extra.push(`https://cdn.jsdelivr.net/gh/${raw[1]}/${raw[2]}@${raw[3]}/${raw[4]}`)
+  return [url, ...GH_MIRRORS.map((m) => m + url), ...extra]
 }
 
 /**
@@ -85,6 +90,32 @@ export function nameFromRef(ref: string): string {
   let last = parts[parts.length - 1] ?? ''
   if (/^skill\.md$/i.test(last) && parts.length >= 2) last = parts[parts.length - 2]
   return last.replace(/\.md$/i, '')
+}
+
+/**
+ * 仓库级 GitHub 引用 → owner/repo（供仓库内 SKILL.md 目录探测）。
+ * 只认 owner/repo 短引用与仓库主页链接；blob/raw/raw 直链等文件级引用返回 null（无需探测）
+ */
+export function githubRepoInfo(ref: string): { owner: string; repo: string } | null {
+  const r = ref.trim().replace(/\/+$/, '').replace(/\.git$/, '')
+  const repo = r.match(/^https:\/\/github\.com\/([^/]+)\/([^/]+)$/) ?? r.match(/^([\w.-]+)\/([\w.-]+)$/)
+  return repo ? { owner: repo[1], repo: repo[2] } : null
+}
+
+/** 仓库全部文件路径 → SKILL.md 候选路径：过滤依赖/点目录/构建产物，浅层在前、同级按名排 */
+export function pickSkillMdPaths(paths: string[]): string[] {
+  return paths
+    .filter((p) => /(^|\/)SKILL\.md$/i.test(p))
+    .filter((p) => !/(^|\/)(node_modules|\.git|\.github|dist|build|venv|__pycache__)\//.test(p))
+    .filter((p) => !/(^|\/)\./.test(p))
+    .sort((a, b) => a.split('/').length - b.split('/').length || a.localeCompare(b))
+}
+
+/** SKILL.md 仓库路径 → 候选展示名：取 SKILL.md 所在目录名；仓库根 SKILL.md 用仓库名 */
+export function skillNameFromPath(path: string, repo: string): string {
+  const segs = path.split('/')
+  const i = segs.findIndex((s) => /^SKILL\.md$/i.test(s))
+  return i > 0 ? segs[i - 1] : repo
 }
 
 /**
