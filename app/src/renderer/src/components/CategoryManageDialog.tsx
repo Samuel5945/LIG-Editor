@@ -3,6 +3,7 @@ import type { CategoryPreset, CategoryPresetPatch, PlatformId, SkillInfo } from 
 import { PLATFORM_LABELS } from '@shared/platformHtml'
 import { shouldSubmitOnEnter } from '@shared/imeEnter'
 import type { WechatConfig } from '@shared/wechatIpc'
+import { confirmAction } from '../confirm'
 import { DialogShell } from '../ui/DialogShell'
 import { btnCls, FIELD_CLS } from '../ui/primitives'
 import { Icon } from '../ui/Icon'
@@ -10,6 +11,8 @@ import { Icon } from '../ui/Icon'
 /**
  * 分类管理弹窗：删除（隐藏）/ 恢复 / 重命名分类 / 账号预设（默认写作 Skill、默认分发平台、绑定的公众号）。
  * - 删除 = 隐藏：分类从列表消失，目录与工程保留，可在「已删除」里恢复（预设与自定义同机制）
+ * - 彻底删除：不可恢复，确认框点名目录下将被删的工程；预设分类的名字写死在代码里，
+ *   光删目录会被列表复活，主进程另存一份「已彻底删除」留痕才真的不再出现
  * - 重命名：目录 + 工程 meta + 自定义主题 + 账号预设 + 公众号绑定同步
  * - 「未分类」是兜底分类，不可删
  * - 账号预设（账号 = 分类）：分类级默认逐项即选即存，新建该分类的工程自动继承；
@@ -25,6 +28,8 @@ interface Props {
   onToast: (msg: string) => void
   /** 变更成功后刷新（重新拉分类/主题/工程列表）；reveal = 需要在左栏树里展开给人看到的分类名 */
   onChanged: (reveal?: string) => void
+  /** 彻底删除前调用：清单里的工程若有正在编辑的，先停手关闭编辑器（主进程监听占用目录时 Windows 删不掉） */
+  onCloseProjects?: (names: string[]) => Promise<void>
   /** 打开中栏「主题库」页签（§5.6）：分类与主题的绑定关系在这里给一个明面入口 */
   onOpenThemeLibrary?: () => void
 }
@@ -40,6 +45,7 @@ export default function CategoryManageDialog({
   onClose,
   onToast,
   onChanged,
+  onCloseProjects,
   onOpenThemeLibrary
 }: Props): ReactElement {
   // 正在重命名的分类 + 输入值；正在确认删除的分类
@@ -126,6 +132,42 @@ export default function CategoryManageDialog({
     })
   }
 
+  /** 彻底删除（已隐藏的分类）：目录+工程+该分类的主题/预设/绑定一并删除，不可恢复。
+   *  删前先扫盘点名受影响的工程——「目录下全部工程」这种笼统说法不足以让人判断要丢什么。 */
+  const doPurge = (name: string): void => {
+    void run(async () => {
+      const info = await window.api.invoke('project:categoryPurgeInfo', name)
+      const total = info.projects.length
+      const lines = [`彻底删除分类「${name}」？`]
+      if (total === 0) {
+        lines.push('该分类目录下没有工程，只删空目录。')
+      } else {
+        lines.push(
+          `该分类下还有 ${total} 个工程，将随目录一并删除，不可恢复：\n` +
+            info.projects
+              .slice(0, 8)
+              .map((p) => `· ${p}`)
+              .join('\n') +
+            (total > 8 ? `\n· …等共 ${total} 个` : '')
+        )
+      }
+      lines.push(
+        info.themes.length > 0
+          ? `同时删除挂在该分类下的 ${info.themes.length} 套自定义主题，并清除账号预设与公众号绑定。`
+          : '同时清除该分类的账号预设与公众号绑定。'
+      )
+      const ok = await confirmAction(lines.join('\n'), {
+        title: '彻底删除分类',
+        okLabel: total > 0 ? `彻底删除（含 ${total} 个工程）` : '彻底删除'
+      })
+      if (!ok) return
+      await onCloseProjects?.(info.projects)
+      await window.api.invoke('project:purgeCategory', name)
+      onToast(`分类「${name}」已彻底删除`)
+      onChanged()
+    })
+  }
+
   return (
     <DialogShell icon="folder" title="分类管理" hint="账号 = 分类" width={560} maxHeight="85vh" bodyClass="px-4 pb-4" onClose={onClose}>
         {/* 内容区自己滚（面板 overflow-hidden + 内层 min-h-0 flex-1）：
@@ -143,7 +185,7 @@ export default function CategoryManageDialog({
             </button>
           )}
           <p className="mb-3 text-[11px] leading-relaxed text-ink-dim">
-            删除 = 隐藏：分类下的工程与目录全部保留，随时可恢复。重命名会同步移动工程目录并更新自定义排版、账号预设与公众号绑定。
+            删除 = 隐藏：分类下的工程与目录全部保留，随时可恢复；确要清掉时在下方「已删除」里彻底删除（目录、工程与该分类的主题/预设/绑定一并删除，不可恢复）。重命名会同步移动工程目录并更新自定义排版、账号预设与公众号绑定。
             每个分类即一个账号，可配账号级默认：新建工程自动挂载的写作 Skill、导出时预选的分发平台、推送草稿用的公众号（凭据在「设置 → 推送设置」里管，这里只选绑哪个号）。
           </p>
 
@@ -300,6 +342,9 @@ export default function CategoryManageDialog({
             {hidden.map((c) => (
               <div key={c} className="flex items-center gap-1.5 rounded bg-panel px-2 py-1 opacity-70">
                 <span className="min-w-0 flex-1 truncate text-xs text-ink">{c}</span>
+                <button onClick={() => doPurge(c)} disabled={busy} className={btnDanger} title="目录与其中工程、该分类的主题/预设/绑定一并删除，不可恢复">
+                  <Icon name="trash" size={11} className="mr-1" />彻底删除
+                </button>
                 <button onClick={() => doRestore(c)} disabled={busy} className={btn}>
                   <Icon name="undo" size={11} className="mr-1" />恢复
                 </button>

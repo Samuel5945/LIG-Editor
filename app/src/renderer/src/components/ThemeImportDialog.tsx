@@ -11,12 +11,17 @@ import type { ArticleTheme } from '@shared/types'
 
 /**
  * 🎨 导入排版弹窗：粘贴公众号文章 HTML 或链接 → 本地启发式提取排版调性 →
- * 迷你预览确认 → 命名保存为「自定义主题 + 同名分类」，当前工程切到该分类即套用。
+ * 迷你预览确认 → 命名保存（主题独立命名，可挂进已有分类或自动建同名分类）→
+ * 保存即激活为该分类当前主题，当前工程切到该分类即套用。
  */
 
 interface Props {
+  /** 已有分类（归属下拉用）；一个分类可挂多套主题，导入不再顶掉旧主题 */
+  categories: string[]
+  /** 默认归属分类（当前工程的分类） */
+  defaultCategory?: string
   onClose: () => void
-  onSaved: (name: string) => void
+  onSaved: (name: string, category: string) => void
   onToast: (msg: string) => void
 }
 
@@ -38,12 +43,14 @@ const btnPrimary = btnCls('pri')
 const btnGhost = btnCls('sec')
 const inputCls = `w-full ${FIELD_CLS} py-1`
 
-export default function ThemeImportDialog({ onClose, onSaved, onToast }: Props): ReactElement {
+export default function ThemeImportDialog({ categories, defaultCategory, onClose, onSaved, onToast }: Props): ReactElement {
   const [html, setHtml] = useState('')
   const [url, setUrl] = useState('')
   const [busy, setBusy] = useState(false)
   const [parsed, setParsed] = useState<ParsedTheme | null>(null)
   const [name, setName] = useState('')
+  // 归属分类：'' = 自动建与主题同名的分类；可选已有分类（一分类可挂多套主题）
+  const [category, setCategory] = useState(defaultCategory ?? '')
   const [saving, setSaving] = useState(false)
 
   const fetchUrl = async (): Promise<void> => {
@@ -89,9 +96,10 @@ export default function ThemeImportDialog({ onClose, onSaved, onToast }: Props):
     setSaving(true)
     try {
       const theme: ArticleTheme = { ...parsed.theme }
-      await window.api.invoke('customTheme:save', name.trim(), { ...theme, origin: 'import' })
-      onSaved(name.trim())
-      onToast(`已保存主题「${name.trim()}」，把工程切到该分类即可套用`)
+      const cat = category || name.trim()
+      await window.api.invoke('customTheme:save', name.trim(), { ...theme, origin: 'import' }, cat)
+      onSaved(name.trim(), cat)
+      onToast(`已保存主题「${name.trim()}」并套用到分类「${cat}」，把工程切到该分类即可查看`)
       onClose()
     } catch (err) {
       onToast(`保存失败：${err instanceof Error ? err.message : err}`)
@@ -132,7 +140,7 @@ export default function ThemeImportDialog({ onClose, onSaved, onToast }: Props):
               placeholder="把公众号文章的 HTML 源码粘贴到这里（微信编辑器里选「复制」→ 粘贴到文本文件后复制源码，或直接用网页另存）&#10;&#10;也可以直接粘贴链接抓取。"
               className="min-h-0 flex-1 resize-none rounded-lg border border-panel-3 bg-panel p-2 font-mono text-[11px] leading-relaxed text-ink outline-none focus:border-accent"
             />
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <button onClick={parse} disabled={!html.trim() || busy} className={btnPrimary}>
                 <Icon name="search" size={12} className="mr-1.5" />解析排版
               </button>
@@ -141,9 +149,22 @@ export default function ThemeImportDialog({ onClose, onSaved, onToast }: Props):
                   <input
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder="主题/分类名"
-                    className={`${inputCls} max-w-[220px]`}
+                    placeholder="主题名"
+                    className={`${inputCls} max-w-[170px]`}
                   />
+                  <select
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value)}
+                    title="归属分类：保存后即套用到该分类（一个分类可挂多套主题，不会顶掉旧的）"
+                    className="max-w-[190px] shrink-0 rounded border border-panel-3 bg-panel-2 px-1 py-1 text-[11px] text-ink-dim outline-none"
+                  >
+                    <option value="">新建分类「{name.trim() || '…'}」</option>
+                    {categories.map((c) => (
+                      <option key={c} value={c}>
+                        存入分类「{c}」
+                      </option>
+                    ))}
+                  </select>
                   <button onClick={() => void save()} disabled={saving || !name.trim()} className={btnPrimary}>
                     {saving ? '保存中…' : ' 保存为主题'}
                   </button>
@@ -158,7 +179,7 @@ export default function ThemeImportDialog({ onClose, onSaved, onToast }: Props):
                     · {s}
                   </p>
                 ))}
-                <p className="mt-1 text-ink-dim">保存后自动建同名分类，把工程切到该分类即套用（也可在对话里让 AI 直接导入）。</p>
+                <p className="mt-1 text-ink-dim">保存即套用到所选分类（缺省自动建同名分类；一个分类可挂多套主题，不会顶掉旧的）。</p>
               </div>
             )}
           </div>

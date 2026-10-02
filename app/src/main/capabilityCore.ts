@@ -7,6 +7,7 @@ import {
   metaPatchToThemeKeys,
   normalizeThemeKeys,
   sanitizeThemePatchDetailed,
+  THEME_KEYS_HINT,
   THEME_OVERRIDE_KEYS
 } from '@shared/categoryThemes'
 import { ALL_CATEGORIES } from '@shared/categories'
@@ -25,7 +26,7 @@ import { exportArticleHtml, exportPlatformHtml } from './exporter'
 import { exportDocx, exportPdf } from './docExport'
 import { pushCards, pushDraft } from './wechatPublish'
 import { readSkill } from './skillStore'
-import { saveCustomTheme } from './themeStore'
+import { saveTheme } from './themeStore'
 import { broadcast } from './ipc'
 
 /**
@@ -486,7 +487,7 @@ export const TOOLS: ToolDef[] = [
       const { notes } = clampThemeNumbers(bag)
       // 写入一律过同一套校验：不合法的值不落脏盘、也不装成功。
       // 实测过 set_theme 传 h2Border: 123 → 旧实现把 123 原样写进 meta 并返回 ok，作者看到的就是「设了没变化」
-      const { values: ok, unknown: unmapped, invalid } = sanitizeThemePatchDetailed(bag)
+      const { values: ok, unknown: unmapped, invalid, coerced } = sanitizeThemePatchDetailed(bag)
       const bag2 = meta as unknown as Record<string, unknown>
       // 写入必须以「归一后的键名」为准，不能拿原始键判：
       // 上一版按 `k in bag` 过滤，别名值（paragraphSpacing→pGap、cornerRadius→bodyRadius）虽然已在 ok 里备好，
@@ -504,7 +505,7 @@ export const TOOLS: ToolDef[] = [
       // null 是「显式恢复默认」，走上面的清除分支，不能混进「值不合法未写入」——
       // 那样会把成功报成失败，和把失败报成成功一样误导作者
       const droppedKeys = invalid.filter((k) => k in norm.patch && norm.patch[k] !== null)
-      const reports = [...notes]
+      const reports = [...notes, ...coerced]
       if (ignoredKeys.length) reports.push(`不认识的参数已忽略：${ignoredKeys.join('、')}（可用键见本工具说明）`)
       if (droppedKeys.length)
         reports.push(`以下字段值不合法，未写入：${droppedKeys.join('、')}（色值要 #rrggbb、数值不带单位、枚举取说明里的形态）`)
@@ -514,15 +515,16 @@ export const TOOLS: ToolDef[] = [
   {
     name: 'save_theme_preset',
     description:
-      '为分类设计并保存整套排版主题（写入自定义主题库，同名分类目录自动创建，保存即生效——该分类下打开工程即套用）。theme 为完整 ArticleTheme 主题对象：accent 必填（十六进制强调色）；常用字段 fontFamily 字体栈 / lineHeight 行高 1.5-3 / letterSpacing 字距 / fontSize 正文字号 / headingFontSize 标题字号 / bodyBg 正文背景卡（浅色系） / bodyRadius 圆角 / bodyPadding 内边距 / pGap 段间距 / h1Style·h2Style·h2Num·h3Mark 标题版式 / quoteStyle·quoteBorder·quoteBg·quoteText 引用 / hrStyle·hrColor 分隔线 / h2Border H2 条色 / hrStyle 分隔线 / strongStyle·strongBg·strongColor 加粗 / tableStyle·tableHeaderBg·tableBorder·tableHeaderText 表格 / imgRadius 图片圆角 / bodyText·headingColor·h2Bg 色系。非法或缺失字段自动回落默认调性',
+      '为分类设计并保存整套排版主题（写入自定义主题库，一个分类可存多套主题，保存即激活为该分类当前主题——该分类下打开工程即套用）。name 为主题名；category 为归属分类（缺省与主题同名，同名分类目录自动创建）。theme 为完整 ArticleTheme 主题对象：accent 必填（十六进制强调色 #rrggbb，rgb()/rgba()/8位hex/渐变串自动转换）；常用字段 fontFamily 字体栈 / lineHeight 行高 1.5-3 / letterSpacing 字距 / fontSize 正文字号 / headingFontSize 标题字号 / bodyBg 正文背景卡（浅色系） / bodyRadius 圆角 / bodyPadding 内边距 / pGap 段间距 / h1Style·h2Style·h2Num·h3Mark 标题版式 / quoteStyle·quoteBorder·quoteBg·quoteText 引用 / hrStyle·hrColor 分隔线 / h2Border H2 条色 / hrStyle 分隔线 / strongStyle·strongBg·strongColor 加粗 / tableStyle·tableHeaderBg·tableBorder·tableHeaderText 表格 / imgRadius 图片圆角 / bodyText·headingColor·h2Bg 色系。非法或缺失字段自动回落默认调性',
     inputSchema: {
       type: 'object',
       properties: {
-        name: { type: 'string', description: '主题名（=分类名，将作为目录名自动创建）' },
+        name: { type: 'string', description: '主题名（主题库里显示的名字；新主题与旧主题可并存）' },
+        category: { type: 'string', description: '归属分类（保存即激活为该分类当前主题；缺省与主题同名，同名分类目录自动创建）' },
         theme: {
           type: 'object',
           description:
-            '完整排版主题对象，**键名必须严格用下面这些**（accent 必填）：accent / fontFamily / lineHeight(1.5-3) / letterSpacing / fontSize(10-40) / headingFontSize(10-40) / bodyAlign / headingAlign / h1Style / h2Style / h2Num / h3Mark / bodyBg / pGap(0-48) / bodyText / headingColor / quoteStyle / quoteBorder / hrStyle / strongStyle / strongBg / strongColor / imgRadius(0-40) / bodyRadius(0-40) / bodyPadding / tableStyle / tableHeaderBg / tableBorder / tableHeaderText / h2Bg / quoteBg / quoteText / hrColor / h2Border。不要自造键名（如 text_color / font_family / paragraph_spacing），系统会拒收并在结果里列出',
+            '完整排版主题对象，**键名必须严格用下面这些**（accent 必填）：accent / fontFamily / lineHeight(1.5-3) / letterSpacing / fontSize(10-40) / headingFontSize(10-40) / bodyAlign / headingAlign / h1Style / h2Style / h2Num / h3Mark / bodyBg / pGap(0-48) / bodyText / headingColor / quoteStyle / quoteBorder / hrStyle / strongStyle / strongBg / strongColor / imgRadius(0-40) / bodyRadius(0-40) / bodyPadding / tableStyle / tableHeaderBg / tableBorder / tableHeaderText / h2Bg / quoteBg / quoteText / hrColor / h2Border。accent 传 #rrggbb 即可（rgb()/rgba()、8位hex、渐变串自动转换成 hex）。不要自造键名（如 text_color / font_family / paragraph_spacing），不认识的键会在结果里照实列出',
           additionalProperties: false
         }
       },
@@ -533,17 +535,49 @@ export const TOOLS: ToolDef[] = [
       // 只认 name 时实测连续两轮报「缺少参数 name」，第三轮才蒙对
       const name = str(a, 'name', false) || str(a, 'category', false)
       if (!name)
-        throw new Error('缺少参数 name（主题名，同时作为分类目录名），形状：{"name":"主题名","theme":{"accent":"#7c3aed", ...}}')
-      // 主题名也接受 category 写法（模型常把「给哪个分类」当成参数名），两者都缺才报错
-      const themeRaw = (a.theme ?? {}) as Record<string, unknown>
-      const { values, unknown, invalid } = sanitizeThemePatchDetailed(themeRaw)
-      const patch = metaPatchToThemeKeys(values)
-      if (!patch.accent)
         throw new Error(
-          'theme.accent 必填（十六进制强调色），缺失则整套主题无法成立；theme 的键名须与工具说明一致'
+          '缺少参数 name（主题名；可选 category 指定归属分类，缺省与主题同名并自动创建分类目录），形状：{"name":"清新蓝调","theme":{"accent":"#7c3aed", ...}}'
         )
+      // 主题名也接受 category 写法（模型常把「给哪个分类」当成参数名），两者都缺才报错。
+      // theme 被整体二次编码成 JSON 字符串（双层编码是模型常见失误）时先救回对象
+      let themeRaw: Record<string, unknown>
+      let themeUnparsed = ''
+      if (typeof a.theme === 'string') {
+        try {
+          themeRaw = JSON.parse(a.theme) as Record<string, unknown>
+        } catch {
+          themeRaw = {}
+          themeUnparsed = a.theme
+        }
+      } else {
+        themeRaw = (a.theme ?? {}) as Record<string, unknown>
+      }
+      const { values, unknown, invalid, coerced } = sanitizeThemePatchDetailed(themeRaw)
+      const patch = metaPatchToThemeKeys(values)
+      if (!patch.accent) {
+        // 报错必须带上「实际收到了什么」：只说「accent 必填」时模型看不出自己错在哪，
+        // 实测同一份参数原样重试两轮。accent 已支持 rgb()/渐变自动转换，走到这里说明真的没有可识别色
+        const received = themeUnparsed
+          ? `theme 是一段解析不成对象的文本：「${themeUnparsed.slice(0, 80)}」`
+          : Object.keys(themeRaw).length
+            ? `实际收到的 theme：${Object.entries(themeRaw)
+                .map(([k, v]) =>
+                  typeof v === 'string'
+                    ? `${k}='${v.trim().slice(0, 50)}'`
+                    : v !== null && typeof v === 'object'
+                      ? `${k}=${Array.isArray(v) ? '[…]' : '{…}'}`
+                      : `${k}=${String(v)}`
+                )
+                .join('、')}`
+            : 'theme 是空对象'
+        throw new Error(
+          `theme.accent 缺失或不是可识别的色值，整套主题无法成立。${received}。可用键连取值口径：${THEME_KEYS_HINT}。色值类传 #rrggbb（rgb()/rgba()/8位hex/渐变串自动转换）；accent 必填、其余可缺省。形状示例：{"accent":"#7c3aed","lineHeight":1.8,"pGap":16}`
+        )
+      }
       if (!Object.keys(patch).length) throw new Error('theme 里没有一个可识别的键，请严格按工具说明的键名重发')
-      saveCustomTheme(name, { ...(patch as ArticleTheme), origin: 'panel' })
+      // 归属分类缺省与主题同名（旧口径兼容）；保存即激活为该分类当前主题，同名主题覆盖更新
+      const category = str(a, 'category', false) || name
+      saveTheme(name, { ...(patch as ArticleTheme), origin: 'panel' }, category)
       // 广播让工程树/设置即时感知新分类目录
       broadcast('workspace:changed', null)
       // 未识别的键必须照实报：否则模型拿着只落了 1 个字段的主题去描述整套排版（实测发生过）
@@ -551,9 +585,11 @@ export const TOOLS: ToolDef[] = [
       const dropped: string[] = []
       if (unknown.length) dropped.push(`键名不认识：${unknown.join('、')}`)
       if (invalid.length) dropped.push(`值不合法被丢弃：${invalid.join('、')}`)
-      const hint = dropped.length
-        ? `主题「${name}」已入库，但只写入 ${applied} 个字段；${dropped.join('；')}——需要的效果请改用工具说明里的键名与取值重发一次，未写入的部分不得向用户声称已生效`
-        : `主题「${name}」已入库（共 ${applied} 个字段）；打开该分类下的工程即可套用`
+      let hint = dropped.length
+        ? `主题「${name}」已入库到分类「${category}」，但只写入 ${applied} 个字段；${dropped.join('；')}——需要的效果请改用工具说明里的键名与取值重发一次，未写入的部分不得向用户声称已生效`
+        : `主题「${name}」已入库（共 ${applied} 个字段）并套用到分类「${category}」；打开该分类下的工程即生效`
+      // 宽进转换（渐变 accent → 取主色 hex）不是静默的：模型要能向作者转述「按什么生效」
+      if (coerced.length) hint += `；${coerced.join('；')}`
       return { ok: true, name, appliedFields: applied, unknownKeys: unknown, droppedKeys: invalid, hint }
     }
   },

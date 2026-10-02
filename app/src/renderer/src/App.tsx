@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { confirmAction } from './confirm'
-import type { AppPaths, ArticleTheme, IdeaCard, ProjectData, ProjectMeta, ProjectSummary, SkillInfo, UpdateCheckResult } from '@shared/types'
+import type { AppPaths, ArticleTheme, CustomThemeLibrary, IdeaCard, ProjectData, ProjectMeta, ProjectSummary, SkillInfo, UpdateCheckResult } from '@shared/types'
 import { PROJECT_CATEGORIES, UNCATEGORIZED } from '@shared/categories'
-import { resolveArticleTheme, sanitizeThemePatch, type ThemeOverrideKey } from '@shared/categoryThemes'
+import { resolveArticleTheme, sanitizeThemePatch, activeThemesView, CATEGORY_THEMES, type ThemeOverrideKey } from '@shared/categoryThemes'
 import { CARD_FORMAT_LABEL, parseCardItems, type CardFormat } from '@shared/cards'
 import { chatOnce } from './copilot/llm'
 import { cardsMessages, categoryMessages } from './copilot/prompts'
@@ -31,7 +31,7 @@ import Sidebar from './components/Sidebar'
 import ProjectWall from './components/ProjectWall'
 import ThemeLibrary, { type ThemeEntry } from './components/ThemeLibrary'
 import { Icon, type IconName } from './ui/Icon'
-import { Popover, PopoverLabel, Segmented, StatusDot, useFittingRow } from './ui/primitives'
+import { Popover, MenuItem, PopoverLabel, Segmented, StatusDot, useFittingRow } from './ui/primitives'
 import ArticleEditor, { type ArticleEditorHandle, type EditorSelection } from './editor/ArticleEditor'
 import type { FigPipeline } from './editor/FigSuggest'
 import { shouldAutoStart, startTour } from './components/onboardingTour'
@@ -166,10 +166,19 @@ export default function App(): JSX.Element {
   const [filterCat, setFilterCat] = useState<string>('all')
   const [categorizing, setCategorizing] = useState(false)
   const [categories, setCategories] = useState<string[]>(() => [...PROJECT_CATEGORIES, UNCATEGORIZED])
-  // 自定义排版主题库（settings/customThemes.json）：分类调性打底时的最高优先覆盖
-  const [customThemes, setCustomThemes] = useState<Record<string, ArticleTheme>>({})
+  // 自定义排版主题库（settings/customThemes.json v2）：主题独立命名，一个分类可挂多套，
+  // 「分类当前套用哪套」由 active 指针决定。resolveArticleTheme 消费的仍是派生视图
+  // 「分类 → 当前套用主题」，主题库页签才需要全量结构
+  const [themeLib, setThemeLib] = useState<CustomThemeLibrary>({ version: 2, themes: {}, active: {} })
+  const customThemes = useMemo(() => activeThemesView(themeLib), [themeLib])
+  /** 任何主题写入后重拉全量库（绑定/解绑/保存/删除/AI 入库共用） */
+  const reloadThemes = useCallback(async () => {
+    setThemeLib(await window.api.invoke('customTheme:list'))
+  }, [])
   // 导入排版弹窗（粘贴 HTML / 公众号链接复用排版）
   const [showThemeImport, setShowThemeImport] = useState(false)
+  // 成文步工具条「排版」合并下拉：整套主题快选 + 导入排版 + 主题库入口
+  const [themeMenuOpen, setThemeMenuOpen] = useState(false)
   // 分类管理弹窗 + 已删除（隐藏）分类列表
   const [showCatManage, setShowCatManage] = useState(false)
   /** 分类管理弹窗变更后要在左栏树展开的分类（at 作触发键，同名连续操作也能再触发一次） */
@@ -192,6 +201,8 @@ export default function App(): JSX.Element {
   articleRef.current = article
   const savedRef = useRef(saved)
   savedRef.current = saved
+  /** 影子工程提示一次标记（refreshProjects 每次变更都会跑，别重复打扰） */
+  const dupToastShown = useRef(false)
 
   const dirty = article !== saved
 
@@ -252,6 +263,22 @@ export default function App(): JSX.Element {
     window.api.invoke('project:list').then(setProjects)
     window.api.invoke('project:listCategories').then(setCategories)
     window.api.invoke('project:listHiddenCategories').then(setHiddenCats)
+    // 影子工程检测（启动/刷新时静默跑，无显式入口）：发现同名工程多份副本才提示一次，
+    // 树里按工程名去重只显示一份，多出的不可见——不提醒的话只能等移动/改名碰撞才发现
+    void window.api
+      .invoke('project:listDuplicates')
+      .then((dups) => {
+        if (!dups.length || dupToastShown.current) return
+        dupToastShown.current = true
+        const first = dups[0]
+        const cats = [...new Set(first.copies.map((c) => c.category || '未分类'))].join(' / ')
+        setToast(
+          dups.length === 1
+            ? `发现同名工程「${first.name}」在多个分类下（${cats}），树里只显示其中一份；建议在文件管理器合并或删除多余副本`
+            : `发现 ${dups.length} 个工程存在同名副本（如「${first.name}」，${cats} 等）；树里只显示其中一份，建议在文件管理器合并或删除多余副本`
+        )
+      })
+      .catch(() => {})
   }, [])
 
   const refreshMeta = useCallback(async () => {
@@ -271,9 +298,9 @@ export default function App(): JSX.Element {
     })
     void window.api.invoke('project:listHiddenCategories').then(setHiddenCats)
     window.api.invoke('project:list').then(setProjects)
-    window.api.invoke('customTheme:list').then(setCustomThemes)
+    void reloadThemes()
     void refreshMeta()
-  }, [refreshMeta])
+  }, [refreshMeta, reloadThemes])
 
   const refreshSkills = useCallback(() => {
     window.api.invoke('skill:list').then(setSkills)
@@ -283,8 +310,8 @@ export default function App(): JSX.Element {
     window.api.invoke('app:getPaths').then(setPaths)
     refreshSkills()
     refreshProjects()
-    window.api.invoke('customTheme:list').then(setCustomThemes)
-  }, [refreshProjects, refreshSkills])
+    void reloadThemes()
+  }, [refreshProjects, refreshSkills, reloadThemes])
 
   // ---- Skill 挂载：读 SKILL.md 全文注入系统提示；随工程持久化到 meta.style_skill ----
 
@@ -350,6 +377,20 @@ export default function App(): JSX.Element {
     [openProject, refreshProjects]
   )
 
+  /** 清单里含当前打开的工程就关掉编辑器：主进程停掉目录监听，整个分类目录在 Windows 上才删得动。
+   *  删单个/批量工程也走这里，免得两处各自清一套编辑态。 */
+  const closeIfOpen = useCallback(async (names: string[]) => {
+    const cur = currentRef.current
+    if (!cur || !names.includes(cur)) return
+    await window.api.invoke('project:close')
+    setCurrent(null)
+    currentRef.current = null
+    setMeta(null)
+    setArticle('')
+    setSaved('')
+    setConflict(null)
+  }, [])
+
   /** 批量删除（工作树批量管理）：一次确认，逐个移除；单个失败不阻塞其余 */
   const deleteProjects = useCallback(
     async (names: string[]) => {
@@ -358,15 +399,7 @@ export default function App(): JSX.Element {
       let ok = 0
       for (const name of names) {
         try {
-          if (currentRef.current === name) {
-            await window.api.invoke('project:close')
-            setCurrent(null)
-            currentRef.current = null
-            setMeta(null)
-            setArticle('')
-            setSaved('')
-            setConflict(null)
-          }
+          await closeIfOpen([name])
           await window.api.invoke('project:delete', name)
           ok++
         } catch {
@@ -376,7 +409,7 @@ export default function App(): JSX.Element {
       refreshProjects()
       setToast(ok === names.length ? `已删除 ${ok} 个工程` : `已删除 ${ok}/${names.length} 个（其余删除失败）`)
     },
-    [refreshProjects]
+    [closeIfOpen, refreshProjects]
   )
 
   /** 删除工程（确认后整目录移除；删当前工程先关闭） */
@@ -384,15 +417,7 @@ export default function App(): JSX.Element {
     async (name: string) => {
       if (!(await confirmAction(`删除工程「${name}」？\n整个文件夹（正文/素材/会话）将被移除，不可恢复。`, { okLabel: '删除' }))) return
       try {
-        if (currentRef.current === name) {
-          await window.api.invoke('project:close')
-          setCurrent(null)
-          currentRef.current = null
-          setMeta(null)
-          setArticle('')
-          setSaved('')
-          setConflict(null)
-        }
+        await closeIfOpen([name])
         await window.api.invoke('project:delete', name)
         refreshProjects()
         setToast(`已删除「${name}」`)
@@ -400,7 +425,7 @@ export default function App(): JSX.Element {
         setToast(`删除失败：${err instanceof Error ? err.message : err}`)
       }
     },
-    [refreshProjects]
+    [closeIfOpen, refreshProjects]
   )
 
   /** 重命名工程：目录原地改名 + meta 同步（主进程完成）。本地文件联动：
@@ -724,15 +749,16 @@ export default function App(): JSX.Element {
     []
   )
 
-  /** 把当前工程生效的整套排版存成自定义主题（同名分类目录自动创建，主题库即时刷新）。
+  /** 把当前工程生效的整套排版存成主题（存入当前工程的分类；一分类可挂多套主题，不覆盖旧的）。
    *  分类级调性此前只有「导入公众号文章」和「对话生成」两条路，作者手工调好的排版没法沉淀成分类主题 */
   const handleSaveThemePreset = useCallback(
     async (name: string) => {
-      await window.api.invoke('customTheme:save', name, { ...articleTheme, origin: 'panel' })
-      setCustomThemes(await window.api.invoke('customTheme:list'))
-      setToast(`已把当前排版存为分类主题「${name}」`)
+      const category = meta?.category ?? name
+      await window.api.invoke('customTheme:save', name, { ...articleTheme, origin: 'panel' }, category)
+      await reloadThemes()
+      setToast(`已把当前排版存为主题「${name}」（分类「${category}」）`)
     },
-    [articleTheme]
+    [articleTheme, meta, reloadThemes]
   )
   /** 源码图「改源码重渲染」→ 代码绘图弹窗编辑模式；完成后只刷图不插节点 */
   const handleEditFigureSource = useCallback((figureSource: string, desc: string) => {
@@ -747,6 +773,18 @@ export default function App(): JSX.Element {
       }
     })
   }, [])
+
+  /** 成文工具条「主题」快选：写分类 active 指针，编辑器/导出/推送同源切换 */
+  const handleQuickTheme = useCallback(
+    async (name: string | null) => {
+      const cat = meta?.category
+      if (!cat) return
+      await window.api.invoke('customTheme:setActive', cat, name)
+      await reloadThemes()
+      setToast(name ? `已切换主题「${name}」` : '已解除主题绑定，回到默认调性')
+    },
+    [meta, reloadThemes]
+  )
 
   // 外部（Agent）改 figures/*.html → 主进程自动重渲完毕 → 刷新正文图片
   useEffect(() => {
@@ -1036,6 +1074,7 @@ export default function App(): JSX.Element {
           onSkillsChanged={refreshSkills}
           revealCategory={revealCat}
           onOpenCatManage={() => setShowCatManage(true)}
+          onCategoriesChanged={() => void refreshProjects()}
           onOpenIntegration={(tab) => {
             setIntegrationTab(tab)
             setShowIntegration(true)
@@ -1129,23 +1168,24 @@ export default function App(): JSX.Element {
           ) : centerTab === 'themes' ? (
             <ThemeLibrary
               categories={categories}
-              customThemes={customThemes}
+              library={themeLib}
               project={current}
               projectCategory={current && meta ? meta.category ?? UNCATEGORIZED : undefined}
               onPreview={(entry) => setThemePreview(entry ? { name: entry.name, theme: entry.theme } : null)}
-              onBind={async (category, theme, source) => {
-                await window.api.invoke('customTheme:save', category, { ...theme, origin: source === 'panel' ? 'panel' : 'import' })
-                setCustomThemes(await window.api.invoke('customTheme:list'))
+              onBind={async (category, entry) => {
+                // 绑定 = 切换该分类的 active 指针（自定义/内置都只是指过去），不动主题库里的其他主题
+                await window.api.invoke('customTheme:setActive', category, entry.name)
+                await reloadThemes()
                 if (current) void refreshMeta()
               }}
               onUnbind={async (category) => {
-                await window.api.invoke('customTheme:delete', category)
-                setCustomThemes(await window.api.invoke('customTheme:list'))
+                await window.api.invoke('customTheme:setActive', category, null)
+                await reloadThemes()
                 if (current) void refreshMeta()
               }}
               onDelete={async (name) => {
                 await window.api.invoke('customTheme:delete', name)
-                setCustomThemes(await window.api.invoke('customTheme:list'))
+                await reloadThemes()
                 if (themePreview?.name === name) setThemePreview(null)
                 if (current) void refreshMeta()
               }}
@@ -1232,13 +1272,101 @@ export default function App(): JSX.Element {
                         >
                           <Icon name="sparkles" size={13} className="mr-1" />排版优化
                         </button>
-                        <button
-                          onClick={() => setShowThemeImport(true)}
-                          title="粘贴公众号 HTML 或链接，复用它的排版"
-                          className="rounded px-2 py-0.5 hover:bg-panel-3"
-                        >
-                          <Icon name="palette" size={13} className="mr-1" />排版
-                        </button>
+                        {/* 排版合并入口：整套主题快选（点选即切，写分类 active 指针）+ 导入排版 + 主题库。
+                            与「排版优化」并排——优化重写正文，这里换视觉层，两层常连用 */}
+                        <div className="relative">
+                          <button
+                            onClick={() => setThemeMenuOpen((v) => !v)}
+                            title="快捷切换整套主题 / 导入排版 / 打开主题库"
+                            className="rounded px-2 py-0.5 hover:bg-panel-3"
+                          >
+                            <Icon name="palette" size={13} className="mr-1" />排版
+                          </button>
+                          {themeMenuOpen && (
+                            <Popover onClose={() => setThemeMenuOpen(false)} className="absolute left-0 top-full z-50 mt-1 w-72 p-1">
+                              {(() => {
+                                const cat = meta?.category ?? null
+                                // 当前实际生效的主题名：active 指针 → 同名内置兜底（与 resolveArticleTheme 回退链一致）
+                                const current = cat
+                                  ? (themeLib.active[cat] && (themeLib.themes[themeLib.active[cat]] || themeLib.active[cat] in CATEGORY_THEMES)
+                                      ? themeLib.active[cat]
+                                      : cat in CATEGORY_THEMES
+                                        ? cat
+                                        : undefined)
+                                  : undefined
+                                const items: { name: string; accent: string; home?: string; custom: boolean }[] = []
+                                if (cat) {
+                                  if (cat in CATEGORY_THEMES && !themeLib.themes[cat])
+                                    items.push({ name: cat, accent: CATEGORY_THEMES[cat].accent, custom: false })
+                                  for (const [n, e] of Object.entries(themeLib.themes)) {
+                                    if (e.category === cat || themeLib.active[cat] === n)
+                                      items.push({ name: n, accent: e.theme.accent, home: e.category, custom: true })
+                                  }
+                                }
+                                return (
+                                  <>
+                                    <PopoverLabel>套用到分类「{cat ?? '—'}」</PopoverLabel>
+                                    {items.length ? (
+                                      <div className="max-h-60 space-y-0.5 overflow-y-auto">
+                                        {items.map((it) => (
+                                          <button
+                                            key={it.name}
+                                            type="button"
+                                            onClick={() => {
+                                              setThemeMenuOpen(false)
+                                              void handleQuickTheme(it.name)
+                                            }}
+                                            title={current === it.name ? '当前套用的主题' : '切换到这套排版（编辑器/导出/推送同步生效）'}
+                                            className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[12px] transition-colors ${
+                                              current === it.name ? 'bg-accent/15 font-semibold text-accent' : 'text-ink hover:bg-panel-3'
+                                            }`}
+                                          >
+                                            <span
+                                              className="inline-block h-3 w-3 shrink-0 rounded-full border border-panel-3"
+                                              style={{ background: it.accent }}
+                                            />
+                                            <span className="min-w-0 flex-1 truncate">{it.name}</span>
+                                            {it.home && it.home !== it.name && (
+                                              <span className="shrink-0 text-[10px] text-ink-dim">归属「{it.home}」</span>
+                                            )}
+                                            {it.custom && (
+                                              <span className="shrink-0 rounded-full bg-panel-3 px-1 py-px text-[9px] text-ink-dim">自定义</span>
+                                            )}
+                                            {current === it.name && <Icon name="check" size={11} />}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <p className="px-2.5 py-2 text-[11px] leading-relaxed text-ink-dim">
+                                        {cat ? '该分类还没有主题：从文章导入一套，或在对话里让 AI 生成。' : '先打开工程（有分类才能套用主题）。'}
+                                      </p>
+                                    )}
+                                    <div className="my-1 h-px bg-panel-3" />
+                                    <MenuItem
+                                      icon="download"
+                                      onClick={() => {
+                                        setThemeMenuOpen(false)
+                                        setShowThemeImport(true)
+                                      }}
+                                      title="粘贴公众号 HTML 或链接，复用它的排版"
+                                    >
+                                      导入排版…
+                                    </MenuItem>
+                                    <MenuItem
+                                      icon="layers"
+                                      onClick={() => {
+                                        setThemeMenuOpen(false)
+                                        setCenterTab('themes')
+                                      }}
+                                    >
+                                      在主题库中浏览全部
+                                    </MenuItem>
+                                  </>
+                                )
+                              })()}
+                            </Popover>
+                          )}
+                        </div>
                         <button
                           onClick={() => setShowConvert((v) => !v)}
                           disabled={!article.trim() || converting}
@@ -1488,7 +1616,7 @@ export default function App(): JSX.Element {
               onToast={setToast}
               onSkillsChanged={refreshSkills}
               onCustomThemesChanged={() => {
-                void window.api.invoke('customTheme:list').then(setCustomThemes)
+                void reloadThemes()
               }}
               onApplyAccent={async (color) => {
                 // 贴图面板在向导贴图步常驻挂载：等 ref 就绪再应用
@@ -1651,12 +1779,14 @@ export default function App(): JSX.Element {
       {/* 导入排版弹窗（复用公众号/网页排版） */}
       {showThemeImport && (
         <ThemeImportDialog
+          categories={categories}
+          defaultCategory={meta?.category ?? undefined}
           onClose={() => setShowThemeImport(false)}
           onToast={setToast}
-          onSaved={async (name) => {
-            setCustomThemes(await window.api.invoke('customTheme:list'))
+          onSaved={async (name, category) => {
+            await reloadThemes()
             refreshProjects()
-            setFilterCat(name)
+            setFilterCat(category || name)
           }}
         />
       )}
@@ -1670,6 +1800,7 @@ export default function App(): JSX.Element {
           onClose={() => setShowCatManage(false)}
           onToast={setToast}
           onChanged={refreshAfterCategoryChange}
+          onCloseProjects={closeIfOpen}
           onOpenThemeLibrary={() => {
             setShowCatManage(false)
             setCenterTab('themes')

@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactElement } from 'react'
-import type { ArticleTheme } from '@shared/types'
+import type { ArticleTheme, CustomThemeLibrary } from '@shared/types'
 import { CATEGORY_THEMES } from '@shared/categoryThemes'
 import { Icon } from '../ui/Icon'
 import { Button, Chip, FIELD_SHELL_CLS, PickerButton, useFittingRow } from '../ui/primitives'
@@ -10,9 +10,9 @@ import { Button, Chip, FIELD_SHELL_CLS, PickerButton, useFittingRow } from '../u
  * 位置定案放中栏不放左栏——主题卡由「样张预览」驱动，左栏 248px 放不下预览网格；
  * 左栏双页签是导航语义，主题库是管理语义。
  *
- * 数据视图层，不落新存储：内置 CATEGORY_THEMES + settings/customThemes.json 现算，
- * 解析优先级仍走 resolveArticleTheme 那一套（自定义 > 内置 > 默认），本组件只负责让人看见。
- * 样张不用色块猜：标题装饰 / 正文 / 引用 / 分隔线 / 加粗各取一段，按该主题真实取值渲染。
+ * 数据视图层，不落新存储：内置 CATEGORY_THEMES + settings/customThemes.json（v2，一分类可挂多套）
+ * 现算，套用关系由 active 指针决定（自定义 > 内置 > 默认，与 resolveArticleTheme 同口径），
+ * 本组件只负责让人看见。样张不用色块猜：标题装饰 / 正文 / 引用 / 分隔线 / 加粗各取一段，按该主题真实取值渲染。
  */
 
 export type ThemeSource = 'builtin' | 'import' | 'panel'
@@ -21,20 +21,22 @@ export interface ThemeEntry {
   name: string
   theme: ArticleTheme
   source: ThemeSource
-  /** 该主题当前正被哪些分类套用 */
+  /** 自定义主题的归属分类（内置主题无此字段） */
+  category?: string
+  /** 该主题当前正被哪些分类套用（active 指针指过来） */
   boundTo: string[]
 }
 
 export interface ThemeLibraryProps {
   categories: string[]
-  customThemes: Record<string, ArticleTheme>
+  library: CustomThemeLibrary
   /** 当前打开的工程：有工程才允许「从当前工程沉淀」与「绑定」 */
   project: string | null
   projectCategory?: string
   onPreview: (entry: ThemeEntry | null) => void
-  /** 把主题套到分类（写 customThemes[分类名]） */
-  onBind: (category: string, theme: ArticleTheme, source: ThemeSource) => void
-  /** 解除该分类的自定义覆盖（回到内置） */
+  /** 绑定 = 把该主题设为分类当前套用（切 active 指针；自定义/内置都只是指过去，不复制不覆盖） */
+  onBind: (category: string, entry: ThemeEntry) => void
+  /** 解除该分类的套用（回到同名内置/默认调性），主题本体保留在库里 */
   onUnbind: (category: string) => void
   onDelete: (name: string) => void
   onImport: () => void
@@ -115,7 +117,7 @@ function ThemeSwatch({ theme }: { theme: ArticleTheme }): ReactElement {
 
 export default function ThemeLibrary({
   categories,
-  customThemes,
+  library,
   project,
   projectCategory,
   onPreview,
@@ -133,26 +135,37 @@ export default function ThemeLibrary({
   const chips = useFittingRow<HTMLDivElement>()
   const [previewing, setPreviewing] = useState<string | null>(null)
 
-  /** 内置 + 自定义合并成一张表：同名时自定义覆盖内置（与 resolveArticleTheme 同口径） */
+  /**
+   * 分类当前「实际生效」的主题名，与 resolveArticleTheme 的回退链同口径：
+   * active 指针 → 同名内置主题兜底 → 无。内置分类不显式绑定时本就套用同名内置主题，
+   * 显示上要把这份兜底算进去，不然内置分类在主题库里全显示「尚未套用」。
+   */
+  const effective = (c: string): string | undefined => {
+    const p = library.active[c]
+    if (p && (library.themes[p] || p in CATEGORY_THEMES)) return p
+    return c in CATEGORY_THEMES ? c : undefined
+  }
+
+  /** 内置 + 自定义合并成一张表：同名时自定义覆盖内置（与 resolveArticleTheme 同口径）；
+   *  套用关系按实际生效算——一个分类套哪套、一套主题被多少分类共享都在这读出来 */
   const entries = useMemo<ThemeEntry[]>(() => {
-    const names = new Set([...Object.keys(CATEGORY_THEMES), ...Object.keys(customThemes)])
+    const boundTo = (name: string): string[] => categories.filter((c) => effective(c) === name)
     const out: ThemeEntry[] = []
-    for (const name of names) {
-      const custom = customThemes[name]
-      const builtin = CATEGORY_THEMES[name]
-      const theme = custom ?? builtin
-      if (!theme) continue
-      const source: ThemeSource = custom ? ((theme as ArticleTheme & { origin?: ThemeSource }).origin ?? 'import') : 'builtin'
-      const boundTo = categories.filter((c) => c === name)
-      out.push({ name, theme, source, boundTo })
+    for (const [name, theme] of Object.entries(CATEGORY_THEMES)) {
+      if (library.themes[name]) continue
+      out.push({ name, theme, source: 'builtin', boundTo: boundTo(name) })
+    }
+    for (const [name, { category, theme }] of Object.entries(library.themes)) {
+      const source: ThemeSource = (theme as ArticleTheme & { origin?: ThemeSource }).origin ?? 'import'
+      out.push({ name, theme, source, category, boundTo: boundTo(name) })
     }
     return out.sort((a, b) => (a.source === 'builtin' ? -1 : 1) - (b.source === 'builtin' ? -1 : 1) || a.name.localeCompare(b.name, 'zh'))
-  }, [customThemes, categories])
+  }, [library, categories])
 
   const shown = useMemo(() => {
     const kw = q.trim().toLowerCase()
     return entries
-      .filter((e) => filter === 'all' || (filter === 'builtin' ? e.source === 'builtin' : filter === 'custom' ? e.source !== 'builtin' : e.boundTo.includes(filter)))
+      .filter((e) => filter === 'all' || (filter === 'builtin' ? e.source === 'builtin' : filter === 'custom' ? e.source !== 'builtin' : e.boundTo.includes(filter) || e.category === filter))
       .filter((e) => !kw || e.name.toLowerCase().includes(kw))
   }, [entries, q, filter])
 
@@ -266,7 +279,10 @@ export default function ThemeLibrary({
           <div className="grid grid-cols-[repeat(auto-fill,minmax(228px,1fr))] gap-3">
             {shown.map((e) => {
               const badge = SOURCE_BADGE[e.source]
-              const bound = projectCategory ? customThemes[projectCategory] === e.theme : false
+              const bound = projectCategory ? effective(projectCategory) === e.name : false
+              // 内置兜底态：分类没显式绑定、靠同名内置主题套用中——此时「解除绑定」无从谈起（解了也还是它）
+              const builtinFloor =
+                bound && e.source === 'builtin' && projectCategory != null && !library.active[projectCategory]
               return (
                 <div
                   key={e.name}
@@ -280,6 +296,7 @@ export default function ThemeLibrary({
                     </div>
                     <p className="mt-1 truncate text-[11px] text-ink-dim">
                       {e.boundTo.length ? `已套用：${e.boundTo.join('、')}` : '尚未套用到分类'}
+                      {e.category && e.category !== e.name ? ` · 归属「${e.category}」` : ''}
                       {` · ${Object.keys(e.theme).length} 项参数`}
                     </p>
                   </div>
@@ -294,22 +311,40 @@ export default function ThemeLibrary({
                       <Icon name="eye" size={11} />
                       {previewing === e.name ? '退出预览' : '预览'}
                     </button>
-                    {projectCategory && (
+                    {projectCategory && builtinFloor && (
                       <button
-                        onClick={() => {
-                          if (bound) {
-                            onUnbind(projectCategory)
-                            onToast(`分类「${projectCategory}」已回到内置调性`)
-                          } else {
-                            onBind(projectCategory, e.theme, e.source)
-                            onToast(`已把「${e.name}」套到分类「${projectCategory}」`)
-                          }
-                        }}
-                        className="inline-flex h-[24px] items-center gap-1 rounded px-2 text-[11px] text-ink-dim hover:bg-panel-3 hover:text-ink"
-                        title={bound ? '解除该分类的自定义覆盖' : `把这套参数绑到当前工程所属分类「${projectCategory}」`}
+                        disabled
+                        className="inline-flex h-[24px] items-center gap-1 rounded px-2 text-[11px] text-ink-dim opacity-60"
+                        title="该分类的内置默认排版，本就套用中；换绑其他主题后，这里会出现「解除绑定」"
                       >
                         <Icon name="link" size={11} />
-                        {bound ? '解除绑定' : '绑定'}
+                        内置套用中
+                      </button>
+                    )}
+                    {projectCategory && bound && !builtinFloor && (
+                      <button
+                        onClick={() => {
+                          onUnbind(projectCategory)
+                          onToast(`分类「${projectCategory}」已解除套用（主题保留在库里，可再绑回来）`)
+                        }}
+                        className="inline-flex h-[24px] items-center gap-1 rounded px-2 text-[11px] text-ink-dim hover:bg-panel-3 hover:text-ink"
+                        title="解除该分类当前套用（主题保留在库里，可再绑回来）"
+                      >
+                        <Icon name="link" size={11} />
+                        解除绑定
+                      </button>
+                    )}
+                    {projectCategory && !bound && (
+                      <button
+                        onClick={() => {
+                          onBind(projectCategory, e)
+                          onToast(`已把「${e.name}」套到分类「${projectCategory}」`)
+                        }}
+                        className="inline-flex h-[24px] items-center gap-1 rounded px-2 text-[11px] text-ink-dim hover:bg-panel-3 hover:text-ink"
+                        title={`把这套参数套到当前工程所属分类「${projectCategory}」`}
+                      >
+                        <Icon name="link" size={11} />
+                        绑定
                       </button>
                     )}
                     <button

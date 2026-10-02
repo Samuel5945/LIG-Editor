@@ -16,7 +16,7 @@ import type {
   WebSearchResult
 } from '@shared/types'
 import { buildToolSchemas, inventoryFor, parseTextToolCalls } from '@shared/llmText'
-import { contextBadge, estimateTokens, hasImageInput, modelCapability, type ModelCapability } from '@shared/modelCatalog'
+import { estimateTokens, hasImageInput, modelCapability, type ModelCapability } from '@shared/modelCatalog'
 import { expandWrapperCalls, normalizeToolArgs } from '@shared/toolArgs'
 import { extractInlineContent, parseSkillDirective } from '@shared/skillInstall'
 import { cardsPlainText, parseAccentDirective } from '@shared/cards'
@@ -127,13 +127,14 @@ function safeParseArgs(argsJson: string): Record<string, unknown> {
   }
 }
 
-/** 参数摘要：一行键值串塞进工具卡 */
+/** 参数摘要：一行键值串塞进工具卡。对象/数组转 JSON——String() 会变成没信息量的「[object Object]」 */
 function argsSummary(argsJson: string): string {
   const args = safeParseArgs(argsJson)
   const keys = Object.keys(args)
   if (!keys.length) return ''
+  const fmt = (v: unknown): string => (typeof v === 'string' ? v : JSON.stringify(v) ?? '')
   return keys
-    .map((k) => `${k}: ${String(args[k]).slice(0, 40)}`)
+    .map((k) => `${k}: ${fmt(args[k]).slice(0, 40)}`)
     .join(' · ')
     .slice(0, 120)
 }
@@ -1216,21 +1217,9 @@ export default function ChatPanel({
         {/* 工具胶囊行与上方文字同一 12px 列；发送/停止键在滚动区外面，永远点得到。
             右栏窄到放不下「图标+文字」时整行退成纯图标胶囊（§4 长标签降级同一套规则），
             名称留在 title 与 aria-label 里——这样最后一只「上下文」不会再被发送键切掉一半。
-            行首是模型目录能力徽章（上下文/读图/思考），有声明才显示 */}
+            行首第一个是「附件」，行内不展示模型目录能力徽章（上下文/读图/思考） */}
         <div className="flex min-w-0 items-center gap-1 px-3 pb-2.5">
           <div ref={pillsRow.ref} data-overflow={pillsRow.overflow ? '1' : '0'} className="chip-row flex min-w-0 flex-1 items-center gap-1">
-            {(() => {
-              const badges = [contextBadge(cap), hasImageInput(cap) ? '读图' : '', cap.reasoning ? '思考' : ''].filter(Boolean)
-              if (!badges.length) return null
-              return (
-                <span
-                  className="inline-flex h-[26px] shrink-0 items-center whitespace-nowrap text-[10.5px] text-ink-dim"
-                  title={`${textProvider?.name ?? ''} · ${textProvider?.textModel ?? ''}（按模型目录声明展示）`}
-                >
-                  {badges.join('·')}
-                </span>
-              )
-            })()}
             <ToolPill
               compact={pillsRow.narrow}
               icon="clip"

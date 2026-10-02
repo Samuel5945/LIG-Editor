@@ -13,6 +13,8 @@ import { createHash } from 'crypto'
 import type {
   ChatSession,
   ChatSessionMeta,
+  CategoryPurgeInfo,
+  DuplicateProjectInfo,
   IdeaCard,
   IdeaEntry,
   IdeaProjectRef,
@@ -29,9 +31,9 @@ import { countWords } from '@shared/wordCount'
 import { UNCATEGORIZED, PROJECT_CATEGORIES, isKnownCategory } from '@shared/categories'
 import { sanitizeProjectName } from '@shared/projectName'
 import { getAppPaths } from './paths'
-import { listCustomThemes, saveCustomThemes } from './themeStore'
-import { listCategoryPresets, presetFillFor, renameCategoryPreset } from './categoryPresetStore'
-import { renameWechatBinding } from './wechatStore'
+import { deleteTheme, hasThemesForCategory, listLibrary, renameCategoryThemes, setActiveTheme } from './themeStore'
+import { listCategoryPresets, presetFillFor, renameCategoryPreset, deleteCategoryPreset } from './categoryPresetStore'
+import { renameWechatBinding, setWechatBinding } from './wechatStore'
 
 /** 工程目录约定（PRD §4）：article.md 为唯一事实源 */
 const TEXT_FILES: ProjectTextFile[] = ['article.md', 'ideas.md', 'review.md']
@@ -166,18 +168,45 @@ function disabledFile(): string {
   return join(getAppPaths().settings, 'disabledCategories.json')
 }
 
-/** 被隐藏的分类列表（「删除」= 隐藏：目录与工程保留，恢复后原样归位） */
-export function listDisabledCategories(): string[] {
+/** 名字列表型 settings 文件（分类隐藏/留痕共用）：读不动一律当空列表，写走同一格式 */
+function readNameList(file: string): string[] {
   try {
-    const raw = JSON.parse(readFileSync(disabledFile(), 'utf-8'))
+    const raw = JSON.parse(readFileSync(file, 'utf-8'))
     return Array.isArray(raw) ? raw.filter((x): x is string => typeof x === 'string') : []
   } catch {
     return []
   }
 }
 
+function writeNameList(file: string, list: string[]): void {
+  writeFileSync(file, JSON.stringify(list, null, 2) + '\n', 'utf-8')
+}
+
+/** 被隐藏的分类列表（「删除」= 隐藏：目录与工程保留，恢复后原样归位） */
+export function listDisabledCategories(): string[] {
+  return readNameList(disabledFile())
+}
+
 function writeDisabledCategories(list: string[]): void {
-  writeFileSync(disabledFile(), JSON.stringify(list, null, 2) + '\n', 'utf-8')
+  writeNameList(disabledFile(), list)
+}
+
+/**
+ * 已彻底删除过的分类名：自定义分类删了目录就再也发现不到，但预设分类的名字写死在
+ * PROJECT_CATEGORIES 里，只删目录会在下次列表时被复活（workbuddy 即命中），故留一份永久屏蔽痕。
+ * 留痕只挡预设：一旦磁盘上又出现同名分类目录，说明作者是有意重建，直接放行。
+ */
+function purgedFile(): string {
+  return join(getAppPaths().settings, 'purgedCategories.json')
+}
+
+export function listPurgedCategories(): string[] {
+  return readNameList(purgedFile())
+}
+
+function markCategoryPurged(name: string): void {
+  const purged = listPurgedCategories()
+  if (!purged.includes(name)) writeNameList(purgedFile(), [...purged, name])
 }
 
 /** 分类名校验：预设分类直接可用；自定义需为安全目录名且不与现有工程名冲突 */
@@ -199,9 +228,12 @@ function assertCategoryName(category: string): void {
 export function listCategories(): string[] {
   const { workspace } = getAppPaths()
   const disabled = new Set(listDisabledCategories())
+  const purged = new Set(listPurgedCategories())
   const cats = new Set<string>()
   for (const c of [...PROJECT_CATEGORIES, UNCATEGORIZED]) {
-    if (!disabled.has(c)) cats.add(c)
+    if (disabled.has(c)) continue
+    if (purged.has(c) && !existsSync(join(workspace, c))) continue
+    cats.add(c)
   }
   if (existsSync(workspace)) {
     for (const entry of readdirSync(workspace, { withFileTypes: true })) {
@@ -228,6 +260,56 @@ export function restoreCategory(name: string): void {
   writeDisabledCategories(listDisabledCategories().filter((x) => x !== name))
 }
 
+/**
+ * 彻底删除（已隐藏的）分类：目录与其中全部工程一并删除，连带清理该分类名下的自定义主题、
+ * 账号预设与公众号绑定，从隐藏列表移除，并记入「已彻底删除」留痕——预设分类名写死在代码里，
+ * 不留痕下次列表就会把它复活。不可恢复——调用方必须先经用户确认（确认框用 categoryPurgeInfo 点名）。
+ */
+export function purgeCategory(name: string): void {
+  assertCategoryName(name)
+  if (name === UNCATEGORIZED) throw new Error('「未分类」是兜底分类，不能删除')
+  const { workspace } = getAppPaths()
+  const dir = join(workspace, name)
+  if (existsSync(dir)) {
+    // maxRetries：Windows 上资源管理器/搜索索引会瞬时占用目录，一次失败会半途而废
+    rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 })
+    // 目录没删干净就先报错：此时仍留在「已删除」里可恢复，不能当作已彻底删除抹掉痕迹
+    if (existsSync(dir)) throw new Error(`分类「${name}」的目录被其他程序占用，删除失败：${dir}`)
+  }
+  dirCache.clear()
+  // 该分类名下的自定义主题一并删除：deleteTheme 会顺带清掉指向这些主题的 active 指针
+  for (const [themeName, entry] of Object.entries(listLibrary().themes)) {
+    if (entry.category === name) deleteTheme(themeName)
+  }
+  // 分类自身在 active 里可能也有指针（分类没了指针无意义）
+  setActiveTheme(name, null)
+  deleteCategoryPreset(name)
+  setWechatBinding(name, null)
+  writeDisabledCategories(listDisabledCategories().filter((x) => x !== name))
+  markCategoryPurged(name)
+}
+
+/**
+ * 彻底删除前的受影响清单（调用方须拿它拼确认框）：只报目录里真会被删掉的工程，
+ * 不报 meta 挂着该分类但住在别处的历史残留——那些不会被这次删除波及。
+ */
+export function categoryPurgeInfo(name: string): CategoryPurgeInfo {
+  assertSafeName(name)
+  const dir = join(getAppPaths().workspace, name)
+  const projects: string[] = []
+  if (existsSync(dir)) {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (entry.isDirectory() && existsSync(join(dir, entry.name, 'project.json'))) projects.push(entry.name)
+    }
+    projects.sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'))
+  }
+  const themes = Object.entries(listLibrary().themes)
+    .filter(([, entry]) => entry.category === name)
+    .map(([themeName]) => themeName)
+    .sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'))
+  return { projects, themes }
+}
+
 /** 重命名分类：分类目录改名 + 目录内工程 meta.category 同步 + 隐藏列表/自定义主题同步。
  * 预设分类重命名后即成为自定义分类（新名不再被预设覆盖）。 */
 export function renameCategory(oldName: string, newName: string): void {
@@ -239,9 +321,6 @@ export function renameCategory(oldName: string, newName: string): void {
     throw new Error(`分类名冲突：「${newName}」是预设分类`)
   }
   if (resolveDir(newName)) throw new Error(`不能以工程名作为分类名：${newName}`)
-  // 自定义主题同名冲突（重名会把新分类名的主题覆盖掉）
-  const themes = listCustomThemes()
-  if (themes[newName]) throw new Error(`分类名冲突：已有自定义主题「${newName}」`)
 
   const { workspace } = getAppPaths()
   const oldDir = join(workspace, oldName)
@@ -263,12 +342,8 @@ export function renameCategory(oldName: string, newName: string): void {
   if (disabled.includes(oldName)) {
     writeDisabledCategories(disabled.map((x) => (x === oldName ? newName : x)))
   }
-  // 自定义主题同步
-  if (themes[oldName]) {
-    themes[newName] = themes[oldName]
-    delete themes[oldName]
-    saveCustomThemes(themes)
-  }
+  // 自定义主题同步：归属分类与 active 指针随分类迁移（主题名保持不变，v2 起一分类可挂多套）
+  renameCategoryThemes(oldName, newName)
   // 账号预设同步（账号 = 分类：预设 key 随分类重命名迁移）
   renameCategoryPreset(oldName, newName)
   // 公众号账号绑定同步（bindings 以分类名为 key，不迁移会变成孤儿绑定）
@@ -422,6 +497,50 @@ export function listProjects(): ProjectSummary[] {
   return out.sort((a, b) => b.updated_at.localeCompare(a.updated_at))
 }
 
+/**
+ * 影子工程检测：同名工程目录同时存在于多个分类下。
+ * 存储模型是「工程名全局唯一」，扫描按名去重后树里只显示一份，多出的副本平时不可见，
+ * 只在移动/改名碰撞时报错露头——多为外部整目录复制（备份/迁移）产生。
+ * 与 scanProjectDirs 走同一目录布局（根目录遗留平铺 + 分类一层），但按名聚合成多份。
+ */
+export function findDuplicateProjects(): DuplicateProjectInfo[] {
+  const { workspace } = getAppPaths()
+  if (!existsSync(workspace)) return []
+  const byName = new Map<string, { dir: string; category: string; updatedAt?: string }[]>()
+  const collect = (dir: string, category: string): void => {
+    let meta: ProjectMeta | null = null
+    try {
+      meta = JSON.parse(readFileSync(join(dir, 'project.json'), 'utf-8')) as ProjectMeta
+    } catch {
+      // meta 读不出（损坏/半截）也照常报出来，副本可见性比元数据完整更重要
+    }
+    const name = meta?.name || basename(dir)
+    const list = byName.get(name) ?? []
+    list.push({ dir, category: meta?.category ?? category, updatedAt: meta?.updated_at })
+    byName.set(name, list)
+  }
+  for (const entry of readdirSync(workspace, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue
+    const top = join(workspace, entry.name)
+    if (existsSync(join(top, 'project.json'))) {
+      collect(top, UNCATEGORIZED)
+      continue
+    }
+    for (const sub of readdirSync(top, { withFileTypes: true })) {
+      if (sub.isDirectory() && existsSync(join(top, sub.name, 'project.json'))) {
+        collect(join(top, sub.name), entry.name)
+      }
+    }
+  }
+  const active = refreshDirCache()
+  const out: DuplicateProjectInfo[] = []
+  for (const [name, copies] of byName) {
+    if (copies.length < 2) continue
+    out.push({ name, activeDir: active.get(name) ?? '', copies })
+  }
+  return out
+}
+
 // ---------- 工程资产清单（左栏工作树） ----------
 
 /** 可入树的资产子目录白名单；其余（chat/、project.json 等）一律不出现 */
@@ -503,7 +622,13 @@ export function setProjectCategory(name: string, category: string): ProjectMeta 
   const { workspace } = getAppPaths()
   const target = join(workspace, category, name)
   if (normalize(dir).toLowerCase() !== normalize(target).toLowerCase()) {
-    if (existsSync(target)) throw new Error(`分类「${category}」下已有同名工程：${name}`)
+    if (existsSync(target)) {
+      // workspace 里存在两份同名工程（多为外部整目录复制产生的影子副本，树里按名去重只显示一份），
+      // 直接移动会覆盖目标那份——报错要把背景讲清，让用户（和 AI 对话路径）知道去文件管理器处理
+      throw new Error(
+        `分类「${category}」下已有同名工程：${name}。workspace 里存在两份同名工程（影子副本，树里只显示其中一份），合并或删除多余副本后再移动`
+      )
+    }
     mkdirSync(join(workspace, category), { recursive: true })
     renameSync(dir, target)
     // 旧分类目录空了就顺手清掉；但绑定自定义主题的分类是用户主动保存的排版资产，
@@ -512,7 +637,7 @@ export function setProjectCategory(name: string, category: string): ProjectMeta 
       const parent = normalize(join(dir, '..'))
       if (parent.toLowerCase() !== normalize(workspace).toLowerCase() && readdirSync(parent).length === 0) {
         const catName = normalize(parent).split(/[\\/]/).pop() ?? ''
-        if (!listCustomThemes()[catName]) {
+        if (!hasThemesForCategory(catName)) {
           rmSync(parent, { recursive: true, force: true })
         }
       }

@@ -98,6 +98,46 @@ export interface ArticleTheme {
   pGap?: number
 }
 
+/** 自定义主题库条目：主题独立命名并归属一个分类（v2 存储格式） */
+export interface StoredThemeEntry {
+  /** 归属分类（保存时自动创建同名目录；一个分类可挂多个主题） */
+  category: string
+  theme: ArticleTheme
+}
+
+/** 影子工程副本：同名工程目录中的一份（外部整目录复制产生，树里只显示按名索引到的那份） */
+export interface ProjectCopyInfo {
+  /** 副本目录绝对路径 */
+  dir: string
+  /** 归属分类（meta.category 缺失时按父目录名；根目录平铺 = UNCATEGORIZED） */
+  category: string
+  /** meta.updated_at（meta 损坏时缺失） */
+  updatedAt?: string
+}
+
+/** 同名工程冲突（影子工程检测）：一名的多份副本 + 树里当前显示的那份 */
+export interface DuplicateProjectInfo {
+  name: string
+  /** 按名索引解析到的目录（树里可见、可正常打开的那份） */
+  activeDir: string
+  copies: ProjectCopyInfo[]
+}
+
+/**
+ * 自定义排版主题库（settings/customThemes.json，v2）：
+ * 主题与分类解耦——一个分类可有多套主题，「当前套用哪套」由 active 指针决定，
+ * 指针可指向自定义主题名，也可指向内置主题名（CATEGORY_THEMES 的键）；
+ * 指针缺省/失效 = 回同名内置主题或默认调性。
+ * v1（Record<分类名, 主题>，主题名即分类名）由 migrateCustomThemes 读时迁移。
+ */
+export interface CustomThemeLibrary {
+  version: 2
+  /** 主题名 → 条目（主题名全局唯一，保存同名即覆盖更新） */
+  themes: Record<string, StoredThemeEntry>
+  /** 分类 → 当前套用的主题名 */
+  active: Record<string, string>
+}
+
 // ---------- 领域模型（PRD §4） ----------
 
 export type ProjectStatus = 'ideating' | 'drafting' | 'reviewing' | 'ready'
@@ -592,6 +632,12 @@ export interface UpdateCheckResult {
 // ---------- IPC 契约 ----------
 // 所有 invoke 通道集中定义；主进程 handle 与渲染进程调用共享此单一来源
 
+/** 彻底删除分类前的受影响清单：分类目录下会被一并删掉的工程与挂在该分类名下的自定义主题 */
+export interface CategoryPurgeInfo {
+  projects: string[]
+  themes: string[]
+}
+
 export interface IpcApi {
   'app:getPaths': () => AppPaths
   'app:ping': () => string
@@ -609,6 +655,8 @@ export interface IpcApi {
   'win:close': () => void
   /** 扫描 workspace 全部含 project.json 的工程（含各分类子目录） */
   'project:list': () => ProjectSummary[]
+  /** 影子工程检测：同名工程目录存在于多个分类（树里只显示一份，多出的不可见） */
+  'project:listDuplicates': () => DuplicateProjectInfo[]
   'project:create': (name: string, category?: string) => ProjectSummary
   /** 删除整个工程目录（渲染层需先确认；删当前工程前先 project:close） */
   'project:delete': (name: string) => void
@@ -623,6 +671,12 @@ export interface IpcApi {
   'project:listHiddenCategories': () => string[]
   /** 删除分类（= 隐藏：目录与工程保留，恢复后归位）；未分类不可删 */
   'project:deleteCategory': (name: string) => void
+  /** 彻底删除已隐藏的分类：目录+工程+该分类的主题/预设/绑定一并删除，不可恢复（调用方须先确认） */
+  'project:purgeCategory': (name: string) => void
+  /** 彻底删除的分类名留痕：预设分类名写死在代码里，靠这份清单才不会再出现（同名目录重建则重新放行） */
+  'project:listPurgedCategories': () => string[]
+  /** 彻底删除前的受影响清单：该分类目录下会被一并删除的工程与自定义主题，供确认框点名 */
+  'project:categoryPurgeInfo': (name: string) => CategoryPurgeInfo
   /** 恢复被隐藏的分类 */
   'project:restoreCategory': (name: string) => void
   /** 重命名分类：目录 + 工程 meta + 自定义主题同步；预设重命名后成为自定义分类 */
@@ -737,8 +791,12 @@ export interface IpcApi {
   /** 把一份 deck 存档（转风格/互切前保留原版） */
   'cards:archiveWrite': (project: string, deck: CardDeck) => void
   // ---- 自定义排版主题库（导入 HTML/公众号链接复用排版）----
-  'customTheme:list': () => Record<string, ArticleTheme>
-  'customTheme:save': (name: string, theme: ArticleTheme) => void
+  'customTheme:list': () => CustomThemeLibrary
+  /** 保存主题：upsert（同名覆盖）并激活到 category（缺省 = 主题原归属，再缺省 = 与主题同名，自动建分类目录） */
+  'customTheme:save': (name: string, theme: ArticleTheme, category?: string) => void
+  /** 切换分类当前套用的主题：name 可指向自定义主题名或内置主题名；null = 解绑（回同名内置/默认调性） */
+  'customTheme:setActive': (category: string, name: string | null) => void
+  /** 删除主题（引用它的分类自动解绑） */
   'customTheme:delete': (name: string) => void
   /** 抓取链接 HTML（导入公众号文章排版） */
   'customTheme:fetchUrl': (url: string) => string

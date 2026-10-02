@@ -19,7 +19,7 @@ import { exportDocx, exportPdf } from './docExport'
 import type { PlatformId } from '@shared/types'
 import { getWechatConfig, saveWechatConfig, setWechatBinding } from './wechatStore'
 import { pushDraft, pushCards, invalidateToken, getPublicIp } from './wechatPublish'
-import { listCustomThemes, saveCustomTheme, deleteCustomTheme, fetchUrlHtml } from './themeStore'
+import { listLibrary, saveTheme, setActiveTheme, deleteTheme, fetchUrlHtml } from './themeStore'
 import { listCategoryPresets, saveCategoryPreset } from './categoryPresetStore'
 import { openMdFile } from './projectStore'
 import { checkForUpdate, dismissVersion } from './updateChecker'
@@ -111,9 +111,13 @@ export function registerIpc(): void {
 
   // ---- 工程管理（M2）----
   handle('project:list', () => store.listProjects())
+  handle('project:listDuplicates', () => store.findDuplicateProjects())
   handle('project:listCategories', () => store.listCategories())
   handle('project:listHiddenCategories', () => store.listDisabledCategories())
   handle('project:deleteCategory', (name) => store.deleteCategory(name))
+  handle('project:listPurgedCategories', () => store.listPurgedCategories())
+  handle('project:categoryPurgeInfo', (name) => store.categoryPurgeInfo(name))
+  handle('project:purgeCategory', (name) => store.purgeCategory(name))
   handle('project:restoreCategory', (name) => store.restoreCategory(name))
   handle('project:renameCategory', async (oldName, newName) => {
     // 当前打开的工程若在被改名分类下，目录会迁移：先停监听，改名后按新路径重挂
@@ -318,10 +322,11 @@ export function registerIpc(): void {
   })
   handle('wechat:public-ip', () => getPublicIp())
 
-  // ---- 自定义排版主题库（导入 HTML/公众号链接复用排版）----
-  handle('customTheme:list', () => listCustomThemes())
-  handle('customTheme:save', (name, theme) => saveCustomTheme(name, theme))
-  handle('customTheme:delete', (name) => deleteCustomTheme(name))
+  // ---- 自定义排版主题库（v2：主题独立命名，分类挂多套，active 指针定当前套用）----
+  handle('customTheme:list', () => listLibrary())
+  handle('customTheme:save', (name, theme, category) => saveTheme(name, theme, category))
+  handle('customTheme:setActive', (category, name) => setActiveTheme(category, name ?? null))
+  handle('customTheme:delete', (name) => deleteTheme(name))
   handle('customTheme:fetchUrl', async (url) => fetchUrlHtml(url))
 
   // ---- 分类级账号预设（账号 = 分类：新工程自动继承账号级默认）----

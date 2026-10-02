@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import {
   clampThemeNumbers,
+  coerceHexColor,
   metaPatchToThemeKeys,
+  migrateCustomThemes,
   normalizeThemeKeys,
   resolveArticleTheme,
   sanitizeThemePatch,
   sanitizeThemePatchDetailed,
+  activeThemesView,
   THEME_NUM_RANGES,
   THEME_OVERRIDE_KEYS,
   DEFAULT_THEME
@@ -132,24 +135,24 @@ describe('resolveArticleTheme（标题版式覆盖）', () => {
 
 describe('resolveArticleTheme（背景卡覆盖）', () => {
   it('meta 未覆盖 → 背景卡跟随主题', () => {
-    const t = resolveArticleTheme({ category: '科技数码' })
-    expect(t.bodyBg).toBe('#eef3fb')
+    const t = resolveArticleTheme({ category: '生活常识' })
+    expect(t.bodyBg).toBe('#fffaf2')
     const plain = resolveArticleTheme({ category: '情感回忆' })
     expect(plain.bodyBg).toBeUndefined() // 情感回忆主题无卡片
   })
 
   it('meta hex 覆盖 → 背景卡换色；非法色值回落主题', () => {
-    const t = resolveArticleTheme({ category: '科技数码', bodyBg: '#f0fdf4' })
+    const t = resolveArticleTheme({ category: '生活常识', bodyBg: '#f0fdf4' })
     expect(t.bodyBg).toBe('#f0fdf4')
-    const bad = resolveArticleTheme({ category: '科技数码', bodyBg: 'not-a-color' })
-    expect(bad.bodyBg).toBe('#eef3fb')
+    const bad = resolveArticleTheme({ category: '生活常识', bodyBg: 'not-a-color' })
+    expect(bad.bodyBg).toBe('#fffaf2')
   })
 
   it("meta bodyBg 'none' 哨兵 → 显式去卡片（区别于未覆盖的跟随）", () => {
-    const off = resolveArticleTheme({ category: '科技数码', bodyBg: 'none' })
+    const off = resolveArticleTheme({ category: '生活常识', bodyBg: 'none' })
     expect(off.bodyBg).toBeUndefined()
-    const keep = resolveArticleTheme({ category: '科技数码' })
-    expect(keep.bodyBg).toBe('#eef3fb')
+    const keep = resolveArticleTheme({ category: '生活常识' })
+    expect(keep.bodyBg).toBe('#fffaf2')
   })
 
   it('无卡片主题覆盖 hex → 有卡片（深浅字色由渲染层兜底自适应）', () => {
@@ -569,5 +572,106 @@ describe('别名表的驼峰口语与长度单位（14:xx 实跑复盘：paragra
 
   it('字体栈给数字仍算非法（不能凭空补 px 成字体名）', () => {
     expect(sanitizeThemePatch({ fontFamily: 12 })).toEqual({})
+  })
+})
+
+describe('coerceHexColor（宽进：模型爱写的色值形态收敛成 #rrggbb）', () => {
+  it('合法 3/6 位 hex 原样通过（形态与大小写都不动）', () => {
+    expect(coerceHexColor('#7c3aed')).toBe('#7c3aed')
+    expect(coerceHexColor('#FFF')).toBe('#FFF')
+  })
+
+  it('8 位丢 alpha（主题库不存透明度）；4 位残缺串不截断兜底', () => {
+    expect(coerceHexColor('#7C3AED80')).toBe('#7c3aed')
+    expect(coerceHexColor('#abcd')).toBeUndefined()
+  })
+
+  it('rgb()/rgba() 换算成 hex（逗号与空格分隔都认）', () => {
+    expect(coerceHexColor('rgb(124, 58, 237)')).toBe('#7c3aed')
+    expect(coerceHexColor('rgba(124,58,237,0.5)')).toBe('#7c3aed')
+    expect(coerceHexColor('rgb(124 58 237)')).toBe('#7c3aed')
+  })
+
+  it('渐变/多色串取第一个可识别色（取主色是最接近作者意图的落点）', () => {
+    expect(coerceHexColor('linear-gradient(135deg, #a78bfa, #7c3aed)')).toBe('#a78bfa')
+    expect(coerceHexColor('linear-gradient(90deg, rgb(1,2,3), #fff)')).toBe('#010203')
+  })
+
+  it('救不动的仍返回 undefined（语义化色名/残缺串不猜）', () => {
+    expect(coerceHexColor('紫色')).toBeUndefined()
+    expect(coerceHexColor('crimson')).toBeUndefined()
+    expect(coerceHexColor('#12345')).toBeUndefined() // 5 位残缺不是截成 3 位的理由
+    expect(coerceHexColor('')).toBeUndefined()
+    expect(coerceHexColor(123)).toBeUndefined()
+  })
+})
+
+describe('sanitizeThemePatchDetailed 宽进回报（accent 写成渐变不再打回重试）', () => {
+  it('渐变 accent 转成主色 hex，转换说明进 coerced（静默改值=「设了没反应」）', () => {
+    const r = sanitizeThemePatchDetailed({ accent: 'linear-gradient(135deg, #a78bfa, #7c3aed)' })
+    expect(r.values.accent).toBe('#a78bfa')
+    expect(r.coerced).toEqual([
+      '强调色：linear-gradient(135deg, #a78bfa, #7c3aed) 不是 #rrggbb 十六进制，已按 #a78bfa 生效'
+    ])
+    expect(r.invalid).toEqual([])
+  })
+
+  it('rgb() 写法的任意色字段同样宽进（与 set_theme 共用同一口径）', () => {
+    expect(sanitizeThemePatch({ bodyText: 'rgb(34, 34, 34)', bodyBg: 'rgba(240, 253, 244, 1)' })).toEqual({
+      bodyText: '#222222',
+      bodyBg: '#f0fdf4'
+    })
+  })
+
+  it('真救不动的仍进 invalid（crimson 之类语义化色名不猜）', () => {
+    const r = sanitizeThemePatchDetailed({ accent: 'crimson' })
+    expect(r.values).toEqual({})
+    expect(r.invalid).toEqual(['accent'])
+    expect(r.coerced).toEqual([])
+  })
+})
+
+describe('migrateCustomThemes（v1 主题名=分类名 → v2 独立命名+active 指针）', () => {
+  it('v1 平铺映射迁移：每个主题同名归入原分类并激活，套用结果与迁移前一致', () => {
+    const lib = migrateCustomThemes({ 生活常识: { accent: '#7c3aed' }, 科技数码: { accent: '#0ea5e9' } })
+    expect(lib.version).toBe(2)
+    expect(lib.themes['生活常识']).toEqual({ category: '生活常识', theme: { accent: '#7c3aed' } })
+    expect(lib.active).toEqual({ 生活常识: '生活常识', 科技数码: '科技数码' })
+    expect(activeThemesView(lib)['生活常识']).toEqual({ accent: '#7c3aed' })
+  })
+
+  it('v2 原样通过（缺字段补空），损坏输入给空库', () => {
+    const v2 = { version: 2, themes: { A: { category: 'X', theme: { accent: '#111111' } } }, active: { X: 'A' } }
+    expect(migrateCustomThemes(v2)).toEqual(v2)
+    expect(migrateCustomThemes({ version: 2 })).toEqual({ version: 2, themes: {}, active: {} })
+    expect(migrateCustomThemes(null)).toEqual({ version: 2, themes: {}, active: {} })
+    expect(migrateCustomThemes('garbage')).toEqual({ version: 2, themes: {}, active: {} })
+  })
+})
+
+describe('activeThemesView（分类 → 当前套用主题，指针可指向自定义或内置）', () => {
+  const builtin = { 科技数码: { accent: '#2563eb' } } as unknown as Record<string, ArticleTheme>
+
+  it('指针指向自定义主题取自定义；指向内置名取内置；指向不存在的名字不进视图', () => {
+    const lib = migrateCustomThemes({
+      version: 2,
+      themes: { 清新蓝: { category: '生活常识', theme: { accent: '#7c3aed' } } },
+      active: { 生活常识: '清新蓝', 科技数码: '科技数码', 未分类: '幽灵主题' }
+    })
+    expect(activeThemesView(lib, builtin)).toEqual({
+      生活常识: { accent: '#7c3aed' },
+      科技数码: { accent: '#2563eb' }
+    })
+  })
+
+  it('一个分类一套当前套用；一套主题可被多个分类共享', () => {
+    const lib = migrateCustomThemes({
+      version: 2,
+      themes: { 共享: { category: '科技数码', theme: { accent: '#0f766e' } } },
+      active: { 科技数码: '共享', 生活常识: '共享' }
+    })
+    const view = activeThemesView(lib)
+    expect(view['科技数码']).toEqual({ accent: '#0f766e' })
+    expect(view['生活常识']).toEqual({ accent: '#0f766e' })
   })
 })

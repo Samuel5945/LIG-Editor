@@ -1,4 +1,16 @@
-import type { ProjectMeta, ArticleTheme, H1Style, H2Style, H2Num, H3Mark, QuoteStyle, HrStyle, StrongStyle } from './types'
+import type {
+  ProjectMeta,
+  ArticleTheme,
+  H1Style,
+  H2Style,
+  H2Num,
+  H3Mark,
+  QuoteStyle,
+  HrStyle,
+  StrongStyle,
+  CustomThemeLibrary,
+  StoredThemeEntry
+} from './types'
 import { isHexColor } from './cards'
 import { UNCATEGORIZED } from './categories'
 export type { ArticleTheme, H1Style, H2Style, H2Num, H3Mark, QuoteStyle, HrStyle, StrongStyle } from './types'
@@ -14,7 +26,6 @@ export type { ArticleTheme, H1Style, H2Style, H2Num, H3Mark, QuoteStyle, HrStyle
 
 const SANS = '"Microsoft YaHei", "PingFang SC", system-ui, sans-serif'
 const SERIF = '"Source Han Serif SC", "Noto Serif SC", "STSong", "SimSun", serif'
-const MONO = '"Cascadia Code", "JetBrains Mono", Consolas, monospace'
 
 /**
  * 背景色是否偏深（用于选前景色/引用文字色）。WCAG 相对亮度 < 0.35 视为深色。
@@ -156,7 +167,7 @@ export const DEFAULT_THEME: ArticleTheme = {
  * 预设分类调性（按分类名索引；未收录的分类回落默认）。
  * 每套都参考了对应领域的公众号爆款排版范式（只有一套日间排版，夜间由
  * resolveEditorTheme 按公众号逻辑自动变深，不再手调深色变体）：
- * - 科技数码：浅蓝白卡片 + 荧光青点缀 + 等宽数字感（135 编辑器「科技感」爆款范式）
+ * - 科技数码：衬线正文 + 青绿强调 + 下划线大标题 + ① 序号 + 圆角卡片引用（2026-10-02 由作者沉淀的「科技绿」主题转正）
  * - 设计鉴赏：杂志极简留白 + 直角图片 + 细下划线小节（设计美学号常见范式）
  * - 生活常识：暖色圆角卡片 + 胶囊标题 + 高亮加粗（生活科普爆款范式）
  * - 情感回忆：文艺信笺 + 引号引用 + 衬线疏朗（深夜情感号范式）
@@ -164,25 +175,25 @@ export const DEFAULT_THEME: ArticleTheme = {
  */
 export const CATEGORY_THEMES: Record<string, ArticleTheme> = {
   科技数码: {
-    accent: '#22d3ee',
-    fontFamily: MONO,
-    lineHeight: 1.95,
-    letterSpacing: '0.01em',
+    accent: '#0d9488',
+    fontFamily: SERIF,
+    lineHeight: 1.85,
+    letterSpacing: '0.04em',
     headingAlign: 'left',
-    // 浅蓝白卡 + 深字（深色卡片排版在公众号夜间无法显示，夜间由公众号逻辑自动变深）
-    bodyBg: '#eef3fb',
-    bodyText: '#333',
-    headingColor: '#1a1a1a',
-    bodyRadius: 14,
-    bodyPadding: '20px 22px',
+    fontSize: 16,
+    headingFontSize: 20,
+    headingColor: '#0d9488',
+    strongColor: '#0d9488',
     h1Style: 'underline',
-    h2Style: 'block',
-    h3Mark: 'dot',
+    h2Style: 'plain',
+    h2Num: '①',
+    h3Mark: 'diamond',
     quoteStyle: 'card',
     hrStyle: 'line',
     strongStyle: 'color',
-    imgRadius: 10,
-    pGap: 14
+    imgRadius: 8,
+    bodyRadius: 8,
+    pGap: 18
   },
   设计鉴赏: {
     accent: '#8b5cf6',
@@ -366,6 +377,11 @@ export const THEME_KEY_ALIASES: Record<string, ThemeOverrideKey> = {
   bg: 'bodyBg',
   background: 'bodyBg',
   accent_color: 'accent',
+  primary_color: 'accent',
+  primary: 'accent',
+  main_color: 'accent',
+  theme_color: 'accent',
+  brand_color: 'accent',
   // 本次实跑新增的口语叫法（段距/圆角/字距/行距；para_spacing / image_radius 表内已有）
   paragraph_gap: 'pGap',
   space_after: 'pGap',
@@ -469,6 +485,12 @@ export const THEME_OVERRIDE_KEYS = [
 
 export type ThemeOverrideKey = (typeof THEME_OVERRIDE_KEYS)[number]
 
+/** 键名清单速查（save_theme_preset 失败报错内嵌用）：文本协议模型收不到 inputSchema，
+ *  报「键名须与工具说明一致」等于让它蒙——把可用键连取值口径直接塞进报错，一轮改对。
+ *  枚举取值须与 sanitizeThemePatchDetailed 的 en() 白名单同步（改枚举先改这里）。 */
+export const THEME_KEYS_HINT =
+  'accent(必填,#rrggbb) / fontFamily / lineHeight(1.5-3) / letterSpacing / fontSize(10-40) / headingFontSize(10-40) / bodyAlign(indent|flush|center) / headingAlign(center|left) / h1Style(bar|pill|underline) / h2Style(leftbar|block|underline|plain) / h2Num(01|1.|1、|一、|壹、|①|none) / h3Mark(diamond|dot|none) / bodyBg(#hex|none) / pGap(0-48) / bodyText / headingColor / quoteStyle(leftbar|card|quotes|dashcard) / quoteBorder / quoteBg / quoteText / hrColor / h2Border / hrStyle(line|dot|long) / strongStyle(color|highlight|plain) / strongBg / strongColor / imgRadius(0-40) / bodyRadius(0-40) / bodyPadding / tableStyle(bordered|striped|plain) / tableHeaderBg / tableBorder / tableHeaderText / h2Bg'
+
 /** 排版覆盖字段中文名（对话框视觉参数预览、工具返回值提示共用一套口径） */
 export const THEME_FIELD_LABELS: Record<ThemeOverrideKey, string> = {
   accent: '强调色',
@@ -552,6 +574,39 @@ export function clampThemeNumbers(raw: Record<string, unknown>): {
   return { values, notes }
 }
 
+/**
+ * 宽进口径：把模型爱写的色值形态收敛成 #rrggbb，转不出返回 undefined（语义化色名/乱串不猜）。
+ * 为什么不只认 #rrggbb：实测 save_theme_preset 的 accent 写成渐变/rgba 连续两轮被拒，而报错
+ * 又不带上「你实际传了什么」，模型只能原样重试。能机械转换的形态一律救回：
+ * #rrggbbaa/#rgba 丢 alpha、rgb()/rgba() 换算、渐变等多色串取第一个可识别色（主题库不存渐变，
+ * 取主色是最接近作者意图的落点）。
+ */
+export function coerceHexColor(v: unknown): string | undefined {
+  if (typeof v !== 'string') return undefined
+  const s = v.trim()
+  if (!s) return undefined
+  // 合法 3/6 位原样通过（不改变既有口径：大小写、书写形态都保持）
+  if (/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(s)) return s
+  // 8 位（#rrggbbaa，设计工具常见输出）：丢 alpha。4/5 位残缺串不做截断兜底——
+  // 多半是 #rrggbb 打漏了字符，截出个错色还不如打回（themeFields 的拒收口径就靠这条）
+  if (/^#[0-9a-fA-F]{8}$/.test(s)) return s.slice(0, 7).toLowerCase()
+  // rgb()/rgba()：分量换算（逗号与空格两种分隔都认）
+  const m = /^rgba?\(\s*(\d{1,3})\s*[,\s]\s*(\d{1,3})\s*[,\s]\s*(\d{1,3})[^)]*\)/.exec(s)
+  if (m) {
+    return '#' + [m[1], m[2], m[3]].map((n) => Math.min(255, Number(n)).toString(16).padStart(2, '0')).join('')
+  }
+  // 渐变/多色串：取文本顺序上第一个可识别色（hex 与 rgb() 混写时也按出现先后；
+  // hex 匹配带 lookahead，防 5/7 位残缺串被截成 3 位假命中）
+  const hexInside = s.match(/#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3})(?![0-9a-fA-F])/g)
+  const rgbInside = s.match(/rgba?\(\s*\d{1,3}\s*[,\s]\s*\d{1,3}\s*[,\s]\s*\d{1,3}[^)]*\)/)
+  const hexAt = hexInside?.length ? s.indexOf(hexInside[0]) : Infinity
+  const rgbAt = rgbInside ? s.indexOf(rgbInside[0]) : Infinity
+  if (hexAt === Infinity && rgbAt === Infinity) return undefined
+  if (rgbAt < hexAt) return coerceHexColor(rgbInside![0])
+  const first = hexInside![0]
+  return (first.length === 9 || first.length === 7 ? first.slice(0, 7) : first).toLowerCase()
+}
+
 /** 把任意对象收敛为合法的排版覆盖键值对：剔未知键 / hex 校验 / 数值夹取 / 枚举守卫。
  *  set_theme 工具与 save_theme_preset 共用；null/undefined 值由调用方先行处理清除语义 */
 export function sanitizeThemePatch(patch: Record<string, unknown>): Partial<ProjectMeta> {
@@ -566,12 +621,24 @@ export function sanitizeThemePatchDetailed(raw: Record<string, unknown>): {
   unknown: string[]
   /** 键名认得、值却不合法而被丢弃的字段（枚举外值 / 读不出数值 / 空串 / 坏色值） */
   invalid: string[]
+  /** 宽进转换说明（rgb()/渐变 accent 已按某某 hex 生效）：工具层照实转述，静默改值=「设了没反应」 */
+  coerced: string[]
 } {
   const { patch, unknown } = normalizeThemeKeys(raw ?? {})
   const out: Record<string, unknown> = {}
-  const hex = (k: string): void => {
+  const coerced: string[] = []
+  const hex = (k: ThemeOverrideKey): void => {
     const v = patch[k]
-    if (typeof v === 'string' && isHexColor(v)) out[k] = v.trim()
+    if (typeof v !== 'string' || !v.trim()) return
+    if (isHexColor(v)) {
+      out[k] = v.trim()
+      return
+    }
+    const conv = coerceHexColor(v)
+    if (conv) {
+      out[k] = conv
+      coerced.push(`${THEME_FIELD_LABELS[k]}：${v.trim()} 不是 #rrggbb 十六进制，已按 ${conv} 生效`)
+    }
   }
   const num = (k: ThemeOverrideKey): void => {
     const range = THEME_NUM_RANGES[k]
@@ -606,7 +673,18 @@ export function sanitizeThemePatchDetailed(raw: Record<string, unknown>): {
     out.h2Num = patch.h2Num
   }
   en('h3Mark', ['diamond', 'dot', 'none'])
-  if (patch.bodyBg === 'none' || (typeof patch.bodyBg === 'string' && isHexColor(patch.bodyBg))) out.bodyBg = patch.bodyBg
+  if (patch.bodyBg === 'none') {
+    out.bodyBg = 'none'
+  } else if (typeof patch.bodyBg === 'string' && patch.bodyBg.trim()) {
+    if (isHexColor(patch.bodyBg)) out.bodyBg = patch.bodyBg.trim()
+    else {
+      const conv = coerceHexColor(patch.bodyBg)
+      if (conv) {
+        out.bodyBg = conv
+        coerced.push(`${THEME_FIELD_LABELS.bodyBg}：${patch.bodyBg.trim()} 不是 #rrggbb 十六进制，已按 ${conv} 生效`)
+      }
+    }
+  }
   // B 期扩展 20 字段
   str('fontFamily')
   num('lineHeight')
@@ -634,7 +712,51 @@ export function sanitizeThemePatchDetailed(raw: Record<string, unknown>): {
   hex('h2Bg')
   // 键名对上了但值被校验丢弃的，同样要能报出去（不然「设了没反应」又变成静默的）
   const invalid = Object.keys(patch).filter((k) => !(k in out))
-  return { values: out as Partial<ProjectMeta>, unknown, invalid }
+  return { values: out as Partial<ProjectMeta>, unknown, invalid, coerced }
+}
+
+/**
+ * 自定义主题库迁移：v1（Record<分类名, 主题>，主题名即分类名，一分类一主题）→ v2
+ * （主题独立命名 + 归属分类 + active 指针，见 CustomThemeLibrary）。旧数据每个主题
+ * 变成同名主题、归属同名分类并激活——迁移后所有分类的套用结果与迁移前完全一致。
+ * v2 原样通过（缺字段补空）；损坏/非对象输入给空库，不让一个坏文件拖垮启动。
+ */
+export function migrateCustomThemes(raw: unknown): CustomThemeLibrary {
+  if (raw && typeof raw === 'object' && !Array.isArray(raw) && (raw as { version?: unknown }).version === 2) {
+    const lib = raw as unknown as CustomThemeLibrary
+    return {
+      version: 2,
+      themes: lib.themes && typeof lib.themes === 'object' ? lib.themes : {},
+      active: lib.active && typeof lib.active === 'object' ? lib.active : {}
+    }
+  }
+  const themes: Record<string, StoredThemeEntry> = {}
+  const active: Record<string, string> = {}
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+      if (!k || !v || typeof v !== 'object' || Array.isArray(v)) continue
+      themes[k] = { category: k, theme: v as ArticleTheme }
+      active[k] = k
+    }
+  }
+  return { version: 2, themes, active }
+}
+
+/**
+ * 派生「分类 → 当前套用主题」视图：active 指针 → 先查自定义库、再查内置同名主题；
+ * 指针缺失或指向的名字两边都不存在则该分类不进视图（resolveArticleTheme 自己回内置/默认）。
+ * resolveArticleTheme 与导出链路只认这个视图形状，主题库结构升级不惊动它们。
+ */
+export function activeThemesView(
+  lib: CustomThemeLibrary,
+  builtin: Record<string, ArticleTheme> = CATEGORY_THEMES
+): Record<string, ArticleTheme> {
+  const out: Record<string, ArticleTheme> = {}
+  for (const [cat, name] of Object.entries(lib.active)) {
+    const t = lib.themes[name]?.theme ?? builtin[name]
+    if (t) out[cat] = t
+  }
+  return out
 }
 
 export function resolveArticleTheme(

@@ -124,10 +124,10 @@ export default function TypographyPanel({
               <input
                 value={presetName}
                 onChange={(e) => setPresetName(e.target.value)}
-                placeholder={category ?? '新分类名'}
+                placeholder={category ? `主题名（存入「${category}」）` : '主题名'}
                 disabled={disabled || saving}
                 className="w-36 rounded bg-panel-3 px-2 py-1 text-ink outline-none placeholder:text-ink-dim disabled:opacity-40"
-                title="把当前生效的整套排版存成自定义主题（同名分类自动创建）"
+                title="把当前生效的整套排版存成一套主题（存入当前工程的分类；一个分类可挂多套主题，可在主题库里切换）"
               />
               <button
                 onClick={() => {
@@ -152,7 +152,7 @@ export default function TypographyPanel({
                 disabled={disabled || saving}
                 className="rounded bg-accent px-2.5 py-1 text-white hover:opacity-90 disabled:opacity-40"
               >
-                {saving ? '保存中…' : '存为分类主题'}
+                {saving ? '保存中…' : '存为主题'}
               </button>
             </div>
           )}

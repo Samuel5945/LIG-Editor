@@ -44,6 +44,8 @@ interface SidebarProps {
   onOpenCatManage: () => void
   onOpenIntegration: (tab: 'skill') => void
   onSetFilterCat: (cat: string) => void
+  /** 分类被右键删除/恢复后刷新分类列表（App 侧重拉 project:listCategories） */
+  onCategoriesChanged?: () => void
   /** 选题收件箱条目「生成大纲」→ 送入脑暴面板（App 级回调） */
   onMakeOutline: (card: IdeaCard) => void
   onToast: (msg: string) => void
@@ -123,6 +125,7 @@ export default function Sidebar(props: SidebarProps): ReactElement {
     onOpenCatManage,
     onOpenIntegration,
     onSetFilterCat,
+    onCategoriesChanged,
     onMakeOutline,
     onToast
   } = props
@@ -175,6 +178,46 @@ export default function Sidebar(props: SidebarProps): ReactElement {
   // 批量管理（分类内）：☑ 进入选选模式，行点击=勾选；批量归档/删除
   const [batchCat, setBatchCat] = useState<string | null>(null)
   const [batchSel, setBatchSel] = useState<string[]>([])
+  // 分类行右键菜单：{ x, y } 视口坐标 + 分类名
+  const [catMenu, setCatMenu] = useState<{ x: number; y: number; cat: string } | null>(null)
+  // 分类置顶（树序偏好，渲染层本地持久化；与工程置顶同风格但独立存——封面墙不消费分类序）
+  const [catPinned, setCatPinned] = useState<string[]>(() => {
+    try {
+      const v = JSON.parse(localStorage.getItem('lig-tree-cat-pinned') ?? '[]')
+      return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : []
+    } catch {
+      return []
+    }
+  })
+  useEffect(() => {
+    localStorage.setItem('lig-tree-cat-pinned', JSON.stringify(catPinned))
+  }, [catPinned])
+  const toggleCatPin = useCallback((cat: string) => {
+    setCatPinned((prev) => (prev.includes(cat) ? prev.filter((c) => c !== cat) : [cat, ...prev]))
+  }, [])
+
+  /** 右键删除分类：与分类管理同一通道（删除 = 隐藏，工程与目录保留可恢复） */
+  const doDeleteCategory = useCallback(
+    async (cat: string) => {
+      if (cat === UNCATEGORIZED) {
+        onToast('「未分类」是兜底分类，不能删除')
+        return
+      }
+      const ok = await confirmAction(`删除分类「${cat}」？工程与目录全部保留，可在分类管理里恢复。`, {
+        title: '删除分类',
+        okLabel: '删除'
+      })
+      if (!ok) return
+      try {
+        await window.api.invoke('project:deleteCategory', cat)
+        onToast(`分类「${cat}」已删除（工程保留，可在分类管理里恢复）`)
+        onCategoriesChanged?.()
+      } catch (err) {
+        onToast(`删除失败：${err instanceof Error ? err.message : err}`)
+      }
+    },
+    [onToast, onCategoriesChanged]
+  )
   const exitBatch = useCallback(() => {
     setBatchCat(null)
     setBatchSel([])
@@ -194,7 +237,12 @@ export default function Sidebar(props: SidebarProps): ReactElement {
   const activeProjects = useMemo(() => projects.filter((p) => !archived.includes(p.name)), [projects, archived])
   const archivedProjects = useMemo(() => projects.filter((p) => archived.includes(p.name)), [projects, archived])
 
-  const groups = groupProjectsByCategory(activeProjects, categories, pinned)
+  // 分组后把置顶分类浮到最前（稳定排序：置顶之间保持原相对顺序，其余跟列表序不变）
+  const groups = useMemo(() => {
+    const g = groupProjectsByCategory(activeProjects, categories, pinned)
+    const rank = new Set(catPinned)
+    return g.sort((a, b) => Number(rank.has(b.category)) - Number(rank.has(a.category)))
+  }, [activeProjects, categories, pinned, catPinned])
 
   const toggleCat = useCallback(
     (cat: string) => {
@@ -458,6 +506,14 @@ export default function Sidebar(props: SidebarProps): ReactElement {
                     : 'text-ink-dim hover:bg-panel-3'
             }`}
           >
+            {/* 批量勾选圈：放行首展开按钮左边的空白处（绝对定位不占布局），点行即切换勾选 */}
+            {inBatch && (
+              <span
+                className={`absolute left-1 top-1/2 -translate-y-1/2 text-[11px] ${checked ? 'text-accent' : 'text-ink-dim/50'}`}
+              >
+                <Icon name={checked ? 'checkCircle' : 'circle'} size={13} />
+              </span>
+            )}
             <span
               onClick={(e) => {
                 e.stopPropagation()
@@ -468,11 +524,6 @@ export default function Sidebar(props: SidebarProps): ReactElement {
             >
               <Icon name={isOpen ? 'chevronDown' : 'chevronRight'} size={12} className="text-ink-dim" />
             </span>
-            {inBatch && (
-              <span className={`w-3 shrink-0 text-center text-[11px] ${checked ? 'text-accent' : 'text-ink-dim/50'}`}>
-                <Icon name={checked ? 'checkCircle' : 'circle'} size={13} />
-              </span>
-            )}
             <span
               className="min-w-0 flex-1"
               title={inBatch ? undefined : isOpen ? '点击收起' : '点击展开'}
@@ -726,11 +777,15 @@ export default function Sidebar(props: SidebarProps): ReactElement {
                   toggleCat(g.category)
                   onSetFilterCat(g.category)
                 }}
+                onContextMenu={(e) => {
+                  e.preventDefault()
+                  setCatMenu({ x: e.clientX, y: e.clientY, cat: g.category })
+                }}
                 className={`${rowBase} ${filterCat === g.category ? 'text-ink' : 'text-ink-dim'} hover:bg-panel-3`}
                 title={
                   badge
-                    ? `分类「${g.category}」绑定公众号：${badge}；点击选中后新建工程/脑暴立项落此分类`
-                    : `点击展开；选中后新建工程/脑暴立项落此分类${wechatBadge.defaultName ? `（未绑定，推送走默认账号 ${wechatBadge.defaultName}）` : ''}`
+                    ? `分类「${g.category}」绑定公众号：${badge}；点击选中后新建工程/脑暴立项落此分类；右键更多操作`
+                    : `点击展开；选中后新建工程/脑暴立项落此分类${wechatBadge.defaultName ? `（未绑定，推送走默认账号 ${wechatBadge.defaultName}）` : ''}；右键更多操作`
                 }
               >
                 <Chevron open={isOpen} />
@@ -739,6 +794,11 @@ export default function Sidebar(props: SidebarProps): ReactElement {
                 {badge && (
                   <span className="shrink-0 rounded bg-panel px-1 py-0.5 text-[10px] text-accent" title={`绑定公众号：${badge}`}>
                     {badge}
+                  </span>
+                )}
+                {catPinned.includes(g.category) && (
+                  <span className={rowBox} title="已置顶">
+                    <Icon name="pin" size={12} />
                   </span>
                 )}
                 <button
@@ -937,6 +997,46 @@ export default function Sidebar(props: SidebarProps): ReactElement {
             }}
           >
             {archived.includes(menu.name) ? '取消归档' : '归档'}
+          </MenuItem>
+        </Popover>
+      )}
+      {/* 分类右键菜单：打开文件目录 / 置顶 / 删除（同一只浮层壳，遮罩或再右键关闭） */}
+      {catMenu && (
+        <Popover
+          onClose={() => setCatMenu(null)}
+          dismissOnContextMenu
+          className="fixed min-w-36 p-1 text-xs"
+          style={{ left: catMenu.x, top: Math.min(catMenu.y, window.innerHeight - 160) }}
+        >
+          <MenuItem
+            icon="folderOpen"
+            onClick={() => {
+              if (paths) openPath(paths.workspace, catMenu.cat, onToast)
+              setCatMenu(null)
+            }}
+          >
+            打开文件目录
+          </MenuItem>
+          <MenuItem
+            icon="pin"
+            onClick={() => {
+              toggleCatPin(catMenu.cat)
+              setCatMenu(null)
+            }}
+          >
+            {catPinned.includes(catMenu.cat) ? '取消置顶' : '置顶'}
+          </MenuItem>
+          <MenuItem
+            icon="trash"
+            tone={catMenu.cat === UNCATEGORIZED ? 'default' : 'danger'}
+            onClick={() => {
+              const cat = catMenu.cat
+              setCatMenu(null)
+              void doDeleteCategory(cat)
+            }}
+            title={catMenu.cat === UNCATEGORIZED ? '「未分类」是兜底分类，不能删除' : '删除 = 隐藏，工程与目录保留可在分类管理恢复'}
+          >
+            删除
           </MenuItem>
         </Popover>
       )}
