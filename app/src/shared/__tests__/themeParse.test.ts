@@ -115,17 +115,18 @@ describe('isDarkColor（背景亮度判断：暖白浅卡 ≠ 深色卡）', () 
 })
 
 describe('resolveEditorTheme（日间基础色 / 夜间公众号逻辑自动变深，无手调深色变体）', () => {
-  it('科技数码：日间浅蓝白卡 + 深字；夜间自动变深（深卡 + 浅字，保留色相）', () => {
+  it('科技数码（科技绿）：无卡片底色，正文直接落页面底；夜间默认深底浅字', () => {
     const tech = CATEGORY_THEMES['科技数码']
     const day = resolveEditorTheme(tech, false)
-    expect(day.bodyBg).toBe('#eef3fb') // 日间基础色
+    expect(day.bodyBg).toBeUndefined() // 2026-10-02 科技绿转正：浅蓝白卡（#eef3fb）摘掉，正文不再垫色卡
     expect(day.darkBg).toBe(false)
     expect(day.bodyText).toBe('#333')
+    expect(day.headingColor).toBe('#0d9488') // 标题跟强调色（昼夜同源）
     const night = resolveEditorTheme(tech, true)
-    expect(night.bodyBg).toBe(wechatDarkColor('#eef3fb')) // 公众号逻辑自动变深
+    expect(night.bodyBg).toBe('#1e2126') // 无日间卡可翻 → 默认夜底
     expect(night.darkBg).toBe(true)
-    expect(night.bodyText).toBe(wechatDarkColor('#333', 'text')) // 深字翻转为近白浅字
-    expect(night.headingColor).toBe(wechatDarkColor('#1a1a1a', 'text'))
+    expect(night.bodyText).toBe('#cbd5e1') // 无卡主题的夜间浅字兜底（不经浅卡翻转那条路）
+    expect(night.headingColor).toBe('#eef2f7') // 青绿自身亮度也判深，深底上被换成默认浅字
   })
 
   it('生活常识：日间保持暖白卡深字；夜间自动变深（深暖卡 + 浅字）', () => {
@@ -192,8 +193,9 @@ describe('wechatDarkColor（公众号夜间逻辑：亮度翻转 + 降饱和，�
     expect(isDarkColor('#333')).toBe(true)
     expect(isDarkColor('#fff')).toBe(false)
     expect(wechatDarkColor('#333', 'text')).toBe(wechatDarkColor('#333333', 'text'))
-    // 缩写深字夜间翻转成近白（回归：此前 #333 不翻转直接渲染在深卡上）
-    const night = resolveEditorTheme(CATEGORY_THEMES['科技数码'], true)
+    // 缩写深字夜间翻转成近白（回归：此前 #333 不翻转直接渲染在深卡上）。
+    // 夹具用「浅卡 + #333 深字」才走得到翻转：科技绿没卡片底色，夜间直接落默认深底
+    const night = resolveEditorTheme({ ...DEFAULT_THEME, bodyBg: '#fff0f0', bodyText: '#333' }, true)
     expect(night.bodyText).toBe('#e0e0e0')
   })
 })

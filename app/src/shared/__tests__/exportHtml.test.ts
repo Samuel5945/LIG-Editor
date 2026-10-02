@@ -304,15 +304,18 @@ describe('docToExportHtml 强调色', () => {
 describe('docToExportHtml 分类排版调性（爆款范式）', () => {
   const MD = '# 标题\n\n## 小节\n\n### 子节\n\n**重点**正文。\n\n> 引用一句。\n\n---\n'
 
-  it('科技数码：浅蓝白卡片 + 荧光青 + 色块 H2 + 等宽字体', () => {
+  it('科技数码（科技绿）：不垫色卡 + 衬线正文 + 青绿下划线 H1 + ① 纯文字 H2 + 圆角引用卡', () => {
     const out = docToExportHtml(mdToDoc(MD), (src) => src, CATEGORY_THEMES['科技数码'])
-    expect(out).toContain('background-color:#eef3fb') // 浅蓝白容器
+    expect(out).not.toContain('background-color:') // 旧浅蓝白容器已摘，正文直接铺页面底
     expect(out).toContain('color:#333') // 深色正文
-    expect(out).toContain('border-radius:14px') // 容器圆角
-    expect(out).toContain('border-bottom:3px solid #22d3ee') // H1 下划线
-    expect(out).toContain('background:#22d3ee;border-radius:6px;padding:3px 14px') // H2 色块
-    expect(out).toContain('background:rgba(34,211,238,0.1)') // 引用淡青卡片
-    expect(out).toContain('font-family:"Cascadia Code"') // 等宽字体
+    expect(out).toContain('font-family:"Source Han Serif SC"') // 衬线正文
+    expect(out).toContain('border-bottom:3px solid #0d9488') // H1 下划线跟强调色
+    expect(/<h2[^>]*>/.exec(out)?.[0]).not.toContain('background') // H2 纯文字，不再是色块
+    expect(out).toContain('>① 小节</h2>') // 小节序号用 ①
+    expect(out).toContain('transform:rotate(45deg)') // H3 菱形小标记
+    expect(out).toContain('border-radius:12px;background:rgba(13,148,136,0.1)') // 引用圆角淡青卡
+    expect(out).toContain('<strong style="font-weight:bold;color:#0d9488;">重点</strong>') // 加粗只换色不高亮
+    expect(out).toContain('border-top:2px solid #e8e8e8;width:64px') // 短居中的分隔线
   })
 
   it('生活常识：暖白卡片 + 胶囊 H1 + 高亮加粗', () => {
