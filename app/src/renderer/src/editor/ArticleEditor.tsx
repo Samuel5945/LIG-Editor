@@ -1038,9 +1038,14 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
               '--article-caption-color': c.darkBg ? '#cbd5e1' : '#555'
             }
             if (t.headingAlign === 'left') vars['--article-bar-left'] = '0'
-            // 页面纸底（日报纸感外壳）：昼夜间与卡片同源解析；不设 = 透明（原行为）
+            // 页面纸底（日报纸感外壳）：昼夜间与卡片同源解析；不设 = 透明（原行为）。
+            // 有纸底时同时给容器一圈内衬——深壳浅卡主题（如日报07）在画布上纸壳才露得出来，
+            // 与导出页面层 padding:16px 12px 26px 同构；没有纸底的主题不加，布局不变
             const pageBg = resolvePageBg(t, uiDark !== false)
-            if (pageBg) vars['--article-page-bg'] = pageBg
+            if (pageBg) {
+              vars['--article-page-bg'] = pageBg
+              vars['--article-page-pad'] = '12px 16px 26px'
+            }
             // H1 装饰：pill 胶囊色块 / underline 下划线 / banner 报头横幅（bar 用 CSS 默认短横）
             const h1 = t.h1Style ?? 'bar'
             if (h1 === 'pill') {
@@ -1126,11 +1131,21 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
               vars['--article-quote-border'] = `1px dashed ${t.quoteBorder && isHexColor(t.quoteBorder) ? t.quoteBorder : accent}`
               vars['--article-quote-bg'] = t.quoteBg && isHexColor(t.quoteBg) ? t.quoteBg.trim() : 'transparent'
             } else if (quote === 'quotes') {
-              vars['--article-quote-mark'] = ''
+              // 引号形态的 ❝ 装饰：导出端渲染在引言内首位，画布用 ::before 呈现（之前被设成空串从不显示）
+              vars['--article-quote-mark'] = '"❝"'
             }
-            // leftbar / quotes 的浅底同样允许整体换成作者指定的引用底色
-            if ((quote === 'leftbar' || quote === 'quotes') && t.quoteBg && isHexColor(t.quoteBg))
-              vars['--article-quote-bg'] = t.quoteBg.trim()
+            // leftbar / quotes 的引用底色：作者指定优先；未给时落浅色缺省（与导出同口径：浅底 #f7f7f7 /
+            // 深底微白 7%）——之前回退到 CSS 里的深灰蓝旧值，浅色主题下引用变成「深字压深底」没法读
+            if (quote === 'leftbar' || quote === 'quotes') {
+              vars['--article-quote-bg'] =
+                t.quoteBg && isHexColor(t.quoteBg) ? t.quoteBg.trim() : c.darkBg ? 'rgba(255,255,255,0.07)' : '#f7f7f7'
+            }
+            // 引用条颜色跟主题 quoteBorder（引用描边色），未设跟强调色——与导出端 quoteBarColor 同源。
+            // 之前画布左条永远吃强调色 60% 混合，主题的描边色在画布上不生效（导出/画布不同貌）
+            if (quote === 'leftbar' || quote === 'quotes') {
+              const barColor = t.quoteBorder && isHexColor(t.quoteBorder) ? t.quoteBorder.trim() : accent
+              vars['--article-quote-left'] = `4px solid ${barColor}`
+            }
             // 分隔线：dot 圆点列 / long 通栏细线（line 用 CSS 默认短横）
             const hr = t.hrStyle ?? 'line'
             if (hr === 'dot') {
@@ -1157,8 +1172,10 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
               // color 样式 + 专属加粗强调色（文章常 strong 用独立品牌色）
               vars['--article-strong-color'] = t.strongColor
             }
-            // 表格：边框 / 表头背景 / 表头字色（按表头背景亮度）
-            if (t.tableStyle) {
+            // 表格：边框 / 表头背景 / 表头字色（按表头背景亮度）。不再以「主题给了 tableStyle」为前提——
+            // 未给时也要落与导出一致的浅色缺省，否则画布回退到 CSS 里的深色旧缺省（表头黑底、深条纹）
+            const tableStyle = t.tableStyle ?? 'bordered'
+            {
               const border = t.tableBorder && isHexColor(t.tableBorder) ? t.tableBorder : c.darkBg ? '#3a4a5e' : '#e5e7eb'
               const hbg =
                 t.tableHeaderBg && isHexColor(t.tableHeaderBg) ? t.tableHeaderBg : c.darkBg ? '#1e2b3d' : '#f3f4f6'
@@ -1170,13 +1187,24 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
                   : isDarkColor(hbg)
                     ? '#eef2f7'
                     : '#1a1a1a'
-              vars['--article-table-stripe'] = t.tableStyle === 'striped' ? '1' : '0'
+              vars['--article-table-stripe'] = tableStyle === 'striped' ? '1' : '0'
               // 斑马纹底色：striped 用表头色的淡色，其余透明
               vars['--article-table-stripe-bg'] =
-                t.tableStyle === 'striped'
+                tableStyle === 'striped'
                   ? `color-mix(in srgb, ${hbg} 40%, transparent)`
                   : 'transparent'
             }
+            // 图片主题四字段（imgStyle/imgFrame/imgGap/captionAlign）画布预览：
+            // 变量由 index.css 的 figure>img 规则消费；形态切宽、边框深浅底各自取色（与导出端同源）。
+            // 圆角复用既有 --article-img-radius（全 img 通用，含图集），不另设第二套变量
+            vars['--thm-img-w'] = t.imgStyle === 'fullwidth' ? '100%' : t.imgStyle === 'half' ? '50%' : 'auto'
+            vars['--thm-img-max-w'] = t.imgStyle === 'fullwidth' ? 'none' : '100%'
+            vars['--thm-img-max-h'] = t.imgStyle === 'fullwidth' ? 'none' : '420px'
+            vars['--thm-img-border'] =
+              t.imgFrame === 'line' ? `1px solid ${uiDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.08)'}` : 'none'
+            vars['--thm-img-shadow'] = t.imgFrame === 'shadow' ? '0 2px 12px rgba(0,0,0,0.14)' : 'none'
+            vars['--thm-img-gap'] = `${t.imgGap ?? 16}px`
+            vars['--thm-cap-align'] = t.captionAlign === 'left' ? 'left' : 'center'
             return vars as CSSProperties
           })()}
         />

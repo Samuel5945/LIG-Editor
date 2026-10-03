@@ -16,8 +16,10 @@ interface PolishDialogProps {
   review?: string
   /** 当前生效的排版调性（视觉层基线）：传入才允许模型打包给出视觉参数补丁 */
   theme?: ArticleTheme | null
-  /** 确认应用：排版全文 + 可选视觉参数覆盖（仅排版优化模式会给第二参） */
-  onConfirm: (result: string, themePatch?: Partial<ProjectMeta>, only?: 'layout' | 'visual') => void
+  /** 工程现有排版微调数（>0 说明有覆盖压着主题，对齐模式应用时会清空它们） */
+  overrideCount?: number
+  /** 确认应用：排版全文 + 可选视觉参数覆盖（仅排版优化模式会给第二参）；alignTheme = 应用时清空工程微调、视觉完全跟随主题 */
+  onConfirm: (result: string, themePatch?: Partial<ProjectMeta>, only?: 'layout' | 'visual', alignTheme?: boolean) => void
   onClose: () => void
 }
 
@@ -27,6 +29,7 @@ export default function PolishDialog({
   skill,
   review,
   theme,
+  overrideCount,
   onConfirm,
   onClose
 }: PolishDialogProps): ReactElement {
@@ -35,6 +38,8 @@ export default function PolishDialog({
   const [running, setRunning] = useState(false)
   const [done, setDone] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // 主题对齐（默认开）：视觉层以分类主题为准，模型只重排文字结构；应用时清空压住主题的工程微调
+  const [alignTheme, setAlignTheme] = useState(true)
   // 排版优化打包输出的视觉参数（<theme> 围栏解析而来；undefined = 模型认为视觉层不用动）
   const [themePatch, setThemePatch] = useState<Partial<ProjectMeta> | undefined>(undefined)
   // 修订模式：补丁应用统计与命中明细（失配项列出供人工处理；items 用于逐条对比展示）
@@ -55,7 +60,7 @@ export default function PolishDialog({
     setRunning(true)
     const messages = isReview
       ? applyReviewMessages(article, review!, skill)
-      : polishLayoutMessages(article, skill, theme)
+      : polishLayoutMessages(article, skill, theme, alignTheme)
     const { promise, abort } = chatOnce(messages, (full) => {
       setStreamLen(full.length)
       if (!isReview) setResult(full)
@@ -97,7 +102,7 @@ export default function PolishDialog({
         setRunning(false)
         abortRef.current = null
       })
-  }, [article, skill, review, theme, isReview])
+  }, [article, skill, review, theme, isReview, alignTheme])
 
   // 打开即自动开跑
   const startedRef = useRef(false)
@@ -144,11 +149,16 @@ export default function PolishDialog({
           <Button
             variant="pri"
             icon="check"
-            onClick={() =>
+            onClick={() => {
+              // 对齐模式：视觉参数一律不落（模型也不会给），应用时由 App 清空工程微调
+              if (alignTheme && !isReview) {
+                onConfirm(result, undefined, undefined, true)
+                return
+              }
               pickVisual && !pickLayout
                 ? onConfirm(result, themePatch, 'visual')
                 : onConfirm(result, pickVisual ? themePatch : undefined)
-            }
+            }}
             disabled={!done || !result || (!pickLayout && !(pickVisual && themePatch))}
           >
             {isReview ? '应用所选修订' : '应用所选'}
@@ -158,6 +168,22 @@ export default function PolishDialog({
     >
 
         <div className="min-h-0 flex-1 overflow-auto p-4 text-xs">
+          {!isReview && theme && (
+            <label className="mb-3 flex cursor-pointer items-start gap-2 rounded-lg border border-panel-3 bg-panel px-3 py-2 text-[11px] leading-relaxed text-ink-dim">
+              <input
+                type="checkbox"
+                checked={alignTheme}
+                onChange={(e) => setAlignTheme(e.target.checked)}
+                className="mt-0.5 shrink-0"
+              />
+              <span>
+                <b className="text-ink">视觉完全跟随主题</b>
+                ：本次只重排文字结构，模型不改视觉参数；应用时清空工程的排版微调
+                {overrideCount ? `（当前 ${overrideCount} 项微调正压着主题）` : '（本工程当前没有微调）'}
+                ，让分类主题完整生效。
+              </span>
+            </label>
+          )}
           {done && (
             <div className="mb-3 grid grid-cols-2 gap-2">
               {[

@@ -111,6 +111,19 @@ function buildStyles(theme?: ArticleTheme, uiDark?: boolean): Styles {
   const captionColor = dark ? '#b6c4d4' : '#555'
   const pGap = t.pGap ?? 16
   const imgR = t.imgRadius ?? 4
+  // 图片形态：inset 常规（限高自适应）/ fullwidth 通栏撑满 / half 半宽居中
+  const imgStyle = t.imgStyle ?? 'inset'
+  // 图片边框形态：细边框（深浅底各自取色）/ 柔和投影 / 无
+  const imgFrameCss =
+    t.imgFrame === 'line'
+      ? `border:1px solid ${dark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.08)'};`
+      : t.imgFrame === 'shadow'
+        ? 'box-shadow:0 2px 12px rgba(0,0,0,0.14);'
+        : ''
+  // 图片区块外间距：图与上下文的呼吸距离（0–48，缺省 20 与经典版式一致）
+  const imgGap = t.imgGap !== undefined && isFinite(t.imgGap) ? Math.min(48, Math.max(0, t.imgGap)) : 20
+  // 图注/滑动提示排列：居中（默认）或左对齐
+  const capAlign = t.captionAlign === 'left' ? 'left' : 'center'
   // 正文基准字号：主题可调，缺省 16px（AI 排版默认 14-15px 偏小，正文以大字号为舒适）
   const baseSize = t.fontSize && t.fontSize >= 10 && t.fontSize <= 40 ? t.fontSize : 16
   // 标题基准字号：缺省 20（H1=+6 H2=+0 H3=-3，与经典导出 26/20/17 一致）
@@ -148,10 +161,16 @@ function buildStyles(theme?: ArticleTheme, uiDark?: boolean): Styles {
   s.p = `font-size:${baseSize}px;line-height:${lh};color:${textColor};margin:${pGap}px 0;${pAlign}`
   s.quoteP = `margin:4px 0;font-size:${baseSize}px;line-height:${lh};color:${quoteColor};`
   s.quotePLast = `margin:4px 0;font-size:${baseSize}px;line-height:${lh};color:${quoteColor};`
-  s.caption = `font-size:12px;color:${captionColor};line-height:1.6;margin-top:8px;text-align:center;`
-  s.hint = `font-size:12px;color:${captionColor};line-height:1.6;margin-top:6px;text-align:center;`
-  s.img = `max-width:100%;max-height:420px;border-radius:${imgR}px;`
-  s.swipeImg = `display:inline-block;width:80%;margin-right:8px;border-radius:${imgR}px;vertical-align:top;`
+  s.caption = `font-size:12px;color:${captionColor};line-height:1.6;margin-top:8px;text-align:${capAlign};`
+  s.hint = `font-size:12px;color:${captionColor};line-height:1.6;margin-top:6px;text-align:${capAlign};`
+  s.figure = `margin:${imgGap}px 0;text-align:center;`
+  s.img =
+    imgStyle === 'fullwidth'
+      ? `display:block;width:100%;border-radius:${imgR}px;${imgFrameCss}`
+      : imgStyle === 'half'
+        ? `width:50%;border-radius:${imgR}px;${imgFrameCss}`
+        : `max-width:100%;max-height:420px;border-radius:${imgR}px;${imgFrameCss}`
+  s.swipeImg = `display:inline-block;width:80%;margin-right:8px;border-radius:${imgR}px;vertical-align:top;${imgFrameCss}`
   s.imgR = `${imgR}px`
   s.quoteMark = ''
   s.strong = strongStyle(t, dark, c)
@@ -225,6 +244,9 @@ function buildStyles(theme?: ArticleTheme, uiDark?: boolean): Styles {
   // 引用：leftbar 左条浅底 / card 圆角卡片 / quotes 引号 + 左条
   const quoteStyle = t.quoteStyle ?? 'leftbar'
   const quoteTint = t.quoteBg && isHexColor(t.quoteBg) ? t.quoteBg.trim() : tint(c, 0.1)
+  // leftbar 的引用条颜色：主题/覆盖给了 quoteBorder（引用描边色）用它，否则跟强调色——
+  // 日报「逐条轮换彩条」范式就落在这一字段上，之前只在 dashcard 生效，leftbar 一直吃不到
+  const quoteBarColor = t.quoteBorder && isHexColor(t.quoteBorder) ? t.quoteBorder.trim() : c
   if (quoteStyle === 'card') {
     s.blockquote = `margin:20px 0;padding:14px 16px;border-radius:12px;background:${quoteTint};color:${quoteColor};font-size:15px;line-height:${lh};`
   } else if (quoteStyle === 'dashcard') {
@@ -235,10 +257,10 @@ function buildStyles(theme?: ArticleTheme, uiDark?: boolean): Styles {
       t.quoteBg && isHexColor(t.quoteBg) ? t.quoteBg.trim() : dark ? 'rgba(255,255,255,0.05)' : '#ffffff'
     s.blockquote = `margin:20px 0;padding:14px 16px;border:1px dashed ${qBorder};border-radius:12px;background:${dashcardBg};color:${quoteColor};font-size:15px;line-height:${lh};`
   } else if (quoteStyle === 'quotes') {
-    s.blockquote = `margin:20px 0;padding:12px 16px 12px 20px;border-left:4px solid ${c};border-top-right-radius:8px;border-bottom-right-radius:8px;background:${quoteTint};color:${quoteColor};font-size:15px;line-height:${lh};`
+    s.blockquote = `margin:20px 0;padding:12px 16px 12px 20px;border-left:4px solid ${quoteBarColor};border-top-right-radius:8px;border-bottom-right-radius:8px;background:${quoteTint};color:${quoteColor};font-size:15px;line-height:${lh};`
     s.quoteMark = `font-size:28px;line-height:1;color:${c};margin:0 0 2px;`
   } else {
-    s.blockquote = `margin:20px 0;padding:8px 12px 8px 16px;border-left:4px solid ${c};border-top-right-radius:8px;border-bottom-right-radius:8px;background:${quoteBg};color:${quoteColor};font-size:15px;line-height:${lh};`
+    s.blockquote = `margin:20px 0;padding:8px 12px 8px 16px;border-left:4px solid ${quoteBarColor};border-top-right-radius:8px;border-bottom-right-radius:8px;background:${quoteBg};color:${quoteColor};font-size:15px;line-height:${lh};`
   }
 
   // 分隔线：line 居中短横 / dot 圆点列 / long 通栏细线
@@ -323,7 +345,7 @@ function galleryToHtml(attrs: FigureGalleryAttrs, resolveImg: (src: string) => s
         return `<img src="${escapeHtml(resolveImg(im.src))}" alt="${escapeHtml(im.alt)}" style="display:inline-block;width:${width}%;margin:0 ${mr} 6px 0;border-radius:${s.imgR};vertical-align:top;${frameStyle(frame || defFrame)}">`
       })
       .join('')
-    return `<section style="${S.figure}"><section style="font-size:0;line-height:0;">${cells}</section>${cap}</section>`
+    return `<section style="${s.figure}"><section style="font-size:0;line-height:0;">${cells}</section>${cap}</section>`
   }
 
   // swipe-h：公众号经典横滑图集
@@ -333,7 +355,7 @@ function galleryToHtml(attrs: FigureGalleryAttrs, resolveImg: (src: string) => s
         `<img src="${escapeHtml(resolveImg(im.src))}" alt="${escapeHtml(im.alt)}" style="${s.swipeImg}${frameStyle(frame)}">`
     )
     .join('')
-  return `<section style="${S.figure}"><section style="${S.swipeBox}">${items}</section><p style="${s.hint}">← 左右滑动查看 ${images.length} 张 →</p>${cap}</section>`
+  return `<section style="${s.figure}"><section style="${S.swipeBox}">${items}</section><p style="${s.hint}">← 左右滑动查看 ${images.length} 张 →</p>${cap}</section>`
 }
 
 /** 中文数字（1-99）：upper=true 用大写「壹贰叁」，配 h2Num 序号渲染 */
@@ -401,7 +423,7 @@ function blockToHtml(block: BlockNode, resolveImg: (src: string) => string, s: S
     case 'figureImage': {
       const { src, alt, caption } = block.attrs
       const cap = caption ? `<p style="${s.caption}">${escapeHtml(caption)}</p>` : ''
-      return `<section style="${S.figure}"><img src="${escapeHtml(resolveImg(src))}" alt="${escapeHtml(alt)}" style="${s.img}">${cap}</section>`
+      return `<section style="${s.figure}"><img src="${escapeHtml(resolveImg(src))}" alt="${escapeHtml(alt)}" style="${s.img}">${cap}</section>`
     }
     case 'figureGallery':
       return galleryToHtml(block.attrs, resolveImg, s)

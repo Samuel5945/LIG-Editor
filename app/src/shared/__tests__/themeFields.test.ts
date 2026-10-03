@@ -30,7 +30,7 @@ describe('spec 与校验面一致（面板能选的，能力核必须真认）',
 
   it('枚举候选逐个被 sanitize 原样接受，枚举外的值必被拒收（spec 与校验面不能有两套口径）', () => {
     const enums = THEME_FIELD_SPECS.filter((s) => s.kind === 'enum')
-    expect(enums.length).toBe(10)
+    expect(enums.length).toBe(13)
     for (const s of enums) {
       for (const o of s.options ?? []) {
         expect(sanitizeThemePatch({ [s.key]: o.value }), `${s.key}=${o.value}`).toEqual({ [s.key]: o.value })

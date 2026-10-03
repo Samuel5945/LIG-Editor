@@ -179,6 +179,39 @@ export const THEME_FIELD_SPECS: ThemeFieldSpec[] = [
   { key: 'bodyRadius', group: 'card', kind: 'number', unit: 'px', integer: true, step: 2 },
   { key: 'bodyPadding', group: 'card', kind: 'text', placeholder: '20px 22px', hint: 'CSS 内边距写法；给裸数字按 px 处理' },
   { key: 'imgRadius', group: 'card', kind: 'number', unit: 'px', integer: true, step: 2 },
+  {
+    key: 'imgStyle',
+    group: 'card',
+    kind: 'enum',
+    options: [
+      { value: 'inset', label: '常规（限高自适应）' },
+      { value: 'fullwidth', label: '通栏撑满' },
+      { value: 'half', label: '半宽居中' }
+    ],
+    hint: '整篇图片的默认形态；通栏=撑满卡宽并放开限高'
+  },
+  {
+    key: 'imgFrame',
+    group: 'card',
+    kind: 'enum',
+    options: [
+      { value: 'none', label: '无' },
+      { value: 'line', label: '细边框' },
+      { value: 'shadow', label: '柔和投影' }
+    ],
+    hint: '日报「卡内投影」范式的落点'
+  },
+  { key: 'imgGap', group: 'card', kind: 'number', unit: 'px', integer: true, step: 2, hint: '图片区块与上下文的间距' },
+  {
+    key: 'captionAlign',
+    group: 'card',
+    kind: 'enum',
+    options: [
+      { value: 'center', label: '居中' },
+      { value: 'left', label: '左对齐' }
+    ],
+    hint: '图注与滑动提示的对齐'
+  },
   // ---- 表格 ----
   {
     key: 'tableStyle',

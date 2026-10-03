@@ -275,11 +275,13 @@ ${source.slice(0, 4000)}
   ]
 }
 
-/** 排版优化：不改内容，只整理排版（段落/小标题/重点加粗/分隔）；视觉层可打包同一次输出 */
+/** 排版优化：不改内容，只整理排版（段落/小标题/重点加粗/分隔）；视觉层可打包同一次输出。
+ *  alignTheme = 主题对齐模式：视觉层以分类绑定主题为准，模型只重排文字结构、禁止出 <theme> 围栏 */
 export function polishLayoutMessages(
   article: string,
   skill: string | null,
-  theme?: ArticleTheme | null
+  theme?: ArticleTheme | null,
+  alignTheme = false
 ): ChatMessage[] {
   return [
     { role: 'system', content: systemPrompt(skill) },
@@ -295,7 +297,16 @@ export function polishLayoutMessages(
 ${SUBSET_RULES}
 ${
   theme
-    ? `
+    ? alignTheme
+      ? `
+【视觉层：主题对齐模式】本文的视觉层由分类绑定的主题统一定义，当前生效值如下（作者看到的观感就是这套）：
+${JSON.stringify(theme)}
+本次排版优化【禁止】输出 <theme> 围栏、禁止改任何视觉参数——你的职责是让文字结构贴合这套主题的表达范式：
+- 标题层级规范：# 全文只用一个（主标题）、## 分节、### 细分；主题的标题装饰与序号会自动渲染到这些层级上
+- 该突出的金句用 > 引用（主题有专门的引用形态）、关键词用 **加粗**
+- 视觉呈现不归你管：不要试图改颜色/字体/间距，也不要在文末附带任何参数
+`
+      : `
 【视觉层可选】当前排版调性参数如下（正文与作者都看不见它，只为让你判断是否需要微调）：
 ${JSON.stringify(theme)}
 仅当你判断某个视觉参数确实更适合这篇内容时，才在全文**末尾**追加一个 <theme> 围栏，里面是单个 JSON 对象，只写需要改的键：
@@ -303,7 +314,7 @@ ${JSON.stringify(theme)}
 { "lineHeight": 2.1, "quoteStyle": "card", "pGap": 24 }
 </theme>
 可用键（值需自洽：hex 颜色如 #0f766e；lineHeight 1.5-3；pGap/imgRadius/bodyRadius 0-48/0-40/0-40；字号 10-40）：
-accent、bodyFontSize、headingFontSize、bodyAlign(indent|flush|center)、headingAlign(center|left)、h1Style(bar|pill|underline|banner)、h1Bg(报头横幅底色，配 banner)、h2Style(leftbar|block|underline|plain)、h2Num、h3Mark(diamond|dot|none)、bodyBg(十六进制或 none)、pageBg(页面纸底，正文卡之下的纸色)、fontFamily、lineHeight、letterSpacing(如 0.02em)、pGap、bodyText、headingColor、quoteStyle(leftbar|card|quotes|dashcard)、quoteBorder、hrStyle(line|dot|long)、strongStyle(color|highlight|plain)、strongBg、strongColor、imgRadius、bodyRadius、bodyPadding(如 '20px 22px')、tableStyle(bordered|striped|plain)、tableHeaderBg、tableBorder、tableHeaderText、h2Bg
+accent、bodyFontSize、headingFontSize、bodyAlign(indent|flush|center)、headingAlign(center|left)、h1Style(bar|pill|underline|banner)、h1Bg(报头横幅底色，配 banner)、h2Style(leftbar|block|underline|plain)、h2Num、h3Mark(diamond|dot|none)、bodyBg(十六进制或 none)、pageBg(页面纸底，正文卡之下的纸色)、fontFamily、lineHeight、letterSpacing(如 0.02em)、pGap、bodyText、headingColor、quoteStyle(leftbar|card|quotes|dashcard)、quoteBorder、hrStyle(line|dot|long)、strongStyle(color|highlight|plain)、strongBg、strongColor、imgRadius、imgStyle(inset|fullwidth|half)、imgFrame(none|line|shadow)、imgGap、captionAlign(center|left)、bodyRadius、bodyPadding(如 '20px 22px')、tableStyle(bordered|striped|plain)、tableHeaderBg、tableBorder、tableHeaderText、h2Bg
 内容不需要动视觉层时，不要输出 <theme> 围栏——宁缺勿滥。`
     : ''
 }

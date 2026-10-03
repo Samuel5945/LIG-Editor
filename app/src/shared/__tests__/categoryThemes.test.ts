@@ -375,7 +375,7 @@ describe('sanitizeThemePatch（set_theme / save_theme_preset / 排版对话框�
     })
   })
 
-  it('白名单 36 键逐键可写（新增字段忘了登记或取值不合法，会在这条红）', () => {
+  it('白名单 40 键逐键可写（新增字段忘了登记或取值不合法，会在这条红）', () => {
     const validProbe: Record<string, unknown> = {
       accent: '#0f766e',
       bodyFontSize: 17,
@@ -406,6 +406,10 @@ describe('sanitizeThemePatch（set_theme / save_theme_preset / 排版对话框�
       strongBg: '#555555',
       strongColor: '#666666',
       imgRadius: 12,
+      imgStyle: 'fullwidth',
+      imgFrame: 'shadow',
+      imgGap: 18,
+      captionAlign: 'left',
       bodyRadius: 14,
       bodyPadding: '20px 22px',
       tableStyle: 'striped',
@@ -452,10 +456,10 @@ describe('clampThemeNumbers（越界夹取要如实报回，不静默改值）',
     ])
   })
 
-  it('区间表只含数值型覆盖键，且都在 30 键白名单内', () => {
+  it('区间表只含数值型覆盖键，且都在白名单内', () => {
     const keys = Object.keys(THEME_NUM_RANGES)
     expect(keys.every((k) => (THEME_OVERRIDE_KEYS as readonly string[]).includes(k))).toBe(true)
-    expect(keys).toEqual(['bodyFontSize', 'headingFontSize', 'lineHeight', 'pGap', 'imgRadius', 'bodyRadius'])
+    expect(keys).toEqual(['bodyFontSize', 'headingFontSize', 'lineHeight', 'pGap', 'imgRadius', 'imgGap', 'bodyRadius'])
   })
 
   it('与 sanitizeThemePatch 同一口径（两条路夹出同一个值）', () => {
@@ -675,5 +679,19 @@ describe('activeThemesView（分类 → 当前套用主题，指针可指向自�
     const view = activeThemesView(lib)
     expect(view['科技数码']).toEqual({ accent: '#0f766e' })
     expect(view['生活常识']).toEqual({ accent: '#0f766e' })
+  })
+
+  it('必填字段缺失的导入主题回落默认（留白口径）——不再把 undefined 传进导出端 .replace 白屏', () => {
+    const lib = migrateCustomThemes({
+      version: 2,
+      themes: { 缺字段: { category: '缺字段', theme: { accent: '#6d5cff', bodyBg: '#ffffff' } as ArticleTheme } },
+      active: { 缺字段: '缺字段' }
+    })
+    const t = resolveArticleTheme({ category: '缺字段' }, activeThemesView(lib))
+    expect(t.accent).toBe('#6d5cff') // 主题给了的字段原样保留
+    expect(t.fontFamily).toBe(DEFAULT_THEME.fontFamily) // 缺了的回落默认调性
+    expect(t.lineHeight).toBe(DEFAULT_THEME.lineHeight)
+    expect(t.letterSpacing).toBe(DEFAULT_THEME.letterSpacing)
+    expect(t.headingAlign).toBe(DEFAULT_THEME.headingAlign)
   })
 })

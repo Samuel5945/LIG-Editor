@@ -197,6 +197,13 @@ textarea:focus-visible,
    排版调性变量由 ArticleEditor 按分类调性注入（--article-accent / --article-font /
    --article-lh / --article-ls / --article-h-align / --article-bar-left / 结构级风格变量），
    缺省为默认调性经典排版 */
+/* 页面纸底（日报纸感外壳）：挂在滚动容器上，正文卡（.ProseMirror 的 bodyBg 层）浮于纸面——
+   与导出「根 → 纸底 → 卡片」三层同构；不设 = 透明（原行为）。变量缺省时透明不挡昼夜底色。
+   深壳浅卡主题（日报07 等）靠内衬露出纸壳：正文列铺满中栏时，没有这圈内衬纸壳就完全看不见 */
+.article-editor {
+  background: var(--article-page-bg, transparent);
+  padding: var(--article-page-pad, 0);
+}
 .article-editor .ProseMirror {
   @apply min-h-full text-[15px] outline-none;
   max-width: 760px;
@@ -209,6 +216,26 @@ textarea:focus-visible,
   font-family: var(--article-font, 'Microsoft YaHei', 'PingFang SC', system-ui, sans-serif);
   line-height: var(--article-lh, 2.13);
   letter-spacing: var(--article-ls, 0.02em);
+}
+/* 图片主题四字段（imgStyle/imgFrame/imgGap/captionAlign）的画布预览：
+   变量由 ArticleEditor 根节点按解析后的主题注入。只作用单图（figure>img 直接子级），
+   图集格位有自己的布局宽度，不参与形态切换。变量缺省值 = 经典版式（与导出缺省一致） */
+.article-editor .ProseMirror figure > img {
+  width: var(--thm-img-w, auto);
+  max-width: var(--thm-img-max-w, 100%);
+  max-height: var(--thm-img-max-h, 420px);
+  border-radius: var(--article-img-radius, 4px);
+  border: var(--thm-img-border, none);
+  box-shadow: var(--thm-img-shadow, none);
+  box-sizing: border-box;
+}
+.article-editor .ProseMirror div[data-type='figureImage'] {
+  margin-top: var(--thm-img-gap, 16px);
+  margin-bottom: var(--thm-img-gap, 16px);
+}
+.article-editor .ProseMirror figure > figcaption,
+.article-editor .ProseMirror figure > figcaption input {
+  text-align: var(--thm-cap-align, center);
 }
 /* H1 大标题：对齐方式随调性（居中仪式感 / 左对齐干练）+ 强调色短线收尾
    pill 胶囊色块字底 / underline 下划线 / 默认短横 */
@@ -291,7 +318,7 @@ textarea:focus-visible,
   border: var(--article-quote-border, none);
   border-left: var(--article-quote-left, 4px solid color-mix(in srgb, var(--article-accent, #0d9488) 60%, transparent));
   border-radius: var(--article-quote-radius, 0 8px 8px 0);
-  background: var(--article-quote-bg, rgb(30 41 59 / 0.6));
+  background: var(--article-quote-bg, #f7f7f7);
   color: var(--article-quote-color, #cbd5e1);
 }
 .article-editor .ProseMirror blockquote::before {
@@ -335,23 +362,23 @@ textarea:focus-visible,
   margin: var(--article-p-gap, 16px) 0;
   font-size: 14px;
   line-height: 1.8;
-  border: 1px solid var(--article-table-border, rgb(51 65 85));
+  border: 1px solid var(--article-table-border, #e5e7eb);
 }
 .article-editor .ProseMirror th {
-  background: var(--article-table-header-bg, rgb(30 41 59));
-  color: var(--article-table-header-text, #eef2f7);
-  border: 1px solid var(--article-table-border, rgb(51 65 85));
+  background: var(--article-table-header-bg, #f3f4f6);
+  color: var(--article-table-header-text, #1a1a1a);
+  border: 1px solid var(--article-table-border, #e5e7eb);
   padding: 8px 12px;
   text-align: left;
   font-weight: 700;
 }
 .article-editor .ProseMirror td {
-  border: 1px solid var(--article-table-border, rgb(51 65 85));
+  border: 1px solid var(--article-table-border, #e5e7eb);
   padding: 7px 12px;
   color: var(--article-body-text, rgb(226 232 240));
 }
 .article-editor .ProseMirror tbody tr:nth-child(even) td {
-  background: var(--article-table-stripe-bg, rgb(30 41 59 / 0.5));
+  background: var(--article-table-stripe-bg, transparent);
 }
 
 /* 空文档占位 */

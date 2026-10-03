@@ -18,6 +18,10 @@ export type QuoteStyle = 'leftbar' | 'card' | 'quotes' | 'dashcard'
 export type HrStyle = 'line' | 'dot' | 'long'
 /** 加粗强调方式 */
 export type StrongStyle = 'color' | 'highlight' | 'plain'
+/** 图片形态：inset 常规（限高自适应）/ fullwidth 通栏撑满 / half 半宽居中 */
+export type ImgStyle = 'inset' | 'fullwidth' | 'half'
+/** 图片边框形态：none 无 / line 细边框 / shadow 柔和投影 */
+export type ImgFrame = 'none' | 'line' | 'shadow'
 
 export interface ArticleTheme {
   /**
@@ -98,6 +102,14 @@ export interface ArticleTheme {
   tableHeaderText?: string
   /** 图片圆角 px */
   imgRadius?: number
+  /** 图片形态：inset 常规（限高自适应）/ fullwidth 通栏撑满 / half 半宽居中 */
+  imgStyle?: ImgStyle
+  /** 图片边框形态：none 无 / line 细边框 / shadow 柔和投影 */
+  imgFrame?: ImgFrame
+  /** 图片区块外间距 px（图与上下文的呼吸距离） */
+  imgGap?: number
+  /** 图注排列：center 居中（默认）/ left 左对齐 */
+  captionAlign?: 'center' | 'left'
   /** 段落间距 px */
   pGap?: number
 }
@@ -234,6 +246,14 @@ export interface ProjectMeta {
   strongColor?: string
   /** 图片圆角覆盖 px（0–40，越界夹取） */
   imgRadius?: number
+  /** 图片形态覆盖：inset 常规 / fullwidth 通栏撑满 / half 半宽居中 */
+  imgStyle?: ImgStyle
+  /** 图片边框覆盖：none 无 / line 细边框 / shadow 柔和投影 */
+  imgFrame?: ImgFrame
+  /** 图片区块外间距覆盖 px（0–48，越界夹取） */
+  imgGap?: number
+  /** 图注排列覆盖：center 居中 / left 左对齐 */
+  captionAlign?: 'center' | 'left'
   /** 正文容器圆角覆盖 px（0–40，越界夹取） */
   bodyRadius?: number
   /** 正文容器内边距覆盖（如 '20px 22px'） */
@@ -662,6 +682,8 @@ export interface IpcApi {
   'win:toggleMaximize': () => void
   'win:close': () => void
   /** 扫描 workspace 全部含 project.json 的工程（含各分类子目录） */
+  /** 渲染层未捕获错误上报（dev 终端可见）——应用无 ErrorBoundary，白屏时靠它自证 */
+  'app:reportError': (message: string) => void
   'project:list': () => ProjectSummary[]
   /** 影子工程检测：同名工程目录存在于多个分类（树里只显示一份，多出的不可见） */
   'project:listDuplicates': () => DuplicateProjectInfo[]

@@ -375,6 +375,8 @@ const QUOTE_STYLES: QuoteStyle[] = ['leftbar', 'card', 'quotes', 'dashcard']
 const HR_STYLES: HrStyle[] = ['line', 'dot', 'long']
 const STRONG_STYLES: StrongStyle[] = ['color', 'highlight', 'plain']
 const TABLE_STYLES = ['bordered', 'striped', 'plain'] as const
+const IMG_STYLES = ['inset', 'fullwidth', 'half'] as const
+const IMG_FRAMES = ['none', 'line', 'shadow'] as const
 const H2_NUMS: H2Num[] = ['01', '1.', '1、', '一、', '壹、', '①']
 
 function clampNum(v: number, min: number, max: number): number {
@@ -430,6 +432,17 @@ export const THEME_KEY_ALIASES: Record<string, ThemeOverrideKey> = {
   bold_color: 'strongColor',
   img_radius: 'imgRadius',
   image_radius: 'imgRadius',
+  // 图片形态/边框/间距/图注（模型口语：style/边框/留白/对齐各来一套）
+  img_style: 'imgStyle',
+  image_style: 'imgStyle',
+  img_frame: 'imgFrame',
+  image_frame: 'imgFrame',
+  img_shadow: 'imgFrame',
+  img_gap: 'imgGap',
+  img_spacing: 'imgGap',
+  image_spacing: 'imgGap',
+  caption_align: 'captionAlign',
+  caption_position: 'captionAlign',
   body_radius: 'bodyRadius',
   card_radius: 'bodyRadius',
   body_padding: 'bodyPadding',
@@ -558,6 +571,10 @@ export const THEME_OVERRIDE_KEYS = [
   'strongBg',
   'strongColor',
   'imgRadius',
+  'imgStyle',
+  'imgFrame',
+  'imgGap',
+  'captionAlign',
   'bodyRadius',
   'bodyPadding',
   'tableStyle',
@@ -573,7 +590,7 @@ export type ThemeOverrideKey = (typeof THEME_OVERRIDE_KEYS)[number]
  *  报「键名须与工具说明一致」等于让它蒙——把可用键连取值口径直接塞进报错，一轮改对。
  *  枚举取值须与 sanitizeThemePatchDetailed 的 en() 白名单同步（改枚举先改这里）。 */
 export const THEME_KEYS_HINT =
-  'accent(必填,#rrggbb) / fontFamily / lineHeight(1.5-3) / letterSpacing / fontSize(10-40) / headingFontSize(10-40) / bodyAlign(indent|flush|center) / headingAlign(center|left) / h1Style(bar|pill|underline|banner) / h1Bg / h2Style(leftbar|block|underline|plain) / h2Num(01|1.|1、|一、|壹、|①|none) / h3Mark(diamond|dot|none) / bodyBg(#hex|none) / pageBg / pGap(0-48) / bodyText / headingColor / quoteStyle(leftbar|card|quotes|dashcard) / quoteBorder / quoteBg / quoteText / hrColor / h2Border / hrStyle(line|dot|long) / strongStyle(color|highlight|plain) / strongBg / strongColor / imgRadius(0-40) / bodyRadius(0-40) / bodyPadding / tableStyle(bordered|striped|plain) / tableHeaderBg / tableBorder / tableHeaderText / h2Bg'
+  'accent(必填,#rrggbb) / fontFamily / lineHeight(1.5-3) / letterSpacing / fontSize(10-40) / headingFontSize(10-40) / bodyAlign(indent|flush|center) / headingAlign(center|left) / h1Style(bar|pill|underline|banner) / h1Bg / h2Style(leftbar|block|underline|plain) / h2Num(01|1.|1、|一、|壹、|①|none) / h3Mark(diamond|dot|none) / bodyBg(#hex|none) / pageBg / pGap(0-48) / bodyText / headingColor / quoteStyle(leftbar|card|quotes|dashcard) / quoteBorder / quoteBg / quoteText / hrColor / h2Border / hrStyle(line|dot|long) / strongStyle(color|highlight|plain) / strongBg / strongColor / imgRadius(0-40) / imgStyle(inset|fullwidth|half) / imgFrame(none|line|shadow) / imgGap(0-48) / captionAlign(center|left) / bodyRadius(0-40) / bodyPadding / tableStyle(bordered|striped|plain) / tableHeaderBg / tableBorder / tableHeaderText / h2Bg'
 
 /** 排版覆盖字段中文名（对话框视觉参数预览、工具返回值提示共用一套口径） */
 export const THEME_FIELD_LABELS: Record<ThemeOverrideKey, string> = {
@@ -606,6 +623,10 @@ export const THEME_FIELD_LABELS: Record<ThemeOverrideKey, string> = {
   strongBg: '加粗底色',
   strongColor: '加粗字色',
   imgRadius: '图片圆角',
+  imgStyle: '图片形态',
+  imgFrame: '图片边框',
+  imgGap: '图片外间距',
+  captionAlign: '图注排列',
   bodyRadius: '正文卡片圆角',
   bodyPadding: '正文内边距',
   tableStyle: '表格样式',
@@ -622,6 +643,7 @@ export const THEME_NUM_RANGES: Partial<Record<ThemeOverrideKey, [number, number]
   lineHeight: [1.5, 3],
   pGap: [0, 48],
   imgRadius: [0, 40],
+  imgGap: [0, 48],
   bodyRadius: [0, 40]
 }
 
@@ -791,6 +813,10 @@ export function sanitizeThemePatchDetailed(raw: Record<string, unknown>): {
   hex('strongBg')
   hex('strongColor')
   num('imgRadius')
+  en('imgStyle', IMG_STYLES)
+  en('imgFrame', IMG_FRAMES)
+  num('imgGap')
+  en('captionAlign', ['center', 'left'])
   num('bodyRadius')
   len('bodyPadding')
   en('tableStyle', TABLE_STYLES)
@@ -880,6 +906,10 @@ export function resolveArticleTheme(
     | 'strongBg'
     | 'strongColor'
     | 'imgRadius'
+    | 'imgStyle'
+    | 'imgFrame'
+    | 'imgGap'
+    | 'captionAlign'
     | 'bodyRadius'
     | 'bodyPadding'
     | 'tableStyle'
@@ -892,7 +922,10 @@ export function resolveArticleTheme(
 ): ArticleTheme {
   const cat = meta?.category
   const base = (cat && (custom?.[cat] ?? CATEGORY_THEMES[cat])) || DEFAULT_THEME
-  const accent = meta?.accent && isHexColor(meta.accent) ? meta.accent.trim() : base.accent
+  // ArticleTheme 的四个必填字段（accent/fontFamily/lineHeight/letterSpacing）+ headingAlign：
+  // 自定义/导入主题可能缺省（文档口径「未写的键跟随默认调性」是有意留白），缺了必须回落
+  // DEFAULT——之前 undefined 一路传到导出端 t.fontFamily.replace(...) 直接 TypeError 白屏
+  const accent = (meta?.accent && isHexColor(meta.accent) ? meta.accent.trim() : base.accent) || DEFAULT_THEME.accent
   // 数值覆盖一律用 `!== undefined` 判定，不用真值判定：0 是合法覆盖值
   // （pGap 0=段间不留空、imgRadius 0=方角图片），按真值短路会被当成「未覆盖」悄悄回落主题默认
   const fontSize =
@@ -904,7 +937,7 @@ export function resolveArticleTheme(
       ? meta.headingFontSize
       : base.headingFontSize ?? DEFAULT_THEME.headingFontSize
   const bodyAlign = meta?.bodyAlign ?? base.bodyAlign
-  const headingAlign = meta?.headingAlign ?? base.headingAlign
+  const headingAlign = meta?.headingAlign ?? base.headingAlign ?? DEFAULT_THEME.headingAlign
   // 标题版式：显式覆盖 > 主题值；h2Num 'none' 哨兵把主题序号关掉
   const h1Style = meta?.h1Style ?? base.h1Style
   const h1Bg = meta?.h1Bg && isHexColor(meta.h1Bg) ? meta.h1Bg.trim() : base.h1Bg
@@ -923,10 +956,12 @@ export function resolveArticleTheme(
   // 页面纸底：显式 hex 覆盖 > 主题值；不设 = 无纸层（保持原双层行为）
   const pageBg = meta?.pageBg && isHexColor(meta.pageBg) ? meta.pageBg.trim() : base.pageBg
   // ---- B 期视觉覆盖扩展：逐字段校验合并（hex 校验 / 数值夹取 / 枚举守卫 / 字符串非空） ----
-  const fontFamily = meta?.fontFamily?.trim() || base.fontFamily
+  const fontFamily = meta?.fontFamily?.trim() || base.fontFamily || DEFAULT_THEME.fontFamily
   const lineHeight =
-    meta?.lineHeight !== undefined && isFinite(meta.lineHeight) ? clampNum(meta.lineHeight, 1.5, 3) : base.lineHeight
-  const letterSpacing = meta?.letterSpacing?.trim() || base.letterSpacing
+    meta?.lineHeight !== undefined && isFinite(meta.lineHeight)
+      ? clampNum(meta.lineHeight, 1.5, 3)
+      : base.lineHeight ?? DEFAULT_THEME.lineHeight
+  const letterSpacing = meta?.letterSpacing?.trim() || base.letterSpacing || DEFAULT_THEME.letterSpacing
   const pGap = meta?.pGap !== undefined && isFinite(meta.pGap) ? clampNum(meta.pGap, 0, 48) : base.pGap
   const bodyText = meta?.bodyText && isHexColor(meta.bodyText) ? meta.bodyText.trim() : base.bodyText
   const quoteStyle = meta?.quoteStyle && QUOTE_STYLES.includes(meta.quoteStyle) ? meta.quoteStyle : base.quoteStyle
@@ -943,6 +978,12 @@ export function resolveArticleTheme(
     meta?.imgRadius !== undefined && isFinite(meta.imgRadius) ? clampNum(meta.imgRadius, 0, 40) : base.imgRadius
   const bodyRadius =
     meta?.bodyRadius !== undefined && isFinite(meta.bodyRadius) ? clampNum(meta.bodyRadius, 0, 40) : base.bodyRadius
+  // 图片形态/边框/外间距/图注排列：枚举守卫 + 数值夹取，缺省跟随主题
+  const imgStyle = meta?.imgStyle && IMG_STYLES.includes(meta.imgStyle) ? meta.imgStyle : base.imgStyle
+  const imgFrame = meta?.imgFrame && IMG_FRAMES.includes(meta.imgFrame) ? meta.imgFrame : base.imgFrame
+  const imgGap = meta?.imgGap !== undefined && isFinite(meta.imgGap) ? clampNum(meta.imgGap, 0, 48) : base.imgGap
+  const captionAlign =
+    meta?.captionAlign && ['center', 'left'].includes(meta.captionAlign) ? meta.captionAlign : base.captionAlign
   const bodyPadding = meta?.bodyPadding?.trim() || base.bodyPadding
   const tableStyle =
     meta?.tableStyle && TABLE_STYLES.includes(meta.tableStyle) ? meta.tableStyle : base.tableStyle
@@ -970,7 +1011,7 @@ export function resolveArticleTheme(
     fontSize, headingFontSize, bodyAlign, headingAlign, h1Style, h1Bg, h2Style, h2Num, h3Mark, bodyBg, pageBg,
     fontFamily, lineHeight, letterSpacing, pGap, bodyText, headingColor, quoteStyle, quoteBorder,
     quoteBg, quoteText, hrColor, h2Border,
-    hrStyle, strongStyle, strongBg, strongColor, imgRadius, bodyRadius, bodyPadding,
+    hrStyle, strongStyle, strongBg, strongColor, imgRadius, imgStyle, imgFrame, imgGap, captionAlign, bodyRadius, bodyPadding,
     tableStyle, tableHeaderBg, tableBorder, tableHeaderText, h2Bg
   }
   return { ...base, accent, ...overrides }

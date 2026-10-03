@@ -110,6 +110,7 @@ export function registerIpc(): void {
   })
 
   // ---- 工程管理（M2）----
+  handle('app:reportError', (message) => console.error('[renderer]', message))
   handle('project:list', () => store.listProjects())
   handle('project:listDuplicates', () => store.findDuplicateProjects())
   handle('project:listCategories', () => store.listCategories())

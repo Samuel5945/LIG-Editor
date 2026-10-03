@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { mdToDoc, type ArticleDoc } from '../markdown'
 import { docToExportHtml, exportPageBg, extractTitle, wrapExportPage, wrapExportPageDayNight } from '../exportHtml'
 import { DEFAULT_THEME, CATEGORY_THEMES, wechatDarkColor } from '../categoryThemes'
+import type { ArticleTheme } from '../types'
 
 const TABLE_MD = `| 功能 | 免费版 |
 | --- | --- |
@@ -248,6 +249,29 @@ describe('docToExportHtml（M7 导出模板）', () => {
     expect(html).toContain('aspect-ratio:3 / 4')
   })
 
+  it('图片主题字段：形态/边框/外间距/图注对齐按主题生效（缺省回经典）', () => {
+    // 缺省：常规限高 + 居中图注 + 20px 图距
+    expect(html).toContain('max-width:100%;max-height:420px;border-radius:4px;')
+    expect(html).toContain('margin:20px 0;text-align:center;')
+    expect(html).toMatch(/margin-top:8px;text-align:center;/)
+    // 通栏撑满 + 柔和投影 + 左对齐图注 + 32px 图距
+    const themed: ArticleTheme = {
+      ...CATEGORY_THEMES['科技数码'],
+      imgStyle: 'fullwidth',
+      imgFrame: 'shadow',
+      imgGap: 32,
+      captionAlign: 'left'
+    }
+    const out = docToExportHtml(mdToDoc(SAMPLE), (src) => src, themed)
+    expect(out).toContain('display:block;width:100%;border-radius:8px;box-shadow:0 2px 12px rgba(0,0,0,0.14);')
+    expect(out).toContain('margin:32px 0;text-align:center;') // 图区外间距跟 imgGap
+    expect(out).toContain('margin-top:8px;text-align:left;') // 图注左对齐
+    // 半宽居中 + 细边框（深浅底各自取色）
+    const half: ArticleTheme = { ...CATEGORY_THEMES['科技数码'], imgStyle: 'half', imgFrame: 'line' }
+    const outHalf = docToExportHtml(mdToDoc(SAMPLE), (src) => src, half)
+    expect(outHalf).toContain('width:50%;border-radius:8px;border:1px solid rgba(0,0,0,0.08);')
+  })
+
   it('resolveImg 决定图片 src 形态', () => {
     const dataHtml = docToExportHtml(mdToDoc(SAMPLE), () => 'data:image/png;base64,xx')
     expect(dataHtml).not.toContain('assets/03.png')
@@ -298,6 +322,19 @@ describe('docToExportHtml 强调色', () => {
     }
     const out = docToExportHtml(mdToDoc(MD), (src) => src)
     expect(out).toContain('border-left:4px solid #0d9488;padding-left:12px;')
+  })
+
+  it('引用条颜色跟主题 quoteBorder（引用描边色），未设跟强调色——日报彩条范式的落点', () => {
+    const themed = docToExportHtml(mdToDoc(MD), (src) => src, {
+      ...DEFAULT_THEME,
+      accent: '#e53935',
+      quoteBorder: '#bbf7d0'
+    })
+    // 左条用描边色而非强调色（之前 quoteBorder 只在 dashcard 生效，leftbar 一直吃不到）
+    expect(themed).toContain('border-left:4px solid #bbf7d0;border-top-right-radius:8px;')
+    expect(themed).not.toContain('border-left:4px solid #e53935;border-top-right-radius')
+    const fallback = docToExportHtml(mdToDoc(MD), (src) => src, { ...DEFAULT_THEME, accent: '#e53935' })
+    expect(fallback).toContain('border-left:4px solid #e53935;border-top-right-radius:8px;')
   })
 })
 

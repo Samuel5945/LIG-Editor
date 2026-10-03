@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as
 import { confirmAction } from './confirm'
 import type { AppPaths, ArticleTheme, CustomThemeLibrary, IdeaCard, ProjectData, ProjectMeta, ProjectSummary, SkillInfo, UpdateCheckResult } from '@shared/types'
 import { PROJECT_CATEGORIES, UNCATEGORIZED } from '@shared/categories'
-import { resolveArticleTheme, sanitizeThemePatch, activeThemesView, CATEGORY_THEMES, type ThemeOverrideKey } from '@shared/categoryThemes'
+import { resolveArticleTheme, sanitizeThemePatch, activeThemesView, CATEGORY_THEMES, THEME_OVERRIDE_KEYS, type ThemeOverrideKey } from '@shared/categoryThemes'
 import { CARD_FORMAT_LABEL, parseCardItems, type CardFormat } from '@shared/cards'
 import { chatOnce } from './copilot/llm'
 import { cardsMessages, categoryMessages } from './copilot/prompts'
@@ -208,11 +208,16 @@ export default function App(): JSX.Element {
 
   useEffect(() => setSavedAt(Date.now()), [saved])
 
-  /** 排版调性：自定义主题 > 分类调性 > 默认（meta 变化即时跟换） */
-  const articleTheme = useMemo(
-    () => (themePreview ? { ...resolveArticleTheme(null, customThemes), ...themePreview.theme } : resolveArticleTheme(meta, customThemes)),
-    [meta, customThemes, themePreview]
-  )
+  /** 排版调性：自定义主题 > 分类调性 > 默认（meta 变化即时跟换）。
+   *  预览 = 临时把「当前分类的主题」换成预览的那套（注入派生视图再走同一条解析链），
+   *  工程显式覆盖（字号/排列/配色）照常最优先——预览态下正文字号/标题字号按钮仍即点即生效；
+   *  没开工程（或工程无分类）时退回全局铺预览主题的旧行为，只看观感 */
+  const articleTheme = useMemo(() => {
+    if (!themePreview) return resolveArticleTheme(meta, customThemes)
+    const cat = meta?.category
+    if (!cat) return { ...resolveArticleTheme(null, customThemes), ...themePreview.theme }
+    return resolveArticleTheme(meta, { ...customThemes, [cat]: themePreview.theme })
+  }, [meta, customThemes, themePreview])
 
   /** 分类调性的强调色：封面墙无封面占位卡用它，保证「墙上看到的颜色」= 该分类工程实际颜色 */
   const accentOf = useCallback(
@@ -353,6 +358,9 @@ export default function App(): JSX.Element {
       setSaved(data.article)
       setConflict(null)
       setCenterTab('create')
+      // 预览跟「看主题」这个动作走：换工程即退——不退的话预览会跨分类「隐形生效」，
+      // 作者以为新分类的排版变了，其实还压着上一次预览的那套
+      setThemePreview(null)
       // 从墙上/树里点开工程就退出「钉住封面墙」，否则开完工程还停在墙上
       setWallPinned(false)
       // 不切向导步骤：脑暴立项后向导自己停在成文步看流式
@@ -389,6 +397,8 @@ export default function App(): JSX.Element {
     setArticle('')
     setSaved('')
     setConflict(null)
+    // 工程都没了，预览无从附着：一并退掉
+    setThemePreview(null)
   }, [])
 
   /** 批量删除（工作树批量管理）：一次确认，逐个移除；单个失败不阻塞其余 */
@@ -1171,7 +1181,16 @@ export default function App(): JSX.Element {
               library={themeLib}
               project={current}
               projectCategory={current && meta ? meta.category ?? UNCATEGORIZED : undefined}
-              onPreview={(entry) => setThemePreview(entry ? { name: entry.name, theme: entry.theme } : null)}
+              activePreview={themePreview?.name ?? null}
+              onPreview={(entry) => {
+                setThemePreview(entry ? { name: entry.name, theme: entry.theme } : null)
+                // 预览的意义是看正文效果：有工程时点「预览」直接跳创作成文步，不在主题库里盲预；
+                // 退出预览（entry=null）不跳，人停在哪就留在哪
+                if (entry && current) {
+                  setCenterTab('create')
+                  setStepRequest({ id: 'draft', ts: Date.now() })
+                }
+              }}
               onBind={async (category, entry) => {
                 // 绑定 = 切换该分类的 active 指针（自定义/内置都只是指过去），不动主题库里的其他主题
                 await window.api.invoke('customTheme:setActive', category, entry.name)
@@ -1342,6 +1361,22 @@ export default function App(): JSX.Element {
                                       </p>
                                     )}
                                     <div className="my-1 h-px bg-panel-3" />
+                                    <MenuItem
+                                      icon="undo"
+                                      onClick={() => {
+                                        setThemeMenuOpen(false)
+                                        // 旧文章的排版微调会压住主题（「应用了主题却显示不全」的原因）：
+                                        // 一键清空全部微调，让分类当前绑定的主题完整生效
+                                        void handleApplyTypography(
+                                          Object.fromEntries(
+                                            THEME_OVERRIDE_KEYS.map((k) => [k, null])
+                                          ) as Partial<Record<ThemeOverrideKey, null>>
+                                        ).then(() => setToast('已清空排版微调，本工程视觉完全跟随主题'))
+                                      }}
+                                      title="清掉本工程全部排版覆盖，分类主题的每个字段都完整生效"
+                                    >
+                                      清空微调，完全跟随主题
+                                    </MenuItem>
                                     <MenuItem
                                       icon="download"
                                       onClick={() => {
@@ -1696,7 +1731,10 @@ export default function App(): JSX.Element {
           skill={skillContent}
           review={polish.review}
           theme={articleTheme}
-          onConfirm={(result, themePatch, only) => {
+          overrideCount={
+            meta ? THEME_OVERRIDE_KEYS.filter((k) => meta[k] !== undefined && meta[k] !== null).length : 0
+          }
+          onConfirm={(result, themePatch, only, alignTheme) => {
             // only=visual：正文一个字都不动，只落视觉参数
             if (only !== 'visual') setArticle(result)
             setPolish(null)
@@ -1704,6 +1742,17 @@ export default function App(): JSX.Element {
               void handleApplyTypography(themePatch ?? {}).then(
                 () => setToast('视觉参数已应用，正文未改动'),
                 (err) => setToast('视觉参数应用失败：' + String(err instanceof Error ? err.message : err))
+              )
+              return
+            }
+            // 主题对齐：清空全部工程排版微调——旧文章的旧覆盖正是「主题显示不全」的原因，
+            // 清掉后分类绑定的主题完整生效；正文重排结果照常进编辑器
+            if (alignTheme) {
+              void handleApplyTypography(
+                Object.fromEntries(THEME_OVERRIDE_KEYS.map((k) => [k, null])) as Partial<Record<ThemeOverrideKey, null>>
+              ).then(
+                () => setToast('排版已应用：工程微调已清空，视觉完全跟随主题'),
+                (err) => setToast(`排版已应用，清空微调失败：${err instanceof Error ? err.message : err}`)
               )
               return
             }
@@ -1812,6 +1861,17 @@ export default function App(): JSX.Element {
       {toast && (
         <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded bg-panel-3 px-4 py-2 text-xs text-ink shadow-lg">
           {toast}
+        </div>
+      )}
+      {/* 预览全局浮标：主题库页签里已有横幅，切到其他页签（成文/导出…）预览仍在生效——
+          不能让它「隐形」：常驻一枚浮标说明预览对象，随手可退；比主题库横幅高一行避开 toast */}
+      {themePreview && centerTab !== 'themes' && (
+        <div className="fixed bottom-14 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-full border border-accent/50 bg-accent/10 px-3.5 py-1.5 text-[11.5px] text-accent shadow-[0_4px_16px_rgba(0,0,0,.28)]">
+          <Icon name="eye" size={12} className="shrink-0" />
+          正在预览主题「{themePreview.name}」——只改观感不写盘
+          <button onClick={() => setThemePreview(null)} className="shrink-0 font-semibold hover:underline">
+            退出预览
+          </button>
         </div>
       )}
     </div>

@@ -117,8 +117,8 @@ describe('readMeta 排版覆盖透传', () => {
 })
 
 describe('THEME_OVERRIDE_KEYS 白名单自洽', () => {
-  it('36 键且无重复（新增字段只加一处会在这条红）', () => {
-    expect(THEME_OVERRIDE_KEYS).toHaveLength(36)
-    expect(new Set(THEME_OVERRIDE_KEYS).size).toBe(36)
+  it('40 键且无重复（新增字段只加一处会在这条红）', () => {
+    expect(THEME_OVERRIDE_KEYS).toHaveLength(40)
+    expect(new Set(THEME_OVERRIDE_KEYS).size).toBe(40)
   })
 })

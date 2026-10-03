@@ -34,6 +34,8 @@ export interface ThemeLibraryProps {
   project: string | null
   projectCategory?: string
   onPreview: (entry: ThemeEntry | null) => void
+  /** 切去其他页签也不退出的进行中预览（App 持有）：回本页签时横幅与按钮态要跟它对齐 */
+  activePreview?: string | null
   /** 绑定 = 把该主题设为分类当前套用（切 active 指针；自定义/内置都只是指过去，不复制不覆盖） */
   onBind: (category: string, entry: ThemeEntry) => void
   /** 解除该分类的套用（回到同名内置/默认调性），主题本体保留在库里 */
@@ -122,6 +124,7 @@ export default function ThemeLibrary({
   library,
   project,
   projectCategory,
+  activePreview,
   onPreview,
   onBind,
   onUnbind,
@@ -136,6 +139,8 @@ export default function ThemeLibrary({
   const bar = useFittingRow<HTMLDivElement>()
   const chips = useFittingRow<HTMLDivElement>()
   const [previewing, setPreviewing] = useState<string | null>(null)
+  // 本页签内的预览态与「切页签不退出的进行中预览」合一：横幅与按钮态都看它
+  const shownPreview = previewing ?? activePreview ?? null
 
   /**
    * 分类当前「实际生效」的主题名，与 resolveArticleTheme 的回退链同口径：
@@ -172,7 +177,8 @@ export default function ThemeLibrary({
   }, [entries, q, filter])
 
   const preview = (e: ThemeEntry): void => {
-    const next = previewing === e.name ? null : e.name
+    // 与「进行中预览」比对：切页签回来后再点同一张卡 = 退出，而不是重复预览
+    const next = shownPreview === e.name ? null : e.name
     setPreviewing(next)
     onPreview(next ? e : null)
   }
@@ -258,10 +264,10 @@ export default function ThemeLibrary({
         )}
       </div>
 
-      {previewing && (
+      {shownPreview && (
         <div className="mx-4 mb-2 flex shrink-0 items-center gap-2 rounded-lg border border-accent/50 bg-accent/10 px-3 py-1.5 text-[11.5px] text-accent">
           <Icon name="eye" size={12} />
-          正在预览「{previewing}」——只改编辑器观感，不写盘；退出即还原
+          正在预览「{shownPreview}」——只改编辑器观感，不写盘；退出即还原
           <button onClick={() => { setPreviewing(null); onPreview(null) }} className="ml-auto font-semibold hover:underline">
             退出预览
           </button>
@@ -306,12 +312,12 @@ export default function ThemeLibrary({
                     <button
                       onClick={() => preview(e)}
                       className={`inline-flex h-[24px] items-center gap-1 rounded px-2 text-[11px] transition-colors ${
-                        previewing === e.name ? 'bg-accent/15 font-semibold text-accent' : 'text-ink-dim hover:bg-panel-3'
+                        shownPreview === e.name ? 'bg-accent/15 font-semibold text-accent' : 'text-ink-dim hover:bg-panel-3'
                       }`}
                       title="不写盘试看效果"
                     >
                       <Icon name="eye" size={11} />
-                      {previewing === e.name ? '退出预览' : '预览'}
+                      {shownPreview === e.name ? '退出预览' : '预览'}
                     </button>
                     {projectCategory && builtinFloor && (
                       <button
