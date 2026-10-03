@@ -542,12 +542,19 @@ export function parseThemeFromHtml(html: string): ParsedTheme {
   //      顺带取该元素的圆角与内边距 ----
   let bodyBg: string | undefined
   let bgEl: ElementStyles | undefined
-  for (const tags of [['section'], ['body'], ['div']]) {
+  // 页面纸底：body 实心底是「页面级」纸色（日报「深纸底+浅卡」双层的外层），
+  // 不再混当卡片色；卡片色继续往内层容器找。body 白底/无底则维持原行为
+  let pageBg: string | undefined
+  const bodyEl = els.find((e) => e.tag === 'body')
+  const bodyHex = bodyEl ? singleBgColor(bodyEl.style['background'] || bodyEl.style['background-color']) : null
+  if (bodyHex && !isWhiteish(bodyHex)) pageBg = bodyHex
+  for (const tags of pageBg ? [['section'], ['div']] : [['section'], ['body'], ['div']]) {
     for (const e of els) {
       if (!tags.includes(e.tag)) continue
       const v = e.style['background'] || e.style['background-color']
       if (!v || /rgba\(\s*0\s*,\s*0\s*,\s*0\s*,\s*0\s*\)/.test(v)) continue
       const hex = singleBgColor(v)
+      if (pageBg && hex === pageBg) continue
       if (hex && !isWhiteish(hex) && coverageOf(html, e.index) >= 0.35) {
         bodyBg = hex
         bgEl = e
@@ -613,13 +620,26 @@ export function parseThemeFromHtml(html: string): ParsedTheme {
   // ---- 标题装饰（同类块形态众数投票，防装饰性首元素污染） ----
   const h1Blocks = taggedBlocks(html, 'h1')
   const h2Blocks = taggedBlocks(html, 'h2')
+  // H1 底色块分两类：圆角胶囊（border-radius 9999px/50%）= pill；通栏色条（无大圆角）=
+  // 报头横幅 banner（日报范式），横幅底色取同类块众数色
+  const h1BannerBgs: string[] = []
   const h1Style: ArticleTheme['h1Style'] =
     (modeStr(
       h1Blocks.map((b) => {
         const bg = blockBg(b)
-        return bg && !isWhiteish(bg) ? 'pill' : b.own['border-bottom'] ? 'underline' : 'bar'
+        if (bg && !isWhiteish(bg)) {
+          if (/9999|50%|^100%$/.test(b.own['border-radius'] ?? '')) return 'pill'
+          const hex = singleBgColor(bg) ?? gradientFirstColor(bg)
+          if (hex) h1BannerBgs.push(hex)
+          return 'banner'
+        }
+        return b.own['border-bottom'] ? 'underline' : 'bar'
       })
     ) as ArticleTheme['h1Style']) ?? 'bar'
+  const h1Bg =
+    h1Style === 'banner'
+      ? topColor(h1BannerBgs.reduce((m, c) => m.set(c, (m.get(c) ?? 0) + 1), new Map<string, number>()))
+      : undefined
   // h2 色块：自身或内部首个 span 的单一背景都算（渐变取首色近似复刻为纯色块）；
   // 无 h2 标签的文章（微信大字块/渐变标题卡范式）由大字号元素参与形态投票；
   // 色块颜色取该形态下最常见的
@@ -780,6 +800,8 @@ export function parseThemeFromHtml(html: string): ParsedTheme {
         : {}),
     ...(headingColor ? { headingColor } : {}),
     h1Style,
+    ...(h1Bg ? { h1Bg } : {}),
+    ...(pageBg ? { pageBg } : {}),
     h2Style,
     ...(h2Bg ? { h2Bg } : {}),
     ...(h2Num ? { h2Num } : {}),
@@ -800,9 +822,10 @@ export function parseThemeFromHtml(html: string): ParsedTheme {
   const summary = [
     `强调色 ${accent}`,
     bodyBg ? `背景卡片 ${bodyBg}` : '白底',
+    pageBg ? `纸底 ${pageBg}` : '',
     headingColor && headingColor !== accent ? `标题色 ${headingColor}` : `标题随强调色`,
     strongColor && strongColor !== accent ? `加粗色 ${strongColor}` : '',
-    `大标题 ${h1Style} / 小节 ${h2Style}${h2Bg ? `（底 ${h2Bg}）` : ''}${h2Num ? `，序号「${h2Num}」` : ''}`,
+    `大标题 ${h1Style}${h1Bg ? `（横幅底 ${h1Bg}）` : ''} / 小节 ${h2Style}${h2Bg ? `（底 ${h2Bg}）` : ''}${h2Num ? `，序号「${h2Num}」` : ''}`,
     `引用 ${quoteStyle}${dashedCard ? `（边 ${dashedCard}）` : ''} / 分隔线 ${hrStyle}`,
     `加粗 ${strongStyle}${strongBg ? `（底 ${strongBg}）` : ''}`,
     hasTable ? `表格 ${tableStyle}${thBg ? `（表头 ${thBg}）` : ''}` : '',

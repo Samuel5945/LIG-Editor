@@ -429,7 +429,7 @@ export const TOOLS: ToolDef[] = [
   {
     name: 'set_theme',
     description:
-      '设置工程排版覆盖（写入 project.json，编辑器/导出/推送同源生效，与顶栏控件一致）。字段独立可传：accent 强调色 / bodyFontSize 正文字号 / headingFontSize 标题字号（H1=+6 H2=+0 H3=-3）/ bodyAlign 正文排列（indent 首行缩进 / flush 顶格两端对齐 / center 居中）/ headingAlign 标题排列（center 居中 / left 左）/ 标题版式四项 h1Style（bar 短横 / pill 胶囊色块字底 / underline 下划线）、h2Style（leftbar 左竖条 / block 色块标签 / underline 下划线 / plain 纯文字）、h2Num（H2 自动序号：01 / 1. / 1、 / 一、 / 壹、 / ① 圈号；none 显式关闭）、h3Mark（diamond 菱形 / dot 圆点 / none 无）/ bodyBg 文章背景卡（浅色系十六进制 #rrggbb；none 去卡片纯白底；夜间由公众号逻辑自动变深）。引用底色 quoteBg / 引用文字色 quoteText / 分隔线颜色 hrColor / H2 条色 h2Border（均十六进制，不设则按强调色或中性灰派生）。传 null = 恢复默认（跟随分类主题）。数值字段越界会被夹到区间内（行高 1.5-3 / 段距 0-48 / 圆角 0-40 / 字号 10-40），夹取结果写在返回的 hint 里，必须照实转述给用户，不要说成已按原值设置',
+      '设置工程排版覆盖（写入 project.json，编辑器/导出/推送同源生效，与顶栏控件一致）。字段独立可传：accent 强调色 / bodyFontSize 正文字号 / headingFontSize 标题字号（H1=+6 H2=+0 H3=-3）/ bodyAlign 正文排列（indent 首行缩进 / flush 顶格两端对齐 / center 居中）/ headingAlign 标题排列（center 居中 / left 左）/ 标题版式四项 h1Style（bar 短横 / pill 胶囊色块字底 / underline 下划线 / banner 报头横幅，配 h1Bg 横幅底色）、h2Style（leftbar 左竖条 / block 色块标签 / underline 下划线 / plain 纯文字）、h2Num（H2 自动序号：01 / 1. / 1、 / 一、 / 壹、 / ① 圈号；none 显式关闭）、h3Mark（diamond 菱形 / dot 圆点 / none 无）/ bodyBg 文章背景卡（浅色系十六进制 #rrggbb；none 去卡片纯白底；夜间由公众号逻辑自动变深）/ pageBg 页面纸底（正文卡之下的纸色外壳，日报纸感）。引用底色 quoteBg / 引用文字色 quoteText / 分隔线颜色 hrColor / H2 条色 h2Border（均十六进制，不设则按强调色或中性灰派生）。传 null = 恢复默认（跟随分类主题）。数值字段越界会被夹到区间内（行高 1.5-3 / 段距 0-48 / 圆角 0-40 / 字号 10-40），夹取结果写在返回的 hint 里，必须照实转述给用户，不要说成已按原值设置',
     inputSchema: {
       type: 'object',
       properties: {
@@ -439,11 +439,13 @@ export const TOOLS: ToolDef[] = [
         headingFontSize: { type: ['number', 'null'], description: '标题字号 px（12-40）；null 跟随主题' },
         bodyAlign: { type: ['string', 'null'], enum: ['indent', 'flush', 'center', null], description: '正文排列；null 跟随主题' },
         headingAlign: { type: ['string', 'null'], enum: ['center', 'left', null], description: '标题排列；null 跟随主题' },
-        h1Style: { type: ['string', 'null'], enum: ['bar', 'pill', 'underline', null], description: 'H1 装饰；null 跟随主题' },
+        h1Style: { type: ['string', 'null'], enum: ['bar', 'pill', 'underline', 'banner', null], description: 'H1 装饰；banner 报头横幅（通栏色块，配 h1Bg）；null 跟随主题' },
+        h1Bg: { type: ['string', 'null'], description: '报头横幅底色十六进制（配 h1Style: banner，缺省跟强调色）；null 跟随主题' },
         h2Style: { type: ['string', 'null'], enum: ['leftbar', 'block', 'underline', 'plain', null], description: 'H2 装饰；null 跟随主题' },
         h2Num: { type: ['string', 'null'], enum: ['01', '1.', '1、', '一、', '壹、', '①', 'none', null], description: 'H2 自动序号格式；none 显式关闭；null 跟随主题' },
         h3Mark: { type: ['string', 'null'], enum: ['diamond', 'dot', 'none', null], description: 'H3 前缀标记；null 跟随主题' },
         bodyBg: { type: ['string', 'null'], description: '文章背景卡十六进制（#rrggbb，建议浅色系）；none 去卡片；null 跟随主题' },
+        pageBg: { type: ['string', 'null'], description: '页面纸底十六进制（正文卡之下的纸色外壳）；null 跟随主题' },
         fontFamily: { type: ['string', 'null'], description: '正文字体栈（如 "Microsoft YaHei", sans-serif）；null 跟随主题' },
         lineHeight: { type: ['number', 'null'], description: '正文行高（1.5-3，非法值回落）；null 跟随主题' },
         letterSpacing: { type: ['string', 'number', 'null'], description: '字距（如 0.02em 或 0.5px；给裸数字按 px 处理）；null 跟随主题' },
@@ -515,7 +517,7 @@ export const TOOLS: ToolDef[] = [
   {
     name: 'save_theme_preset',
     description:
-      '为分类设计并保存整套排版主题（写入自定义主题库，一个分类可存多套主题，保存即激活为该分类当前主题——该分类下打开工程即套用）。name 为主题名；category 为归属分类（缺省与主题同名，同名分类目录自动创建）。theme 为完整 ArticleTheme 主题对象：accent 必填（十六进制强调色 #rrggbb，rgb()/rgba()/8位hex/渐变串自动转换）；常用字段 fontFamily 字体栈 / lineHeight 行高 1.5-3 / letterSpacing 字距 / fontSize 正文字号 / headingFontSize 标题字号 / bodyBg 正文背景卡（浅色系） / bodyRadius 圆角 / bodyPadding 内边距 / pGap 段间距 / h1Style·h2Style·h2Num·h3Mark 标题版式 / quoteStyle·quoteBorder·quoteBg·quoteText 引用 / hrStyle·hrColor 分隔线 / h2Border H2 条色 / hrStyle 分隔线 / strongStyle·strongBg·strongColor 加粗 / tableStyle·tableHeaderBg·tableBorder·tableHeaderText 表格 / imgRadius 图片圆角 / bodyText·headingColor·h2Bg 色系。非法或缺失字段自动回落默认调性',
+      '为分类设计并保存整套排版主题（写入自定义主题库，一个分类可存多套主题，保存即激活为该分类当前主题——该分类下打开工程即套用）。name 为主题名；category 为归属分类（缺省与主题同名，同名分类目录自动创建）。theme 为完整 ArticleTheme 主题对象：accent 必填（十六进制强调色 #rrggbb，rgb()/rgba()/8位hex/渐变串自动转换）；常用字段 fontFamily 字体栈 / lineHeight 行高 1.5-3 / letterSpacing 字距 / fontSize 正文字号 / headingFontSize 标题字号 / bodyBg 正文背景卡（浅色系） / pageBg 页面纸底 / h1Bg 报头横幅底色（配 h1Style: banner） / bodyRadius 圆角 / bodyPadding 内边距 / pGap 段间距 / h1Style·h2Style·h2Num·h3Mark 标题版式 / quoteStyle·quoteBorder·quoteBg·quoteText 引用 / hrStyle·hrColor 分隔线 / h2Border H2 条色 / hrStyle 分隔线 / strongStyle·strongBg·strongColor 加粗 / tableStyle·tableHeaderBg·tableBorder·tableHeaderText 表格 / imgRadius 图片圆角 / bodyText·headingColor·h2Bg 色系。非法或缺失字段自动回落默认调性',
     inputSchema: {
       type: 'object',
       properties: {
@@ -524,7 +526,7 @@ export const TOOLS: ToolDef[] = [
         theme: {
           type: 'object',
           description:
-            '完整排版主题对象，**键名必须严格用下面这些**（accent 必填）：accent / fontFamily / lineHeight(1.5-3) / letterSpacing / fontSize(10-40) / headingFontSize(10-40) / bodyAlign / headingAlign / h1Style / h2Style / h2Num / h3Mark / bodyBg / pGap(0-48) / bodyText / headingColor / quoteStyle / quoteBorder / hrStyle / strongStyle / strongBg / strongColor / imgRadius(0-40) / bodyRadius(0-40) / bodyPadding / tableStyle / tableHeaderBg / tableBorder / tableHeaderText / h2Bg / quoteBg / quoteText / hrColor / h2Border。accent 传 #rrggbb 即可（rgb()/rgba()、8位hex、渐变串自动转换成 hex）。不要自造键名（如 text_color / font_family / paragraph_spacing），不认识的键会在结果里照实列出',
+            '完整排版主题对象，**键名必须严格用下面这些**（accent 必填）：accent / fontFamily / lineHeight(1.5-3) / letterSpacing / fontSize(10-40) / headingFontSize(10-40) / bodyAlign / headingAlign / h1Style / h1Bg / h2Style / h2Num / h3Mark / bodyBg / pageBg / pGap(0-48) / bodyText / headingColor / quoteStyle / quoteBorder / hrStyle / strongStyle / strongBg / strongColor / imgRadius(0-40) / bodyRadius(0-40) / bodyPadding / tableStyle / tableHeaderBg / tableBorder / tableHeaderText / h2Bg / quoteBg / quoteText / hrColor / h2Border。accent 传 #rrggbb 即可（rgb()/rgba()、8位hex、渐变串自动转换成 hex）。不要自造键名（如 text_color / font_family / paragraph_spacing），不认识的键会在结果里照实列出',
           additionalProperties: false
         }
       },

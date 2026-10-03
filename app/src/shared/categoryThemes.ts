@@ -216,6 +216,17 @@ export function resolveEditorTheme(theme: ArticleTheme, uiDark: boolean): Editor
   return { bodyBg: bg, bodyText, headingColor, darkBg }
 }
 
+/**
+ * 页面纸底昼夜解析：日间 = 主题纸色；夜间 = 公众号逻辑自动变深（浅纸变深纸、深纸保持）。
+ * 不设纸底返回 undefined（调用方回自身底色逻辑）。编辑器画布与导出页面外壳共用，
+ * 与 resolveEditorTheme 的卡片变深逻辑同源同参。
+ */
+export function resolvePageBg(theme: Pick<ArticleTheme, 'pageBg'>, uiDark: boolean): string | undefined {
+  const base = theme.pageBg && isHexColor(theme.pageBg) ? theme.pageBg.trim() : undefined
+  if (!base) return undefined
+  return uiDark && !isDarkColor(base) ? wechatDarkColor(base) : base
+}
+
 /** 默认调性：与编辑器/导出历史排版一致（青绿强调色、黑体、2.13 行高、居中大标题）；
  * 2026-08-21 日间配色换色：默认蓝 #4f8cff → 青绿 #0d9488（深底 4.5:1 / 白底 3.7:1，昼夜同源跟色） */
 export const DEFAULT_THEME: ArticleTheme = {
@@ -433,6 +444,12 @@ export const THEME_KEY_ALIASES: Record<string, ThemeOverrideKey> = {
   h2_bg: 'h2Bg',
   h2_bg_color: 'h2Bg',
   h1_style: 'h1Style',
+  h1_bg: 'h1Bg',
+  banner_bg: 'h1Bg',
+  banner_color: 'h1Bg',
+  page_bg: 'pageBg',
+  page_background: 'pageBg',
+  paper_bg: 'pageBg',
   h2_style: 'h2Style',
   h2_num: 'h2Num',
   h3_mark: 'h3Mark',
@@ -507,7 +524,7 @@ export function metaPatchToThemeKeys(patch: Partial<ProjectMeta>): Partial<Artic
   return out as Partial<ArticleTheme>
 }
 
-/** meta 级排版覆盖白名单（30 键）：set_theme 工具、sanitizeThemePatch、readMeta 透传、
+/** meta 级排版覆盖白名单（36 键）：set_theme 工具、sanitizeThemePatch、readMeta 透传、
  *  App handleApplyTypography 四处共用同一口径。
  *  新增视觉字段必须同步这几处（PRD §14 已点名 readMeta 白名单是回归高发点）——
  *  漏一处的表现是「写进 meta 却读不出来」或「下次 writeMeta 把它覆掉」。 */
@@ -518,10 +535,12 @@ export const THEME_OVERRIDE_KEYS = [
   'bodyAlign',
   'headingAlign',
   'h1Style',
+  'h1Bg',
   'h2Style',
   'h2Num',
   'h3Mark',
   'bodyBg',
+  'pageBg',
   'fontFamily',
   'lineHeight',
   'letterSpacing',
@@ -554,7 +573,7 @@ export type ThemeOverrideKey = (typeof THEME_OVERRIDE_KEYS)[number]
  *  报「键名须与工具说明一致」等于让它蒙——把可用键连取值口径直接塞进报错，一轮改对。
  *  枚举取值须与 sanitizeThemePatchDetailed 的 en() 白名单同步（改枚举先改这里）。 */
 export const THEME_KEYS_HINT =
-  'accent(必填,#rrggbb) / fontFamily / lineHeight(1.5-3) / letterSpacing / fontSize(10-40) / headingFontSize(10-40) / bodyAlign(indent|flush|center) / headingAlign(center|left) / h1Style(bar|pill|underline) / h2Style(leftbar|block|underline|plain) / h2Num(01|1.|1、|一、|壹、|①|none) / h3Mark(diamond|dot|none) / bodyBg(#hex|none) / pGap(0-48) / bodyText / headingColor / quoteStyle(leftbar|card|quotes|dashcard) / quoteBorder / quoteBg / quoteText / hrColor / h2Border / hrStyle(line|dot|long) / strongStyle(color|highlight|plain) / strongBg / strongColor / imgRadius(0-40) / bodyRadius(0-40) / bodyPadding / tableStyle(bordered|striped|plain) / tableHeaderBg / tableBorder / tableHeaderText / h2Bg'
+  'accent(必填,#rrggbb) / fontFamily / lineHeight(1.5-3) / letterSpacing / fontSize(10-40) / headingFontSize(10-40) / bodyAlign(indent|flush|center) / headingAlign(center|left) / h1Style(bar|pill|underline|banner) / h1Bg / h2Style(leftbar|block|underline|plain) / h2Num(01|1.|1、|一、|壹、|①|none) / h3Mark(diamond|dot|none) / bodyBg(#hex|none) / pageBg / pGap(0-48) / bodyText / headingColor / quoteStyle(leftbar|card|quotes|dashcard) / quoteBorder / quoteBg / quoteText / hrColor / h2Border / hrStyle(line|dot|long) / strongStyle(color|highlight|plain) / strongBg / strongColor / imgRadius(0-40) / bodyRadius(0-40) / bodyPadding / tableStyle(bordered|striped|plain) / tableHeaderBg / tableBorder / tableHeaderText / h2Bg'
 
 /** 排版覆盖字段中文名（对话框视觉参数预览、工具返回值提示共用一套口径） */
 export const THEME_FIELD_LABELS: Record<ThemeOverrideKey, string> = {
@@ -564,10 +583,12 @@ export const THEME_FIELD_LABELS: Record<ThemeOverrideKey, string> = {
   bodyAlign: '段落排列',
   headingAlign: '标题排列',
   h1Style: '一级标题版式',
+  h1Bg: '报头横幅底色',
   h2Style: '二级标题版式',
   h2Num: '二级标题序号',
   h3Mark: '三级标题标记',
   bodyBg: '正文背景卡',
+  pageBg: '页面纸底',
   fontFamily: '字体栈',
   lineHeight: '行高',
   letterSpacing: '字距',
@@ -732,7 +753,8 @@ export function sanitizeThemePatchDetailed(raw: Record<string, unknown>): {
   num('headingFontSize')
   en('bodyAlign', ['indent', 'flush', 'center'])
   en('headingAlign', ['center', 'left'])
-  en('h1Style', ['bar', 'pill', 'underline'])
+  en('h1Style', ['bar', 'pill', 'underline', 'banner'])
+  hex('h1Bg')
   en('h2Style', ['leftbar', 'block', 'underline', 'plain'])
   if (patch.h2Num === 'none' || (typeof patch.h2Num === 'string' && (H2_NUMS as string[]).includes(patch.h2Num))) {
     out.h2Num = patch.h2Num
@@ -750,6 +772,7 @@ export function sanitizeThemePatchDetailed(raw: Record<string, unknown>): {
       }
     }
   }
+  hex('pageBg')
   // B 期扩展 20 字段
   str('fontFamily')
   num('lineHeight')
@@ -834,10 +857,12 @@ export function resolveArticleTheme(
     | 'bodyAlign'
     | 'headingAlign'
     | 'h1Style'
+    | 'h1Bg'
     | 'h2Style'
     | 'h2Num'
     | 'h3Mark'
     | 'bodyBg'
+    | 'pageBg'
     | 'fontFamily'
     | 'lineHeight'
     | 'letterSpacing'
@@ -882,6 +907,7 @@ export function resolveArticleTheme(
   const headingAlign = meta?.headingAlign ?? base.headingAlign
   // 标题版式：显式覆盖 > 主题值；h2Num 'none' 哨兵把主题序号关掉
   const h1Style = meta?.h1Style ?? base.h1Style
+  const h1Bg = meta?.h1Bg && isHexColor(meta.h1Bg) ? meta.h1Bg.trim() : base.h1Bg
   const h2Style = meta?.h2Style ?? base.h2Style
   const h2Num = meta?.h2Num ? (meta.h2Num === 'none' ? undefined : meta.h2Num) : base.h2Num
   const h3Mark = meta?.h3Mark ?? base.h3Mark
@@ -894,6 +920,8 @@ export function resolveArticleTheme(
         ? meta.bodyBg.trim()
         : base.bodyBg
     : base.bodyBg
+  // 页面纸底：显式 hex 覆盖 > 主题值；不设 = 无纸层（保持原双层行为）
+  const pageBg = meta?.pageBg && isHexColor(meta.pageBg) ? meta.pageBg.trim() : base.pageBg
   // ---- B 期视觉覆盖扩展：逐字段校验合并（hex 校验 / 数值夹取 / 枚举守卫 / 字符串非空） ----
   const fontFamily = meta?.fontFamily?.trim() || base.fontFamily
   const lineHeight =
@@ -939,7 +967,7 @@ export function resolveArticleTheme(
         ? accent
         : base.strongColor
   const overrides = {
-    fontSize, headingFontSize, bodyAlign, headingAlign, h1Style, h2Style, h2Num, h3Mark, bodyBg,
+    fontSize, headingFontSize, bodyAlign, headingAlign, h1Style, h1Bg, h2Style, h2Num, h3Mark, bodyBg, pageBg,
     fontFamily, lineHeight, letterSpacing, pGap, bodyText, headingColor, quoteStyle, quoteBorder,
     quoteBg, quoteText, hrColor, h2Border,
     hrStyle, strongStyle, strongBg, strongColor, imgRadius, bodyRadius, bodyPadding,

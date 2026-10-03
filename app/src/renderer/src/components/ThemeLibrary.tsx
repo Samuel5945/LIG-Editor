@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactElement } from 'react'
 import type { ArticleTheme, CustomThemeLibrary } from '@shared/types'
-import { CATEGORY_THEMES } from '@shared/categoryThemes'
+import { CATEGORY_THEMES, isDarkColor } from '@shared/categoryThemes'
 import { Icon } from '../ui/Icon'
 import { Button, Chip, FIELD_SHELL_CLS, PickerButton, useFittingRow } from '../ui/primitives'
 
@@ -60,8 +60,8 @@ function ThemeSwatch({ theme }: { theme: ArticleTheme }): ReactElement {
   const centered = (theme.h1Style ? theme.headingAlign !== 'left' : theme.headingAlign === 'center')
   return (
     <div
-      className="h-[104px] overflow-hidden border-b border-panel-3 px-3.5 py-3"
-      style={{ background: bg || undefined, fontFamily: theme.fontFamily, lineHeight: theme.lineHeight || 1.9 }}
+      className="h-[104px] overflow-hidden border-b border-panel-3 px-4 py-3"
+      style={{ background: theme.pageBg || bg || undefined, fontFamily: theme.fontFamily, lineHeight: theme.lineHeight || 1.9 }}
     >
       <div className={centered ? 'text-center' : 'text-left'}>
         <span
@@ -71,7 +71,9 @@ function ThemeSwatch({ theme }: { theme: ArticleTheme }): ReactElement {
               ? { background: accent, color: '#fff', borderRadius: 999, padding: '2px 10px' }
               : h1 === 'underline'
                 ? { borderBottom: `2px solid ${accent}`, paddingBottom: 2 }
-                : { color: theme.headingColor || undefined }
+                : h1 === 'banner'
+                  ? { background: theme.h1Bg || accent, color: isDarkColor(theme.h1Bg || accent) ? '#f5f5f4' : '#333', padding: '3px 10px', width: '100%', textAlign: centered ? 'center' : 'left' }
+                  : { color: theme.headingColor || undefined }
           }
         >
           标题装饰

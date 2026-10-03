@@ -19,7 +19,7 @@ import { Plugin, PluginKey } from 'prosemirror-state'
 import { Decoration, DecorationSet } from 'prosemirror-view'
 import { mdToDoc, docToMd, docToTiptap, type ArticleDoc } from '@shared/markdown'
 import { isHexColor } from '@shared/cards'
-import { DEFAULT_THEME, contrastText, isDarkColor, resolveEditorTheme, type ArticleTheme } from '@shared/categoryThemes'
+import { DEFAULT_THEME, contrastText, isDarkColor, resolveEditorTheme, resolvePageBg, type ArticleTheme } from '@shared/categoryThemes'
 import { SEQ_PREFIX } from '@shared/exportHtml'
 import type { H1Style, H2Style, H2Num, H3Mark } from '@shared/types'
 import type { ThemeOverrides } from '@shared/themeFields'
@@ -772,7 +772,11 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
           )
         })()}
       </div>
-      <div className="min-h-0 flex-1 overflow-auto">
+      <div
+        className="min-h-0 flex-1 overflow-auto"
+        // 页面纸底挂在滚动容器上（纸在卡外）；变量定义在下方 EditorContent 上，祖先读不到
+        style={{ background: resolvePageBg(theme ?? DEFAULT_THEME, uiDark !== false) }}
+      >
         {/* 选区浮动指令条：加粗 + 手动样式（字色/背景高亮/字号）+ AI 指令 */}
         <BubbleMenu
           editor={editor}
@@ -1034,7 +1038,10 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
               '--article-caption-color': c.darkBg ? '#cbd5e1' : '#555'
             }
             if (t.headingAlign === 'left') vars['--article-bar-left'] = '0'
-            // H1 装饰：pill 胶囊色块 / underline 下划线（bar 用 CSS 默认短横）
+            // 页面纸底（日报纸感外壳）：昼夜间与卡片同源解析；不设 = 透明（原行为）
+            const pageBg = resolvePageBg(t, uiDark !== false)
+            if (pageBg) vars['--article-page-bg'] = pageBg
+            // H1 装饰：pill 胶囊色块 / underline 下划线 / banner 报头横幅（bar 用 CSS 默认短横）
             const h1 = t.h1Style ?? 'bar'
             if (h1 === 'pill') {
               vars['--article-h1-bg'] = accent
@@ -1042,6 +1049,13 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
               vars['--article-h1-display'] = 'inline-block'
               vars['--article-h1-pad'] = '6px 22px'
               vars['--article-h1-radius'] = '9999px'
+              vars['--article-h1-bar'] = 'none'
+            } else if (h1 === 'banner') {
+              // 报头横幅（日报范式）：通栏色块 + 按底色自动对比字色；底色缺省跟强调色
+              const bannerBg = t.h1Bg && isHexColor(t.h1Bg) ? t.h1Bg.trim() : accent
+              vars['--article-h1-bg'] = bannerBg
+              vars['--article-h1-color'] = contrastText(bannerBg)
+              vars['--article-h1-pad'] = '24px 20px'
               vars['--article-h1-bar'] = 'none'
             } else if (h1 === 'underline') {
               vars['--article-h1-border'] = `3px solid ${accent}`

@@ -637,3 +637,41 @@ describe('parseThemeFromHtml v8（虚线边框提示卡 → dashcard 引用）',
     expect(parseThemeFromHtml(html).theme.quoteStyle).toBe('quotes')
   })
 })
+
+describe('日报范式反解（纸底 / 报头横幅）', () => {
+  const DAILY = `<!DOCTYPE html><html><head><title>DESIGN DAILY #74 · 把碑刻装进字库（公众号版）</title></head>
+<body style="margin:0;padding:0;background:#eceae4;">
+<div style="margin:0;padding:0;background:#eceae4;">
+<div style="max-width:677px;margin:0 auto;padding:18px 12px 30px;background:#f7f5f1;font-family:'PingFang SC',sans-serif;color:#2a2a2a;line-height:1.75;">
+<h1 style="font-size:23px;font-weight:800;letter-spacing:.1em;color:#1a1a1a;background:#1a1a2e;padding:24px 20px;margin:0;">把碑刻装进字库</h1>
+<h2 style="font-size:19px;font-weight:800;border-bottom:2px solid #1a1a1a;padding-bottom:8px;">潮流速递</h2>
+<p style="font-size:13.5px;color:#3a362e;margin:12px 0;">正文一段</p>
+</div>
+</div>
+</body></html>`
+
+  it('body 实心底识别为页面纸底，内层容器识别为背景卡', () => {
+    const { theme } = parseThemeFromHtml(DAILY)
+    expect(theme.pageBg).toBe('#eceae4')
+    expect(theme.bodyBg).toBe('#f7f5f1')
+  })
+
+  it('通栏 h1 底色块识别为报头横幅并取底色；圆角胶囊仍归 pill', () => {
+    const { theme } = parseThemeFromHtml(DAILY)
+    expect(theme.h1Style).toBe('banner')
+    expect(theme.h1Bg).toBe('#1a1a2e')
+    const pill = parseThemeFromHtml(
+      DAILY.replace('padding:24px 20px;margin:0;', 'border-radius:9999px;padding:6px 22px;margin:32px auto 0;display:inline-block;')
+    )
+    expect(pill.theme.h1Style).toBe('pill')
+    expect(pill.theme.h1Bg).toBeUndefined()
+  })
+
+  it('白底 body 不产生纸底', () => {
+    const { theme } = parseThemeFromHtml(
+      '<html><body style="background:#fff;"><section style="background:#eef3fb;padding:20px;"><h1 style="text-align:center;">标题</h1></section></body></html>'
+    )
+    expect(theme.pageBg).toBeUndefined()
+    expect(theme.bodyBg).toBe('#eef3fb')
+  })
+})
