@@ -372,7 +372,7 @@ describe('sanitizeThemePatch（set_theme / save_theme_preset / 排版对话框�
     })
   })
 
-  it('白名单 34 键逐键可写（新增字段忘了登记或取值不合法，会在这条红）', () => {
+  it('白名单 36 键逐键可写（新增字段忘了登记或取值不合法，会在这条红）', () => {
     const validProbe: Record<string, unknown> = {
       accent: '#0f766e',
       bodyFontSize: 17,
@@ -380,10 +380,12 @@ describe('sanitizeThemePatch（set_theme / save_theme_preset / 排版对话框�
       bodyAlign: 'indent',
       headingAlign: 'left',
       h1Style: 'pill',
+      h1Bg: '#1a1a2e',
       h2Style: 'block',
       h2Num: '1.',
       h3Mark: 'dot',
       bodyBg: 'none',
+      pageBg: '#f5f1ea',
       fontFamily: 'Serif, serif',
       lineHeight: 2.2,
       letterSpacing: '0.03em',

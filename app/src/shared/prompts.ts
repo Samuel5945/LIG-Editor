@@ -302,7 +302,7 @@ ${JSON.stringify(theme)}
 { "lineHeight": 2.1, "quoteStyle": "card", "pGap": 24 }
 </theme>
 可用键（值需自洽：hex 颜色如 #0f766e；lineHeight 1.5-3；pGap/imgRadius/bodyRadius 0-48/0-40/0-40；字号 10-40）：
-accent、bodyFontSize、headingFontSize、bodyAlign(indent|flush|center)、headingAlign(center|left)、h1Style(bar|pill|underline)、h2Style(leftbar|block|underline|plain)、h2Num、h3Mark(diamond|dot|none)、bodyBg(十六进制或 none)、fontFamily、lineHeight、letterSpacing(如 0.02em)、pGap、bodyText、headingColor、quoteStyle(leftbar|card|quotes|dashcard)、quoteBorder、hrStyle(line|dot|long)、strongStyle(color|highlight|plain)、strongBg、strongColor、imgRadius、bodyRadius、bodyPadding(如 '20px 22px')、tableStyle(bordered|striped|plain)、tableHeaderBg、tableBorder、tableHeaderText、h2Bg
+accent、bodyFontSize、headingFontSize、bodyAlign(indent|flush|center)、headingAlign(center|left)、h1Style(bar|pill|underline|banner)、h1Bg(报头横幅底色，配 banner)、h2Style(leftbar|block|underline|plain)、h2Num、h3Mark(diamond|dot|none)、bodyBg(十六进制或 none)、pageBg(页面纸底，正文卡之下的纸色)、fontFamily、lineHeight、letterSpacing(如 0.02em)、pGap、bodyText、headingColor、quoteStyle(leftbar|card|quotes|dashcard)、quoteBorder、hrStyle(line|dot|long)、strongStyle(color|highlight|plain)、strongBg、strongColor、imgRadius、bodyRadius、bodyPadding(如 '20px 22px')、tableStyle(bordered|striped|plain)、tableHeaderBg、tableBorder、tableHeaderText、h2Bg
 内容不需要动视觉层时，不要输出 <theme> 围栏——宁缺勿滥。`
     : ''
 }

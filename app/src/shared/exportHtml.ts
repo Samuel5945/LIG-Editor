@@ -1,6 +1,6 @@
 import type { ArticleDoc, BlockNode, FigureGalleryAttrs, InlineNode, ParagraphNode } from './markdown'
 import { isHexColor } from './cards'
-import { DEFAULT_NIGHT_BG, DEFAULT_THEME, contrastText, isDarkColor, resolveEditorTheme, type ArticleTheme } from './categoryThemes'
+import { DEFAULT_NIGHT_BG, DEFAULT_THEME, contrastText, isDarkColor, resolveEditorTheme, resolvePageBg, type ArticleTheme } from './categoryThemes'
 
 /**
  * article.md → 公众号可粘贴 HTML（M7 导出）
@@ -57,6 +57,8 @@ type Styles = { -readonly [K in keyof typeof S]: string } & {
   /** 背景卡内层（background-color/圆角/内边距）：公众号粘贴/提交会剥最外层 section 样式，
    * 视觉卡片必须挂在第二层 section 才能在公众号预览/正文里存活 */
   card: string
+  /** 页面纸底层（日报纸感外壳）：挂在卡片的上一层；无纸底主题为空串（保持原双层结构） */
+  page: string
 }
 
 /** 强调色转淡色底（公众号客户端不认 color-mix，预计算 rgba；非法输入回默认蓝） */
@@ -86,7 +88,8 @@ function buildStyles(theme?: ArticleTheme, uiDark?: boolean): Styles {
     td: '',
     tdStripe: '',
     tdFirst: '',
-    card: ''
+    card: '',
+    page: ''
   }
   const c = t.accent && isHexColor(t.accent) ? t.accent.trim() : DEFAULT_ACCENT
   const lh = t.lineHeight || 2.13
@@ -131,11 +134,17 @@ function buildStyles(theme?: ArticleTheme, uiDark?: boolean): Styles {
 
   // 正文容器：字号/行高/字色/字距/字体挂最外层（排版继承）；背景卡挂第二层 section——
   // 公众号编辑器粘贴/提交草稿时会剥掉最外层容器的样式，背景/圆角/内边距放内层才能存活
-  s.root = `font-size:${baseSize}px;line-height:${lh};color:${textColor};letter-spacing:${t.letterSpacing};word-break:break-word;font-family:${t.fontFamily};`
+  // 字体栈换单引号：内联样式属性用双引号包裹，字体名带双引号会截断属性（font-family 整体失效）
+  const fam = t.fontFamily.replace(/"/g, "'")
+  s.root = `font-size:${baseSize}px;line-height:${lh};color:${textColor};letter-spacing:${t.letterSpacing};word-break:break-word;font-family:${fam};`
   if (t.bodyBg) {
     // background-color 而非 background 简写：部分清理环节只保留 background-color
     s.card = `background-color:${t.bodyBg};border-radius:${t.bodyRadius ?? 0}px;padding:${t.bodyPadding ?? '16px 18px'};`
   }
+  // 页面纸底层：日报纸感外壳，挂在卡片的上一层（同样避开公众号剥最外层的刀）。
+  // 昼夜解析与卡片同源（夜间公众号逻辑变深）；不设纸底 = 空串，保持原双层结构
+  const pageBg = resolvePageBg(t, uiDark === true)
+  if (pageBg) s.page = `background-color:${pageBg};padding:16px 12px 26px;`
   s.p = `font-size:${baseSize}px;line-height:${lh};color:${textColor};margin:${pGap}px 0;${pAlign}`
   s.quoteP = `margin:4px 0;font-size:${baseSize}px;line-height:${lh};color:${quoteColor};`
   s.quotePLast = `margin:4px 0;font-size:${baseSize}px;line-height:${lh};color:${quoteColor};`
@@ -147,7 +156,7 @@ function buildStyles(theme?: ArticleTheme, uiDark?: boolean): Styles {
   s.quoteMark = ''
   s.strong = strongStyle(t, dark, c)
   // 表格：全边框 / 斑马纹 / 极简（plain 用底线分隔，无竖边框）
-  s.table = `border-collapse:collapse;width:100%;margin:${pGap}px 0;font-size:14px;line-height:1.8;font-family:${t.fontFamily};`
+  s.table = `border-collapse:collapse;width:100%;margin:${pGap}px 0;font-size:14px;line-height:1.8;font-family:${fam};`
   if (tableStyle === 'plain') {
     s.table += 'border:0 none;'
     s.th = `padding:10px 4px;text-align:left;font-weight:bold;color:${headerText};border-bottom:2px solid ${tableBorder};`
@@ -162,11 +171,16 @@ function buildStyles(theme?: ArticleTheme, uiDark?: boolean): Styles {
   }
   s.h1Wrap = `text-align:${t.headingAlign};`
 
-  // H1 装饰：bar 经典短横 / pill 胶囊色块字底 / underline 下划线
+  // H1 装饰：bar 经典短横 / pill 胶囊色块字底 / underline 下划线 / banner 报头横幅
   const h1Style = t.h1Style ?? 'bar'
   const h1Size = headingBase + 6
   if (h1Style === 'pill') {
     s.h1 = `font-size:${h1Size}px;font-weight:bold;color:${contrastText(c)};line-height:1.375;letter-spacing:0.025em;margin:32px 0 0;display:inline-block;background:${c};border-radius:9999px;padding:6px 22px;`
+    s.h1Bar = 'display:none;'
+  } else if (h1Style === 'banner') {
+    // 报头横幅（日报范式）：通栏色块 + 按底色自动对比字色；底色缺省跟强调色
+    const bannerBg = t.h1Bg && isHexColor(t.h1Bg) ? t.h1Bg.trim() : c
+    s.h1 = `font-size:${h1Size}px;font-weight:bold;color:${contrastText(bannerBg)};line-height:1.375;letter-spacing:0.05em;margin:0;background:${bannerBg};padding:24px 20px;`
     s.h1Bar = 'display:none;'
   } else if (h1Style === 'underline') {
     s.h1 = `font-size:${h1Size}px;font-weight:bold;color:${headingColor};line-height:1.375;letter-spacing:0.025em;margin:32px 0 0;border-bottom:3px solid ${c};padding-bottom:10px;`
@@ -458,16 +472,26 @@ export function docToExportHtml(
     )
     .filter(Boolean)
     .join('\n')
-  // 背景卡双层包裹：外层排版继承 + 内层视觉卡片（外层被公众号剥掉时内层卡片仍在）
-  return s.card
-    ? `<section style="${s.root}"><section style="${s.card}">\n${body}\n</section></section>`
-    : `<section style="${s.root}">\n${body}\n</section>`
+  // 三层包裹（纸底 → 卡片 → 正文）：外层排版继承被公众号剥掉后，纸底层与卡片层仍在——
+  // 日报「深纸底 + 浅卡」的双层表面由此在公众号里存活；无纸底/无卡片逐级退回原结构
+  let open = `<section style="${s.root}">`
+  let close = '</section>'
+  if (s.page) {
+    open += `<section style="${s.page}">`
+    close = '</section>' + close
+  }
+  if (s.card) {
+    open += `<section style="${s.card}">`
+    close = '</section>' + close
+  }
+  return `${open}\n${body}\n${close}`
 }
 
-/** 所选配色变体的页面外壳背景：卡片主题取实际卡片色（整页一体，与编辑器正文区一致）；
- * 无卡片主题夜间给默认深底 DEFAULT_NIGHT_BG、日间白底。 */
+/** 所选配色变体的页面外壳背景：优先页面纸底（日报纸感），其次卡片色（整页一体，与编辑器正文区一致）；
+ * 都没有时夜间给默认深底 DEFAULT_NIGHT_BG、日间白底。 */
 export function exportPageBg(theme: ArticleTheme | undefined, uiDark: boolean): string {
-  return resolveEditorTheme(theme ?? DEFAULT_THEME, uiDark).bodyBg ?? (uiDark ? DEFAULT_NIGHT_BG : '#fff')
+  const t = theme ?? DEFAULT_THEME
+  return resolvePageBg(t, uiDark) ?? resolveEditorTheme(t, uiDark).bodyBg ?? (uiDark ? DEFAULT_NIGHT_BG : '#fff')
 }
 
 /** 片段 → 完整独立页面（article.html / 手机预览）。bg 为外壳背景，缺省白底（向后兼容） */

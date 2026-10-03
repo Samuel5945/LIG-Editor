@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { mdToDoc, type ArticleDoc } from '../markdown'
-import { docToExportHtml, extractTitle, wrapExportPage, wrapExportPageDayNight } from '../exportHtml'
+import { docToExportHtml, exportPageBg, extractTitle, wrapExportPage, wrapExportPageDayNight } from '../exportHtml'
 import { DEFAULT_THEME, CATEGORY_THEMES, wechatDarkColor } from '../categoryThemes'
 
 const TABLE_MD = `| 功能 | 免费版 |
@@ -312,7 +312,8 @@ describe('docToExportHtml 分类排版调性（爆款范式）', () => {
     expect(out).toContain('border-bottom:3px solid #22d3ee') // H1 下划线
     expect(out).toContain('background:#22d3ee;border-radius:6px;padding:3px 14px') // H2 色块
     expect(out).toContain('background:rgba(34,211,238,0.1)') // 引用淡青卡片
-    expect(out).toContain('font-family:"Cascadia Code"') // 等宽字体
+    // 字体名单引号化：双引号会截断 style 属性（font-family 整体失效）
+    expect(out).toContain("font-family:'Cascadia Code'") // 等宽字体
   })
 
   it('生活常识：暖白卡片 + 胶囊 H1 + 高亮加粗', () => {
@@ -489,5 +490,46 @@ describe('引用底色 / 引用字色 / 分隔线颜色 / H2 条色覆盖（补�
     const html = withTheme({ quoteStyle: 'card', quoteBg: '粉色', hrColor: 'nope', h2Border: '' })
     expect(html).not.toContain('粉色')
     expect(html).not.toContain('nope')
+  })
+})
+
+describe('报头横幅与页面纸底（日报口径）', () => {
+  it('h1Style banner → 通栏色块 + 按底色自动对比字色，缺省底跟强调色', () => {
+    const md = ['# 把碑刻装进字库', '', '正文一段'].join('\n')
+    const banner = docToExportHtml(mdToDoc(md), (src) => src, {
+      ...DEFAULT_THEME,
+      h1Style: 'banner',
+      h1Bg: '#1a1a2e'
+    })
+    expect(banner).toContain('background:#1a1a2e')
+    expect(banner).toContain('color:#ffffff')
+    expect(banner).toContain('padding:24px 20px')
+    // 缺省底色跟强调色
+    const fallback = docToExportHtml(mdToDoc(md), (src) => src, { ...DEFAULT_THEME, h1Style: 'banner' })
+    expect(fallback).toContain(`background:${DEFAULT_THEME.accent}`)
+  })
+
+  it('pageBg → 纸底-卡片三层包裹；无卡片时纸底单层；无纸底维持原双层', () => {
+    const md = ['# 标题', '', '正文'].join('\n')
+    const both = docToExportHtml(mdToDoc(md), (src) => src, {
+      ...DEFAULT_THEME,
+      pageBg: '#eceae4',
+      bodyBg: '#f7f5f1'
+    })
+    // 根（排版继承）> 纸底 > 卡片
+    expect(both.indexOf('background-color:#eceae4')).toBeGreaterThan(both.indexOf('font-size'))
+    expect(both.indexOf('background-color:#f7f5f1')).toBeGreaterThan(both.indexOf('background-color:#eceae4'))
+    const paperOnly = docToExportHtml(mdToDoc(md), (src) => src, { ...DEFAULT_THEME, pageBg: '#eceae4' })
+    expect(paperOnly).toContain('background-color:#eceae4')
+    expect(paperOnly).not.toContain('background-color:undefined')
+    const plain = docToExportHtml(mdToDoc(md), (src) => src, DEFAULT_THEME)
+    expect(plain).not.toContain('background-color:#eceae4')
+  })
+
+  it('exportPageBg 优先纸底，其次卡片色', () => {
+    const t = { ...DEFAULT_THEME, pageBg: '#eceae4', bodyBg: '#f7f5f1' }
+    expect(exportPageBg(t, false)).toBe('#eceae4')
+    expect(exportPageBg({ ...DEFAULT_THEME, bodyBg: '#f7f5f1' }, false)).toBe('#f7f5f1')
+    expect(exportPageBg(undefined, false)).toBe('#fff')
   })
 })

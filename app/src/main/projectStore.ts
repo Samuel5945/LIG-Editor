@@ -301,10 +301,12 @@ export function readMeta(name: string): ProjectMeta {
     bodyAlign: raw.bodyAlign,
     headingAlign: raw.headingAlign,
     h1Style: raw.h1Style,
+    h1Bg: raw.h1Bg,
     h2Style: raw.h2Style,
     h2Num: raw.h2Num,
     h3Mark: raw.h3Mark,
     bodyBg: raw.bodyBg,
+    pageBg: raw.pageBg,
     plannedAt: raw.plannedAt,
     lastExportAt: raw.lastExportAt,
     // B 期排版视觉覆盖 20 字段：白名单缺字段会在 readMeta→writeMeta 往返时被清空，必须全量透传

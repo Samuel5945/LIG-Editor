@@ -77,9 +77,11 @@ export const THEME_FIELD_SPECS: ThemeFieldSpec[] = [
     options: [
       { value: 'bar', label: '短横' },
       { value: 'pill', label: '胶囊色块' },
-      { value: 'underline', label: '下划线' }
+      { value: 'underline', label: '下划线' },
+      { value: 'banner', label: '报头横幅' }
     ]
   },
+  { key: 'h1Bg', group: 'heading', kind: 'color', hint: '配「报头横幅」使用；横幅字色按底色自动对比' },
   {
     key: 'h2Style',
     group: 'heading',
@@ -173,6 +175,7 @@ export const THEME_FIELD_SPECS: ThemeFieldSpec[] = [
     sentinel: { value: 'none', label: '去卡片（纯白底）' },
     hint: '正文卡片底色；夜间由公众号逻辑自动变深'
   },
+  { key: 'pageBg', group: 'card', kind: 'color', hint: '页面纸底（正文卡之下的纸色外壳）；夜间由公众号逻辑自动变深' },
   { key: 'bodyRadius', group: 'card', kind: 'number', unit: 'px', integer: true, step: 2 },
   { key: 'bodyPadding', group: 'card', kind: 'text', placeholder: '20px 22px', hint: 'CSS 内边距写法；给裸数字按 px 处理' },
   { key: 'imgRadius', group: 'card', kind: 'number', unit: 'px', integer: true, step: 2 },

@@ -217,7 +217,7 @@ textarea:focus-visible,
   font-size: var(--article-h1-size, 26px);
   text-align: var(--article-h-align, center);
   display: var(--article-h1-display, block);
-  color: var(--article-heading-color, rgb(var(--ink)));
+  color: var(--article-h1-color, var(--article-heading-color, rgb(var(--ink))));
   background: var(--article-h1-bg, transparent);
   border-radius: var(--article-h1-radius, 0);
   padding: var(--article-h1-pad, 0);

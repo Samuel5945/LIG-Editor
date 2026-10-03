@@ -4,8 +4,8 @@ import type { CardDeck, CardFormat } from './cards'
 
 // ---------- 排版调性（分类排版，见 categoryThemes.ts 的预设与解析） ----------
 
-/** H1 大标题装饰 */
-export type H1Style = 'bar' | 'pill' | 'underline'
+/** H1 大标题装饰；banner 报头横幅 = 通栏色块 + 按底色自动对比字色（配 h1Bg，日报范式） */
+export type H1Style = 'bar' | 'pill' | 'underline' | 'banner'
 /** H2 小节标题装饰 */
 export type H2Style = 'leftbar' | 'block' | 'underline' | 'plain'
 /** H2 序号格式（按文档 h2 顺序自动编号） */
@@ -38,6 +38,8 @@ export interface ArticleTheme {
   // ---- 结构级排版风格（爆款范式），缺省回退经典排版 ----
   /** 正文容器背景色（如深色卡片 / 暖白卡片）；不设则透明白底 */
   bodyBg?: string
+  /** 页面纸底（纸感外壳，正文卡之下的纸色；日报「深纸底+浅卡」双层用）；不设=无纸层 */
+  pageBg?: string
   /** 正文文字色（深底卡片需浅色文字） */
   bodyText?: string
   // 昼夜变体字段（bodyBgLight/bodyBgDark 等）已删除：只有一套日间排版，
@@ -54,8 +56,10 @@ export interface ArticleTheme {
   bodyRadius?: number
   /** 正文容器内边距 */
   bodyPadding?: string
-  /** H1 装饰：bar 经典短横 / pill 胶囊色块字底 / underline 下划线 */
+  /** H1 装饰：bar 经典短横 / pill 胶囊色块字底 / underline 下划线 / banner 报头横幅 */
   h1Style?: H1Style
+  /** 报头横幅底色（配 h1Style: 'banner'；缺省=accent）；横幅字色按底色自动对比 */
+  h1Bg?: string
   /** H2 装饰：leftbar 左竖条 / block 色块标签 / underline 下划线 / plain 纯文字 */
   h2Style?: H2Style
   /** H2 序号样式（导入排版复刻「01 标题」「一、标题」「① 标题」等范式；渲染按文档 h2 顺序自动编号） */
@@ -141,8 +145,10 @@ export interface ProjectMeta {
   bodyAlign?: 'indent' | 'flush' | 'center'
   /** 标题排列覆盖：center 居中 / left 左对齐；缺省跟随主题 */
   headingAlign?: 'center' | 'left'
-  /** H1 装饰覆盖：bar 短横 / pill 胶囊 / underline 下划线；缺省跟随主题 */
+  /** H1 装饰覆盖：bar 短横 / pill 胶囊 / underline 下划线 / banner 报头横幅；缺省跟随主题 */
   h1Style?: H1Style
+  /** 报头横幅底色覆盖（十六进制）；缺省跟随主题 */
+  h1Bg?: string
   /** H2 装饰覆盖：leftbar 左竖条 / block 色块标签 / underline 下划线 / plain 纯文字；缺省跟随主题 */
   h2Style?: H2Style
   /** H2 序号覆盖：H2Num 各格式；'none' 显式关掉主题自带序号；缺省跟随主题 */
@@ -151,6 +157,8 @@ export interface ProjectMeta {
   h3Mark?: H3Mark
   /** 文章背景卡覆盖（十六进制）：覆盖主题 bodyBg；'none' 显式去卡片（透明白底）；缺省跟随主题 */
   bodyBg?: string
+  /** 页面纸底覆盖（十六进制）：覆盖主题 pageBg；缺省跟随主题 */
+  pageBg?: string
   // ---- 排版视觉覆盖扩展（B 期，20 字段）：缺省全部跟随主题；写值即覆盖，null/删除恢复（AI set_theme / 排版优化对话框 / 排版面板同源） ----
   /** 正文字体族覆盖 */
   fontFamily?: string
