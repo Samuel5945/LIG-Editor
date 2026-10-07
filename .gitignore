@@ -7,6 +7,10 @@
 # packaged artifacts
 /releases/
 
+# 发布物料：成片与截图是二进制交付件（单条视频 19MB），且桌面 lig-xhs-v090 另有一份
+# 可编辑工作副本（HyperFrames 工程 + 发布物）。进 git 只会让仓库永久背着这些字节
+/promo/
+
 # logs
 *.log
 
