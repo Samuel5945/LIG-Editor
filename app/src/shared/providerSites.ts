@@ -30,6 +30,16 @@ export const SENSENOVA_PROVIDER_SEED = {
   imageApi: 'openai-images' as const
 }
 
+/** 内置供应商种子：Agnes AI（预置默认文本/生图，v0.8.0 起随首次运行写入）。
+ * imageApi 用 Agnes 档位尺寸格式（该平台 images/generations 不支持尺寸档位与宽高比） */
+export const AGNES_PROVIDER_SEED = {
+  name: 'Agnes AI',
+  baseUrl: 'https://api.agnes-ai.cn/v1',
+  textModel: 'agnes-2.5-flash',
+  imageModel: 'agnes-image-2.1-flash',
+  imageApi: 'agnes-images' as const
+}
+
 /** 内置供应商种子：阿里云百炼（DashScope OpenAI 兼容模式）。无 OpenAI 风格生图端点，生图留空 */
 export const DASHSCOPE_PROVIDER_SEED = {
   name: '阿里云百炼',

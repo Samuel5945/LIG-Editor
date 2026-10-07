@@ -4,13 +4,26 @@ import { imageFormatFor } from '@shared/imageFormats'
 import {
   DASHSCOPE_PROVIDER_SEED,
   SENSENOVA_PROVIDER_SEED,
+  RHYTHM_PROVIDER_SEED,
+  AGNES_PROVIDER_SEED,
   isRhythmProvider,
   providerSiteLinks
 } from '@shared/providerSites'
 import { contextBadge, hasImageInput, modelCapability } from '@shared/modelCatalog'
 import { DialogShell } from '../ui/DialogShell'
-import { Button, FIELD_CLS, Segmented } from '../ui/primitives'
+import { Button, FIELD_CLS, Segmented, Popover, PopoverLabel, MenuItem } from '../ui/primitives'
 import { Icon, type IconName } from '../ui/Icon'
+
+/** 模板槽位形状：供应商 id/Key 之外的全套接入参数（四家内置种子的公共形状） */
+type ProviderSeed = Omit<ProviderConfig, 'id' | 'apiKey'>
+
+/** 「+ 添加」菜单里的内置模板：四家种子齐全（基元律动置顶展示位由种子数据自带） */
+const PROVIDER_TEMPLATES: { label: string; hint: string; seed: ProviderSeed }[] = [
+  { label: '商汤日日新', hint: 'Anthropic 兼容协议 · 文本 deepseek-v4-flash · 生图 u1.5-lite', seed: SENSENOVA_PROVIDER_SEED },
+  { label: '阿里云百炼', hint: 'OpenAI 兼容 compatible-mode · 文本 qwen3.8-flash', seed: DASHSCOPE_PROVIDER_SEED },
+  { label: '基元律动', hint: 'OpenAI 兼容 · 生图 wan2.7-image', seed: RHYTHM_PROVIDER_SEED },
+  { label: 'Agnes AI', hint: 'OpenAI 兼容 + Agnes 档位生图 · 文本 agnes-2.5-flash', seed: AGNES_PROVIDER_SEED }
+]
 
 interface SettingsDialogProps {
   onClose: () => void
@@ -52,6 +65,7 @@ export default function SettingsDialog({ onClose, appearance, onOpenIntegration 
   const [saveError, setSaveError] = useState<string | null>(null)
   const [fetchingModels, setFetchingModels] = useState(false)
   const [modelsError, setModelsError] = useState<string | null>(null)
+  const [addMenuOpen, setAddMenuOpen] = useState(false)
 
   useEffect(() => {
     window.api.invoke('settings:getLlm').then((s) => {
@@ -165,18 +179,22 @@ export default function SettingsDialog({ onClose, appearance, onOpenIntegration 
     setTestResult(null)
   }, [])
 
-  const addProvider = useCallback(() => {
-    const p: ProviderConfig = {
-      id: crypto.randomUUID(),
-      name: '新供应商',
-      baseUrl: 'https://api.openai.com/v1',
-      apiKey: '',
-      textModel: 'gpt-4o-mini',
-      imageModel: 'dall-e-3',
-      imageApi: 'openai-images'
-    }
+  /** 新增供应商槽位：template 传种子则整套带入（含协议/默认模型），Key 一律留待用户粘贴 */
+  const addProvider = useCallback((template?: ProviderSeed) => {
+    const p: ProviderConfig = template
+      ? { id: crypto.randomUUID(), apiKey: '', ...template }
+      : {
+          id: crypto.randomUUID(),
+          name: '新供应商',
+          baseUrl: 'https://api.openai.com/v1',
+          apiKey: '',
+          textModel: 'gpt-4o-mini',
+          imageModel: 'dall-e-3',
+          imageApi: 'openai-images'
+        }
     setSettings((prev) => (prev ? { ...prev, providers: [...prev.providers, p] } : prev))
     setSelectedId(p.id)
+    setAddMenuOpen(false)
   }, [])
 
   const removeProvider = useCallback(() => {
@@ -260,11 +278,11 @@ export default function SettingsDialog({ onClose, appearance, onOpenIntegration 
     return `${Math.floor(h / 24)} 天前`
   }
 
-  // 预设模板：一键填充内置供应商的接入参数（Key 需用户自行粘贴；商汤 key 已随预置从 ZCode 配置读取）
-  const PRESETS = [
-    { label: '商汤日日新', seed: SENSENOVA_PROVIDER_SEED },
-    { label: '阿里云百炼', seed: DASHSCOPE_PROVIDER_SEED }
-  ]
+  // 预设模板进「+ 添加」弹出菜单（addMenuOpen 状态在组件顶部 hook 区——早退 return 之后不许再挂 hook）：
+  // 新建槽位即带全套接入参数（协议/URL/默认模型），不再出现在编辑区——那里点一下会覆盖正在编辑的
+  // 供应商，看着像切换实际是覆盖（误点即改配置）。四家内置种子齐全：商汤（Anthropic 兼容 + 双协议
+  // 同域）与百炼（compatible-mode）参数不显然最值得模板化，基元律动/Agnes 一并纳入保持口径一致；
+  // Key 一律自行粘贴（商汤首启种子已自动从 ZCode 配置带入）
 
   // 默认模型页：未指定默认供应商时与主进程一致回退到列表第一个
   const textProvider = settings.providers.find((p) => p.id === settings.textProviderId) ?? settings.providers[0] ?? null
@@ -410,40 +428,33 @@ export default function SettingsDialog({ onClose, appearance, onOpenIntegration 
                   )
                 })}
               </div>
-              <button
-                onClick={addProvider}
-                className="rounded border border-dashed border-panel-3 py-1.5 text-xs text-ink-dim hover:border-accent hover:text-accent"
-              >
-                + 添加
-              </button>
+              <div className="relative">
+                <button
+                  onClick={() => setAddMenuOpen((v) => !v)}
+                  className="w-full rounded border border-dashed border-panel-3 py-1.5 text-xs text-ink-dim hover:border-accent hover:text-accent"
+                >
+                  + 添加
+                </button>
+                {addMenuOpen && (
+                  <Popover onClose={() => setAddMenuOpen(false)} className="absolute bottom-full left-0 z-50 mb-1 w-64 p-1">
+                    <PopoverLabel>从模板添加（参数整套带入，Key 自行粘贴）</PopoverLabel>
+                    <MenuItem icon="plus" onClick={() => addProvider()}>
+                      空白（自定义）
+                    </MenuItem>
+                    {PROVIDER_TEMPLATES.map(({ label, hint, seed }) => (
+                      <MenuItem key={seed.name} icon="plug" onClick={() => addProvider(seed)} title={hint}>
+                        {label}
+                      </MenuItem>
+                    ))}
+                  </Popover>
+                )}
+              </div>
             </aside>
 
             {/* 右：供应商编辑区 */}
             <div className="flex min-w-0 flex-1 flex-col p-4">
               {provider && (
                 <div className="mt-1 min-h-0 flex-1 overflow-auto pr-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-[11px] text-ink-dim">预设模板：</span>
-                    {PRESETS.map(({ label: pl, seed }) => (
-                      <button
-                        key={seed.name}
-                        onClick={() =>
-                          patchProviderById(provider.id, {
-                            name: seed.name,
-                            baseUrl: seed.baseUrl,
-                            api: seed.api,
-                            textModel: seed.textModel,
-                            imageModel: seed.imageModel,
-                            imageApi: seed.imageApi
-                          })
-                        }
-                        className="rounded border border-panel-3 px-2 py-0.5 text-[11px] text-ink-dim hover:border-accent hover:text-accent"
-                      >
-                        {pl}
-                      </button>
-                    ))}
-                  </div>
-
                   <label className={label}>名称</label>
                   <input
                     className={field}

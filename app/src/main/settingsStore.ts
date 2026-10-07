@@ -6,6 +6,7 @@ import { randomUUID } from 'crypto'
 import type { LlmSettings, ProviderConfig, ProviderModelCache, SearchSettings } from '@shared/types'
 import {
   RHYTHM_PROVIDER_SEED,
+  AGNES_PROVIDER_SEED,
   SENSENOVA_PROVIDER_SEED,
   DASHSCOPE_PROVIDER_SEED,
   isRhythmProvider,
@@ -67,15 +68,7 @@ function readZCodeSenseNovaKey(): string {
 /** 首次运行预置：基元律动（展示置顶）+ Agnes AI（默认文本/生图）+ 商汤日日新 + 阿里云百炼 */
 function presetSettings(): LlmSettings {
   const rhythm: ProviderConfig = { id: randomUUID(), apiKey: '', ...RHYTHM_PROVIDER_SEED }
-  const agnes: ProviderConfig = {
-    id: randomUUID(),
-    name: 'Agnes AI',
-    baseUrl: 'https://api.agnes-ai.cn/v1',
-    apiKey: '',
-    textModel: 'agnes-2.5-flash',
-    imageModel: 'agnes-image-2.1-flash',
-    imageApi: 'agnes-images'
-  }
+  const agnes: ProviderConfig = { id: randomUUID(), apiKey: '', ...AGNES_PROVIDER_SEED }
   const sensenova: ProviderConfig = { id: randomUUID(), apiKey: readZCodeSenseNovaKey(), ...SENSENOVA_PROVIDER_SEED }
   const dashscope: ProviderConfig = { id: randomUUID(), apiKey: '', ...DASHSCOPE_PROVIDER_SEED }
   return {
