@@ -359,6 +359,28 @@ export default function SettingsDialog({ onClose, appearance, onOpenIntegration 
             {/* 左：供应商列表 */}
             <aside data-tour="provider-list" className="flex w-44 shrink-0 flex-col border-r border-panel-3 bg-panel p-2">
               <p className="mb-2 px-1 text-xs font-bold">模型供应商</p>
+              {/* 添加入口贴着标题：列表长了也不被页脚顶到底边；菜单向下展开 */}
+              <div className="relative mb-2">
+                <button
+                  onClick={() => setAddMenuOpen((v) => !v)}
+                  className="w-full rounded border border-dashed border-panel-3 py-1.5 text-xs text-ink-dim hover:border-accent hover:text-accent"
+                >
+                  + 添加
+                </button>
+                {addMenuOpen && (
+                  <Popover onClose={() => setAddMenuOpen(false)} className="absolute left-0 top-full z-50 mt-1 w-64 p-1">
+                    <PopoverLabel>从模板添加（参数整套带入，Key 自行粘贴）</PopoverLabel>
+                    <MenuItem icon="plus" onClick={() => addProvider()}>
+                      空白（自定义）
+                    </MenuItem>
+                    {PROVIDER_TEMPLATES.map(({ label, hint, seed }) => (
+                      <MenuItem key={seed.name} icon="plug" onClick={() => addProvider(seed)} title={hint}>
+                        {label}
+                      </MenuItem>
+                    ))}
+                  </Popover>
+                )}
+              </div>
               {/* min-h-0：flex 项默认不肯缩到内容以下，供应商多了会把下方/外层裁掉 */}
               <div className="min-h-0 flex-1 overflow-auto">
                 {displayProviders.map((p, i) => {
@@ -427,27 +449,6 @@ export default function SettingsDialog({ onClose, appearance, onOpenIntegration 
                     </div>
                   )
                 })}
-              </div>
-              <div className="relative">
-                <button
-                  onClick={() => setAddMenuOpen((v) => !v)}
-                  className="w-full rounded border border-dashed border-panel-3 py-1.5 text-xs text-ink-dim hover:border-accent hover:text-accent"
-                >
-                  + 添加
-                </button>
-                {addMenuOpen && (
-                  <Popover onClose={() => setAddMenuOpen(false)} className="absolute bottom-full left-0 z-50 mb-1 w-64 p-1">
-                    <PopoverLabel>从模板添加（参数整套带入，Key 自行粘贴）</PopoverLabel>
-                    <MenuItem icon="plus" onClick={() => addProvider()}>
-                      空白（自定义）
-                    </MenuItem>
-                    {PROVIDER_TEMPLATES.map(({ label, hint, seed }) => (
-                      <MenuItem key={seed.name} icon="plug" onClick={() => addProvider(seed)} title={hint}>
-                        {label}
-                      </MenuItem>
-                    ))}
-                  </Popover>
-                )}
               </div>
             </aside>
 
