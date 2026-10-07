@@ -759,10 +759,10 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
                   </div>
                 )}
               </div>
-              {/* 全量排版入口放「标题」右边：正文/标题是快调，34 项全量面板是它们的延伸，顺序上收尾 */}
+              {/* 全量排版入口放「标题」右边：正文/标题是快调，40 项全量面板是它们的延伸，顺序上收尾 */}
               <button
                 type="button"
-                title="全量排版：字体节奏 / 配色 / 标题 / 引用 / 分隔线 / 加粗 / 卡片图片 / 表格（34 项，覆盖主题并导出同步）"
+                title="全量排版：字体节奏 / 配色 / 标题 / 引用 / 分隔线 / 加粗 / 卡片图片 / 表格（40 项，覆盖主题并导出同步）"
                 onClick={() => onOpenTypography?.()}
                 className={typeBtn}
               >
