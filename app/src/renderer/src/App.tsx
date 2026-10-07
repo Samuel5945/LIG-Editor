@@ -209,14 +209,21 @@ export default function App(): JSX.Element {
   useEffect(() => setSavedAt(Date.now()), [saved])
 
   /** 排版调性：自定义主题 > 分类调性 > 默认（meta 变化即时跟换）。
-   *  预览 = 临时把「当前分类的主题」换成预览的那套（注入派生视图再走同一条解析链），
-   *  工程显式覆盖（字号/排列/配色）照常最优先——预览态下正文字号/标题字号按钮仍即点即生效；
+   *  预览 = 临时把「当前分类的主题」换成预览的那套（注入派生视图再走同一条解析链）。
+   *  预览的意义是看主题真实观感：预览主题**显式定义**的字段压过工程微调——
+   *  否则残留的 accent/标题字色微调会把预览也压成「换了主题颜色纹丝不动」；
+   *  主题没定义的字段仍跟工程微调，预览态下正文字号/标题字号按钮照常即点即生效。
    *  没开工程（或工程无分类）时退回全局铺预览主题的旧行为，只看观感 */
   const articleTheme = useMemo(() => {
     if (!themePreview) return resolveArticleTheme(meta, customThemes)
     const cat = meta?.category
-    if (!cat) return { ...resolveArticleTheme(null, customThemes), ...themePreview.theme }
-    return resolveArticleTheme(meta, { ...customThemes, [cat]: themePreview.theme })
+    if (!cat || !meta) return { ...resolveArticleTheme(null, customThemes), ...themePreview.theme }
+    const defined = new Set(Object.keys(themePreview.theme))
+    // 覆盖键与主题字段几乎同名，唯一异名 bodyFontSize↔fontSize（resolveArticleTheme 的映射口径）
+    const metaForPreview = Object.fromEntries(
+      Object.entries(meta).filter(([k]) => !defined.has(k === 'bodyFontSize' ? 'fontSize' : k))
+    ) as ProjectMeta
+    return resolveArticleTheme(metaForPreview, { ...customThemes, [cat]: themePreview.theme })
   }, [meta, customThemes, themePreview])
 
   /** 分类调性的强调色：封面墙无封面占位卡用它，保证「墙上看到的颜色」= 该分类工程实际颜色 */
@@ -1184,11 +1191,13 @@ export default function App(): JSX.Element {
               activePreview={themePreview?.name ?? null}
               onPreview={(entry) => {
                 setThemePreview(entry ? { name: entry.name, theme: entry.theme } : null)
-                // 预览的意义是看正文效果：有工程时点「预览」直接跳创作成文步，不在主题库里盲预；
+                // 预览的意义是看真实排版：有工程时点「预览」直接跳导出步——手机宽度预览按主题
+                // 完整渲染标题装饰/引用/分隔线，比编辑器里看观感更接近发布效果（导出预览与编辑器
+                // 同吃 articleTheme，预览态两处同步）。贴图工程没有导出步，退回成文步看卡片；
                 // 退出预览（entry=null）不跳，人停在哪就留在哪
                 if (entry && current) {
-                  setCenterTab('create')
-                  setStepRequest({ id: 'draft', ts: Date.now() })
+                  selectCenterTab('create')
+                  setStepRequest({ id: meta?.format === 'cards' ? 'draft' : 'export', ts: Date.now() })
                 }
               }}
               onBind={async (category, entry) => {

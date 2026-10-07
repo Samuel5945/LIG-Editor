@@ -267,7 +267,7 @@ export default function ThemeLibrary({
       {shownPreview && (
         <div className="mx-4 mb-2 flex shrink-0 items-center gap-2 rounded-lg border border-accent/50 bg-accent/10 px-3 py-1.5 text-[11.5px] text-accent">
           <Icon name="eye" size={12} />
-          正在预览「{shownPreview}」——只改编辑器观感，不写盘；退出即还原
+          正在预览「{shownPreview}」——观感即导出排版效果，不写盘；退出即还原
           <button onClick={() => { setPreviewing(null); onPreview(null) }} className="ml-auto font-semibold hover:underline">
             退出预览
           </button>
@@ -314,7 +314,7 @@ export default function ThemeLibrary({
                       className={`inline-flex h-[24px] items-center gap-1 rounded px-2 text-[11px] transition-colors ${
                         shownPreview === e.name ? 'bg-accent/15 font-semibold text-accent' : 'text-ink-dim hover:bg-panel-3'
                       }`}
-                      title="不写盘试看效果"
+                      title="不写盘试看导出排版效果（有工程时跳到导出预览）"
                     >
                       <Icon name="eye" size={11} />
                       {shownPreview === e.name ? '退出预览' : '预览'}
