@@ -9,21 +9,25 @@
 ## 界面一览
 
 <p align="center">
-  <img src="docs/images/lig-editor-0.8.0-tour.gif" width="820" alt="立格编辑器 0.8.0 界面轮播：创作向导七步工作台 / 配图批量清单 / 标题封面 / 对话工具调用" />
+  <img src="docs/images/lig-editor-0.9.0-tour.gif" width="820" alt="立格编辑器 0.9.0 界面轮播：三栏工作台与创作向导 / 工程封面墙 / 主题库与日报排版预览 / 深色外观 / 全量排版 40 项 / 标题封面 / 模型接入" />
 </p>
-<p align="center"><sub>创作向导七步工作台 · 配图批量清单 · 标题封面 · 对话工具调用 · 外观系统</sub></p>
+<p align="center"><sub>三栏工作台 · 工程封面墙 · 主题库 15 套 · 日报排版预览 · 深色外观 · 全量排版 40 项 · 标题封面 · 模型接入</sub></p>
 
 <details>
 <summary>📸 查看全部高清截图</summary>
 <br>
 
-| 三栏工作台（主界面） | 选题库 ＆ 标题 / 审阅 |
+| 三栏工作台 · 创作向导七步 | 工程封面墙（状态 · 字数 · 分类筛选） |
 | :---: | :---: |
-| ![三栏工作台](docs/images/main-ui.png) | ![选题库与审阅](docs/images/ideas-titles-review.png) |
-| **Agent MCP 接入（WorkBuddy 等）** | **开放模型接口** |
-| ![Agent MCP 接入](docs/images/agent-mcp.png) | ![开放模型接口](docs/images/model-providers.png) |
-| **小红书贴图** | **公众号贴图** |
-| ![小红书贴图](docs/images/xhs-cards.png) | ![公众号贴图](docs/images/wechat-cards.png) |
+| ![三栏工作台与创作向导七步](docs/images/workbench-wizard.png) | ![工程封面墙](docs/images/project-wall.png) |
+| **主题库（内置 7 类调性 + 预装日报八套）** | **全量排版面板（40 项逐项可调）** |
+| ![主题库](docs/images/theme-library.png) | ![全量排版面板](docs/images/typography-panel.png) |
+| **排版预览 · 日报01 米白杂志** | **排版预览 · 日报04 赛博霓虹夜** |
+| ![排版预览 日报01 米白杂志](docs/images/preview-daily-01.png) | ![排版预览 日报04 赛博霓虹夜](docs/images/preview-daily-04.png) |
+| **深色外观** | **标题 ＆ 封面工作区** |
+| ![深色外观](docs/images/appearance-dark.png) | ![标题与封面工作区](docs/images/title-cover.png) |
+| **模型接入（OpenAI / Anthropic 双协议）** | **供应商模板一键套用** |
+| ![模型供应商](docs/images/model-providers.png) | ![供应商模板](docs/images/provider-templates.png) |
 
 </details>
 
@@ -32,14 +36,14 @@
 - **本地优先**：工程、素材、密钥全在本机，不上传任何内容到自有服务器
 - **创作向导**：选题→大纲→成文→配图→标题封面→审阅→导出，七步步进工作台，进度自动跟踪
 - **md 直开**：双击 .md 文件 / 把它拖到应用图标直接打开（已在 workspace 内则定位到对应工程，外部 md 自动导入为新工程；portable 版首次使用需「打开方式」指定一次 exe）
-- **AI 副驾驶**：右侧对话面板驱动全流程，接入任意 OpenAI 兼容 API，Skill 体系挂载写作风格；工具调用落地——对话里直接建工程、改正文、配图、排期、导出、推送公众号（推送需确认）
+- **AI 副驾驶**：右侧对话面板驱动全流程，接入任意 OpenAI / Anthropic 兼容 API（四家供应商模板整套带入参数），Skill 体系挂载写作风格（预装 6 个）；工具调用落地——对话里直接建工程、改正文、配图、排期、导出、推送公众号（推送需确认）
 - **Agent 可操控**：MCP + 本地 HTTP 桥，外部编程 Agent（Codex / Qoder 等）可直接操控编辑器
 - **三栏工作台**：左栏工程工作树（工程归档、分类内批量管理）· 中栏所见即所得编辑器（TipTap）· 右栏 AI 副驾驶；分栏宽度拖拽可调、双击折叠，偏好记忆
 - **界面外观**：深浅色跟随系统 + 界面字号小/中/大，顶栏「外观」统一入口
 - **三种配图管线**：代码绘图（HTML→PNG）、AI 文生图、真图抠图，产物统一进 `assets/`
 - **一键推送公众号**：正文本地图片自动上传微信 CDN，草稿直推公众号后台
 - **版本更新提醒**：启动静默检测 + 顶栏手动检查，新版本弹窗直达夸克/百度/GitHub 下载（双更新源：官网 update.json + GitHub Release）
-- **排版主题**：6 套分类预设调性，标题装饰（胶囊/下划线等）、小节序号（01/一、/① 圈号等 6 种）、引用/分隔线/加粗形态、背景色逐项自选，支持导入公众号排版自定义
+- **排版主题**：主题库 15 套随包（7 类内置分类调性 + 预装「日报八套」），一个分类可挂多套随时切换；全量排版 40 项逐项自选——标题装饰（胶囊/下划线等）、小节序号（01/一、/① 圈号等 6 种）、引用/分隔线/加粗形态、纸底与卡片、图片圆角，支持导入公众号排版自定义
 
 ## 下载
 
