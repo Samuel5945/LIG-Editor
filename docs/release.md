@@ -18,11 +18,31 @@
 1. **bump 版本**：改 `app/package.json` 的 `version`（应用内当前版本号即来自这里）。
 2. **构建**：`cd app && npm run dist`，产物在 `releases/`（`LIG-Editor-setup-<版本>.exe` + portable）。
 3. **上传网盘**：夸克 + 百度网盘（分享链接若变动，记下新链接）。
-4. **发 GitHub Release**：tag `v<版本>`，正文写更新说明，**正文必须贴夸克/百度网盘链接**（裸链或 markdown 链接均可）。
+4. **发 GitHub Release**：tag **必须带 `v` 前缀**（`v<版本>`，与 `v0.3.0`…`v0.8.0` 一致），正文写更新说明，**正文必须贴夸克/百度网盘链接**（裸链或 markdown 链接均可）。正文顶部若要像 0.8.0 那样放界面轮播图，先把 GIF 放进官网 `assets/img/lig-editor-<版本>-tour.gif` 并 push 上线，再回填链接。
+
+   **两个 exe 必须写在同一条 `gh release create` 里随创建一起上传**，没有第二步：
+
+   ```bash
+   gh release create v<版本> --verify-tag --title "立格编辑器 <版本>" \
+     --notes-file releases/RELEASE_BODY-<版本>.md \
+     releases/LIG-Editor-setup-<版本>.exe releases/LIG-Editor-portable-<版本>.exe
+   ```
+
+   > ⛔ **踩过的坑（v0.9.0 又踩了一次，代价是一个永久作废的 tag 名）**：Release 一经发布就是
+   > `immutable`（GitHub 默认行为，0.8.0 的 API 返回里同样是 `immutable:true`），事后再
+   > `gh release upload` 会 `422 Cannot upload assets to an immutable release`；而一旦为了补传把这条
+   > release 删掉，**它的 tag 名就永久占用了**，再建会 `422 tag_name was used by an immutable release`。
+   > 所以「先建 release 再传附件」这条路根本不存在，必须一条命令带齐。
+   >
+   > 传完当场核对，别只看命令 exit 0：
+   > `gh api repos/Samuel5945/LIG-Editor/releases/tags/v<版本> --jq '.assets[]|"\(.name) \(.size) \(.digest)"'`
+   > 对本地 `sha256sum releases/LIG-Editor-*-<版本>.exe`，名称/字节数/摘要三项全等才算发出去。
+   >
    > ⚠️ 创建 Release 前**必须先把本地提交推上远端**（`git push origin master`）——tag 会打在远端
-   > master 的当前顶端，先建后推就会指向旧提交（v0.7.0 就吃过这个亏）。且本仓库 tag 一经创建
-   > 不可改删（Settings → Tags 有保护模式，API 无法解除），打错了只能进设置页临时解除再强推。
-5. **更新官网 update.json**：把 `docs/site/lig-editor-update.json` 内容改成真实版本后上传到 `https://ligdesign.win/lig-editor-update.json`——**这一步完成，应用内提醒才正式上线**。
+   > master 的当前顶端，先建后推就会指向旧提交（v0.7.0 就吃过这个亏）。tag 本身可删可重打
+   > （`git push origin :refs/tags/<tag>` 实测有效，v0.9.0 那次删裸 `0.9.0` 就成功了），
+   > 但**删掉带过 release 的 tag 只留下墓碑**：名字不能再用，只能换个写法。
+5. **更新官网**：官网源在本地 `C:\Users\PC\Documents\Qoder\2026-08-28\1b3e82f9\lig-site`（GitHub `Samuel5945/lig-site`，分支 `main`）。把 `docs/site/lig-editor-update.json` 的内容同步过去（版本/日期/notes），文案改动要**三处一起改**：`assets/i18n.js` 的 `zh` 与 `en` 两套，加上页面里的中文兜底文字；改词典必须把六个顶层页的 `assets/i18n.js?v=` 一起递增。本地先跑 `node tools/publish.mjs`（组 staging + 断链自检，不部署），再 **push main**：线上 ligdesign.win 由 Cloudflare Pages 的 **git 构建**喂（项目 `ligdesign`，Build command `node tools/publish.mjs --out dist`），**不要再走 `wrangler pages deploy` 直传**——直传改不动域名，还会把 `tools/`、`covers/` 暴露出去。这一步里 update.json 完成，应用内「发现新版本」提醒才正式上线，所以它必须排在 Release 之后。
 
 ## update.json 格式
 
