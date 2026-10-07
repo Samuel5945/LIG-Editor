@@ -20,7 +20,19 @@
 3. **上传网盘**：夸克 + 百度网盘（分享链接若变动，记下新链接）。
 4. **发 GitHub Release**：tag **必须带 `v` 前缀**（`v<版本>`，与 `v0.3.0`…`v0.8.0` 一致），正文写更新说明，**正文必须贴夸克/百度网盘链接**（裸链或 markdown 链接均可）。正文顶部若要像 0.8.0 那样放界面轮播图，先把 GIF 放进官网 `assets/img/lig-editor-<版本>-tour.gif` 并 push 上线，再回填链接。
 
-   **两个 exe 必须写在同一条 `gh release create` 里随创建一起上传**，没有第二步：
+   **走脚本，别手敲**（`app/scripts/ship-release.mjs` 把下面所有约束变成预检，不通过就不碰远端）：
+
+   ```bash
+   node app/scripts/ship-release.mjs <版本> --dry-run   # 先演一遍，看预检与将要执行的命令
+   node app/scripts/ship-release.mjs <版本>             # 建 tag + 发 release + 传附件，一条命令完成
+   node app/scripts/ship-release.mjs --verify <版本>    # 事后单独核对附件摘要
+   ```
+
+   脚本入参是 `x.y.z`（不带 `v`），它会自己补成 `v<版本>`；预检覆盖：`app/package.json` 已 bump、
+   两个 exe 都在且体积像真产物、正文含网盘链接、本地 HEAD 已进远端 master、该 tag 没有 release。
+   发完自动用 API 的 `assets[].digest` 对本地 `sha256sum`，名称/字节数/摘要三项全等才算过。
+
+   手工等价命令（脚本不可用时的同一件事，**两个 exe 必须跟在 `--notes-file` 后面一起给**，没有第二步）：
 
    ```bash
    gh release create v<版本> --verify-tag --title "立格编辑器 <版本>" \
