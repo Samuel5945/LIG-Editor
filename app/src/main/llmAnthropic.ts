@@ -208,6 +208,9 @@ export async function anthropicChatStart(ctx: {
     let buffer = ''
     const tools = new Map<number, ToolAccEntry>()
     let errored = false
+    // 空流哨兵：网关限流时实测会回 HTTP 200 + 零事件的 SSE（kimi-k3 限流场景），若不拦
+    // 就是无报错的空回复。正常 Anthropic 流必有 message_start / content_block_* 之一
+    let sawStreamContent = false
     for await (const chunk of res.body as unknown as AsyncIterable<Uint8Array>) {
       buffer += decoder.decode(chunk, { stream: true })
       const lines = buffer.split('\n')
@@ -224,6 +227,9 @@ export async function anthropicChatStart(ctx: {
             content_block?: { type: string; id?: string; name?: string }
             index?: number
             delta?: { type?: string; text?: string; thinking?: string; partial_json?: string }
+          }
+          if (json.type === 'message_start' || json.type === 'content_block_start' || json.type === 'content_block_delta') {
+            sawStreamContent = true
           }
           if (json.type === 'error') {
             errored = true
@@ -248,6 +254,14 @@ export async function anthropicChatStart(ctx: {
       }
     }
     if (errored) return
+    if (!sawStreamContent) {
+      broadcast('llm:done', {
+        requestId,
+        error:
+          '模型返回了空流（HTTP 200 但没有任何内容事件）——常见于供应商限流或网关异常，可稍后重试、换一个模型或换供应商'
+      })
+      return
+    }
     const list = [...tools.values()]
     broadcast('llm:done', {
       requestId,
