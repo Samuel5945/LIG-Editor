@@ -215,7 +215,7 @@ C:\Users\PC\Desktop\tuwen-editor\workspace\<分类>\<项目名>\
 
 | 维度 | 存放处 | 生效方式 |
 |---|---|---|
-| 排版调性 | `CATEGORY_THEMES`（内置 6 套 + 未分类默认）与 `settings/customThemes.json`（导入） | **不落到工程**，每次读取按 `meta.category` 现算（§7.6） |
+| 排版调性 | `CATEGORY_THEMES`（内置 7 套：6 个内容分类 + 未分类兜底调性，2026-10-07 重设计）与 `settings/customThemes.json`（导入 / 随包预装） | **不落到工程**，每次读取按 `meta.category` 现算（§7.6） |
 | 写作风格 | `settings/categoryPresets.json` 的 `style_skill` | 新建工程时由 `createProject` 单点注入 `meta.style_skill`，手动新建 / 日历选题立项 / Agent `create_project` 三条路都走这里 |
 | 默认分发平台 | 同文件的 `default_platform` | **不落工程**：导出框打开时按 `meta.category` 现算并预选，未配置则公众号；改预设即刻对全账号生效 |
 | 公众号凭据 | `settings/wechat.json`：账号列表 + 默认账号 + 分类绑定（appSecret 经 safeStorage 加密） | 推送草稿时按工程所属分类解析：**分类绑定 → 默认账号 → 首个账号**；一个账号都没有时报错并指向设置。账号本身在「设置 → 推送设置」里增删，分类管理里只选绑哪个号 |
@@ -336,6 +336,7 @@ C:\Users\PC\Desktop\tuwen-editor\workspace\<分类>\<项目名>\
 - 主题可逐项微调：标题装饰（胶囊/下划线等）、小节序号（01 / 一、/ ① 圈号等 6 种）、引用与分隔线形态、加粗是否高亮、背景卡色；**工程级覆盖白名单已放开到全量视觉字段 40 项**（v0.8.0 后 34 项起步，2026-10-03 页面纸底/报头横幅到 36，2026-10-07 图片四字段到 40）：新增字体栈、行高、字距、段距、正文/标题字色、引用描边、加粗底色与字色、图片与正文圆角、正文内边距、表格三色系与表头字色、h2 底色，以及引用底色 quoteBg / 引用文字色 quoteText / 分隔线颜色 hrColor / H2 条色 h2Border / 图片形态 imgStyle / 图片边框 imgFrame / 图片外间距 imgGap / 图注排列 captionAlign（编辑器 CSS 变量与导出内联样式双端消费）
 - 解析优先级：`customThemes[分类]` > `CATEGORY_THEMES[分类]` > `DEFAULT_THEME`，再被工程级 40 项覆盖（§4）；覆盖口径单源为 `THEME_OVERRIDE_KEYS`（校验与夹取集中在 `sanitizeThemePatch` + `resolveArticleTheme`，数值用 `!== undefined` 判定，0 是合法覆盖值如段距 0 / 图片方角）。必填五项（accent / fontFamily / lineHeight / letterSpacing / headingAlign）在 resolve 时缺省回落默认调性——导入主题留白时 undefined 传入导出端 `.replace()` 直接白屏（未分类工程白屏的根因，2026-10-07 修）
 - **日报口径扩展（2026-10-03，36 项）**：为把设计日报版式落成主题新增三件——`pageBg` 页面纸底（纸感外壳，导出挂卡片外一层：根 section 被公众号剥掉后纸底层仍存活，深纸底+浅卡双层表面成立；夜间同 `resolvePageBg` 公众号逻辑变深）、`h1Style: 'banner'` 报头横幅（通栏色块 + 按底色自动对比字色）配 `h1Bg` 横幅底色；`themeParse` 反解同步识别 body 纸底（→ pageBg）与通栏 H1 色条（→ banner/h1Bg，圆角胶囊仍归 pill）。八套日报主题见 `docs/日报八套排版主题.md`。同修：导出内联样式的字体栈双引号换单引号（双引号会截断 style 属性致 font-family 整体失效）
+- **未分类兜底调性转正（2026-10-07）**：`CATEGORY_THEMES[UNCATEGORIZED]` 原本直接等于 `DEFAULT_THEME`（裸默认：无纸底无卡片），而新建工程不选分类就落这一格，等于新用户看到的第一张脸。改为完整设计的一套：冷灰纸底 `#eef0f4` + 白卡双层表面、墨蓝报头横幅（`h1Style: banner` + `h1Bg: #1b2330`）、左条小节、圆点 H3、半透明靛洗卡片引用、淡靛高亮划重点、墨蓝表头，32 项字段全走 40 项新口径。**夜间字段纪律**：`buildStyles` 的 uiDark 只覆盖 `bodyBg`/`bodyText`/`headingColor` 三项，`quoteBg`/`quoteText`/`tableBorder`/`tableHeaderText` 写死浅值会在深卡上留一块亮板——兜底调性这四格一律留空走自适应（引用退 `tint(accent,.1)`，边框浅底 `#e5e7eb` / 深底 `#3a4a5e` 各自取色）。`h2Num` 不写（`'none'` 只是 meta 覆盖层的取值，`ArticleTheme.h2Num` 类型里没有，写了过不了 typecheck；缺省即不编号，且不剥作者手写的「一、」）。校验固化在 `src/shared/__tests__/themePresets.test.ts`：随包主题包 + 本调性逐字段对账 sanitize（未知键/非法值/越界夹取一律为空、生效字段数下限），并钉死那四格不得写死
 - **图片口径扩展（2026-10-07，36→40 项）**：`imgStyle` 图片形态（inset 常规 / fullwidth 通栏 / half 半宽居中）、`imgFrame` 图片边框（none / line 细边框 / shadow 柔和投影）、`imgGap` 图片外间距（0-48）、`captionAlign` 图注对齐（center / left），类型/白名单/别名/夹取/sanitize/resolve/面板控件/set_theme 与 save_theme_preset 说明全链同布，导出与编辑器画布同源渲染。同批**画布一致性清理**（一批字段此前定义了但不渲染）：pageBg 纸底挂滚动容器并加内衬（深壳浅卡主题的纸壳可见）、quotes 形态 ❝ 装饰补渲染、leftbar/quotes 引用条与引用底色跟主题（quoteBorder 此前只在 dashcard 生效）、表格缺省改与导出一致的浅色系
 - **昼夜配色分档判（2026-10-07）**：文字档的深浅兜底不再误伤品牌色——新增 `isBrandColor`（有彩度且中调亮度：s ≥ 0.2 且 0.15 ≤ l ≤ 0.7）与 `readableOn`（分档规则单一来源）：强调色只要在所处底色上读得清（WCAG ≥3:1）就原样保留，读不清才退回文字档默认色；夜间翻转同样先挡品牌色（近白化=褪色）。编辑器 `resolveEditorTheme` 与导出 `buildStyles` 两处兜底同走这一个函数（此前导出侧那份重复兜底会把编辑器保住的强调色再刷成灰白）；历史导入的脏数据（浅粉底配浅灰字）照旧被救
 - **排版优化主题对齐模式（默认开，2026-10-07）**：模型只重排文字结构、禁改视觉参数，应用时清空压住主题的工程微调——「应用了主题却显示不全」的根因就是旧覆盖压主题；排版下拉另设「清空微调，完全跟随主题」一键项。**预览态同理**：预览主题**显式定义**的字段压过工程微调（否则残留的 accent/标题字色微调会把预览也压成「换了主题颜色纹丝不动」），主题没定义的字段仍跟微调（预览时字号/排列按钮照常即点即生效）
@@ -463,7 +464,7 @@ Agent 文件通道由此从暗箱变明箱：外部改了 `figures/*.html`，树
 导航语义，主题库是管理语义，预览套用与绑定操作的对象都在中栏。左栏分类管理与设置页只放入口按钮。
 
 - **主题卡**：每卡含 ① 样张预览（按主题真实取值分段直渲：标题装饰/正文/引用/分隔线/加粗五段，
-  不用色块猜）② 主题名 ③ 来源徽标（内置 / 导入 / 面板沉淀，取 `ArticleTheme.origin`）
+  不用色块猜）② 主题名 ③ 来源徽标（内置 / 预装 / 导入 / 面板沉淀，取 `ArticleTheme.origin`）
   ④ 套用信息（「已套用：A、B」按实际生效口径现算——一套被多少分类共享、内置分类靠同名兜底
   套用中都读得出来）⑤ N 项参数
 - **卡上操作**：预览（临时套用不写盘，退出即还原；**点「预览」直接跳导出步**看手机宽度真实排版，
@@ -474,6 +475,20 @@ Agent 文件通道由此从暗箱变明箱：外部改了 `figures/*.html`，树
   `customThemes.json` 升 version 2（`{ themes: Record<名称, {category, theme}>, active: Record<分类, 主题名> }`），
   v1 旧格式（主题名=分类名）读取时自动迁移落盘；「分类当前用哪套」由 active 指针决定，解析回退链
   不变（active 指针 → 同名内置 → 默认，§7.6），主题库只是视图层
+- **随包预装主题（2026-10-07）**：日报八套这类「同一分类挂多套」的版式资产放不进内置
+  `CATEGORY_THEMES`（那是编译期一分类一套的常量），改为随包预装：打包源
+  `app/resources/themes/daily.json` 经 extraResources 带到安装目录的 `resources/themes`，
+  首启由 `seedBundledThemes` 合入 `customThemes.json`——只补库里不存在的主题名，同名不覆盖，
+  且不写任何 active 指针（预装不等于替用户改套用）。与 `seedBundledSkills` 的关键差异：
+  Skill 是一目录一资产，靠「同名目录已存在」就能判重；主题全在一个文件里，用户删过后
+  无法与「没种过」区分，故另记 `settings/themeSeed.json` 版本戳，同版本只种一次，
+  删掉的预装主题重启不复活（新增预装包时把 `THEME_SEED_VERSION` 加一，只补该版本的新主题）。
+  预装主题徽标取 `origin: 'preset'`，与普通自定义一样可删可导出 JSON。
+  **计数口径**：新装机主题库 = 内置 7（含 `未分类` 兜底调性）+ 预装 8 = **15 套**，宣传物料的主题数以此为准。
+  坑在这里：作者机显示的是 内置 6 / 自定义 9——同名自定义会遮蔽内置行（`entries` 里
+  `if (library.themes[name]) continue`，与 `resolveArticleTheme` 的自定义优先同口径），
+  那套从文章导入的紫色主题恰好命名成 `未分类`，内置那行就从列表里消失了。
+  总数同为 15，但拆分数不同：**核对物料计数要看新装机，不能拿开发机截图当口径**
 - **顶条三条来源入口**：搜索主题名 · 从文章导入（粘贴公众号 HTML/链接，themeParse 反解，保存即激活
   为归属分类当前主题）· 从当前工程沉淀（跳排版面板）；筛选胶囊 全部/内置/自定义/各分类，放不下时
   降级为「全部筛选」下拉（§4 窄栏三级降级）

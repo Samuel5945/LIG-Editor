@@ -248,6 +248,12 @@ export const DEFAULT_THEME: ArticleTheme = {
  * - 生活常识：暖色圆角卡片 + 胶囊标题 + 高亮加粗（生活科普爆款范式）
  * - 情感回忆：文艺信笺 + 引号引用 + 衬线疏朗（深夜情感号范式）
  * - 哲学思考：极简黑白 + 纯文字标题 + 通栏细线 + 大段距（哲思类公众号范式）
+ * - 未分类（兜底调性，2026-10-07 重设计）：新建工程不选分类就落这里，等于应用的脸面，
+ *   要压得住任何题材——冷灰纸底 + 白卡双层表面、墨蓝报头横幅、左条小节、淡靛高亮划重点，
+ *   全部走 40 项新口径（pageBg / h1Style banner / imgFrame / imgGap / captionAlign / tableStyle）。
+ *   夜间只覆盖 bodyBg/bodyText/headingColor 三项，故引用底色、表格边框这类不参与变深的
+ *   字段一律留空走自适应，不写死浅值（否则深卡上是一块亮板）。
+ *   原先这一格直接等于 DEFAULT_THEME（裸默认，无纸底无卡片），新用户首篇即是裸的。
  */
 export const CATEGORY_THEMES: Record<string, ArticleTheme> = {
   科技数码: {
@@ -354,7 +360,44 @@ export const CATEGORY_THEMES: Record<string, ArticleTheme> = {
     strongStyle: 'color',
     pGap: 24
   },
-  [UNCATEGORIZED]: DEFAULT_THEME
+  [UNCATEGORIZED]: {
+    accent: '#2f4b7c',
+    fontFamily: SANS,
+    fontSize: 15,
+    headingFontSize: 20,
+    lineHeight: 1.9,
+    letterSpacing: '0.02em',
+    pGap: 16,
+    bodyAlign: 'flush',
+    headingAlign: 'left',
+    // 报头横幅：墨蓝通栏色块，字色按底色自动取白（h1Bg 缺省会退到强调色）
+    h1Style: 'banner',
+    h1Bg: '#1b2330',
+    h2Style: 'leftbar',
+    h3Mark: 'dot',
+    // 双层表面：冷灰纸底 + 纯白正文卡，公众号剥掉最外层后纸底仍在
+    pageBg: '#eef0f4',
+    bodyBg: '#ffffff',
+    bodyText: '#39404d',
+    headingColor: '#161b23',
+    bodyRadius: 14,
+    bodyPadding: '22px 20px',
+    imgRadius: 10,
+    imgStyle: 'inset',
+    imgFrame: 'shadow',
+    imgGap: 16,
+    captionAlign: 'center',
+    quoteStyle: 'card',
+    // 引用底色/字色、表格边框一律不写死：这几项不参与夜间变深（buildStyles 只覆盖
+    // bodyBg/bodyText/headingColor），写死浅值会在深卡上留一块亮板。留空即走自适应——
+    // 卡片引用退到 tint(强调色,.1) 半透明靛洗，表边框浅底 #e5e7eb / 深底 #3a4a5e 各自取色
+    hrStyle: 'dot',
+    hrColor: '#c3cbd8',
+    strongStyle: 'highlight',
+    strongBg: '#e6ecf7',
+    tableStyle: 'bordered',
+    tableHeaderBg: '#1b2330'
+  }
 }
 
 /**

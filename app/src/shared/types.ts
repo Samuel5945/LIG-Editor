@@ -26,9 +26,10 @@ export type ImgFrame = 'none' | 'line' | 'shadow'
 export interface ArticleTheme {
   /**
    * 主题来源（仅主题库徽标用，排版解析不读它）：
-   * import = 从文章 HTML 反向解析导入；panel = 排版面板/AI 沉淀。缺省按内置或导入显示。
+   * import = 从文章 HTML 反向解析导入；panel = 排版面板/AI 沉淀；preset = 随包预装（可删，删后不复活）。
+   * 缺省按内置或导入显示。
    */
-  origin?: 'import' | 'panel'
+  origin?: 'import' | 'panel' | 'preset'
   /** 强调色：H1 短横 / H2 竖条 / H3 菱形 / 引用边线 / 加粗词 */
   accent: string
   /** 正文字体族 */

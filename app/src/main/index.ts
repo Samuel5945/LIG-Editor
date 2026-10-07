@@ -9,7 +9,7 @@ import { startBridge, stopBridge } from './bridge'
 import { seedBundledSkills } from './skillStore'
 import { migrateWorkspaceLayout } from './projectStore'
 import { migrateSafeStorageKey } from './oscryptMigrate'
-import { ensureThemeCategoryDirs } from './themeStore'
+import { ensureThemeCategoryDirs, seedBundledThemes } from './themeStore'
 
 // --mcp：无头模式（由 resources/mcp-proxy.cjs 拉起）：只开 HTTP bridge 不开窗口
 // Windows 下 Electron 主进程拿不到管道 stdin/stdout（electron#4218），MCP stdio 由纯 Node 代理承接后转 HTTP 进来
@@ -98,6 +98,7 @@ app.whenReady().then(() => {
   migrateSafeStorageKey() // 改名首启：搬旧 userData 的 safeStorage 密钥，历史密文（API Key/公众号密钥）才能解开；须在任何 safeStorage 调用前
   seedBundledSkills() // 预装 Skill 铺入 <root>/skills（已存在不覆盖）；GUI 与无头模式都需要
   migrateWorkspaceLayout() // 一次性：历史平铺工程挪入「未分类」，分类目录内工程补齐 meta.category
+  seedBundledThemes() // 预装排版主题合入 settings/customThemes.json（版本戳记账，用户删过不复活）；须在下面的分类目录自愈前跑
   ensureThemeCategoryDirs() // 自愈：自定义主题对应的分类目录缺失时补建（历史误删空目录的恢复）
   if (MCP_MODE) {
     // 无头模式：不开窗口不起 watcher，只挂 HTTP bridge 供代理转发（figure:render 的离屏窗口不受影响）

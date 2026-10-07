@@ -20,6 +20,9 @@ extraResources:
   # 预装 Skill：首启时由主进程种子复制到 <root>/skills（不覆盖用户已有目录）
   - from: resources/skills
     to: skills
+  # 预装排版主题：首启由 themeStore.seedBundledThemes 合入 settings/customThemes.json
+  - from: resources/themes
+    to: themes
 asarUnpack:
   - "**/node_modules/sharp/**"
   - "**/node_modules/@img/**"

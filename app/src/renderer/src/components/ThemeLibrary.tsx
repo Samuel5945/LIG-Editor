@@ -15,7 +15,7 @@ import { Button, Chip, FIELD_SHELL_CLS, PickerButton, useFittingRow } from '../u
  * 本组件只负责让人看见。样张不用色块猜：标题装饰 / 正文 / 引用 / 分隔线 / 加粗各取一段，按该主题真实取值渲染。
  */
 
-export type ThemeSource = 'builtin' | 'import' | 'panel'
+export type ThemeSource = 'builtin' | 'import' | 'panel' | 'preset'
 
 export interface ThemeEntry {
   name: string
@@ -49,6 +49,7 @@ export interface ThemeLibraryProps {
 
 const SOURCE_BADGE: Record<ThemeSource, { label: string; cls: string }> = {
   builtin: { label: '内置', cls: 'bg-panel-3 text-ink-dim' },
+  preset: { label: '预装', cls: 'bg-st-draft/15 text-st-draft' },
   import: { label: '导入', cls: 'bg-[#EEF2FF] text-[#4C6FFF] dark:bg-accent/15 dark:text-accent' },
   panel: { label: '面板沉淀', cls: 'bg-accent/15 text-accent' }
 }
@@ -367,7 +368,7 @@ export default function ThemeLibrary({
                       <button
                         onClick={() => onDelete(e.name)}
                         className="ml-auto inline-flex h-[24px] items-center gap-1 rounded px-2 text-[11px] text-ink-dim hover:bg-[#FEF2F2] hover:text-st-bad"
-                        title="删除自定义主题（内置不可删）"
+                        title="删除这套主题（内置不可删；预装主题删后重启不会自动回来）"
                       >
                         <Icon name="trash" size={11} />
                         删除

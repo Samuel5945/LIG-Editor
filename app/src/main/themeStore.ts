@@ -1,5 +1,11 @@
-import { net } from 'electron'
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs'
+import { app, net } from 'electron'
+import {
+  readFileSync,
+  writeFileSync,
+  mkdirSync,
+  readdirSync,
+  existsSync
+} from 'fs'
 import { join } from 'path'
 import type { ArticleTheme, CustomThemeLibrary } from '@shared/types'
 import { activeThemesView, migrateCustomThemes, CATEGORY_THEMES } from '@shared/categoryThemes'
@@ -12,6 +18,8 @@ import { getAppPaths } from './paths'
  * 「分类当前套用哪套」由 active 指针决定，可指向自定义主题或内置主题（CATEGORY_THEMES 键）。
  * 保存主题时自动创建归属分类目录，工程即可在分类下拉里选它、套用该排版。
  * v1 旧格式（主题名=分类名的一层映射）读取时自动迁移并落盘。
+ * 随包预装的主题（设计日报八套）也落在这里，由 seedBundledThemes 首启合入——
+ * 内置 CATEGORY_THEMES 是「一分类一套」的编译期常量，装不下同分类的多套版式。
  */
 
 function themesFile(): string {
@@ -39,6 +47,63 @@ function readLibrary(): CustomThemeLibrary {
 
 function writeLibrary(lib: CustomThemeLibrary): void {
   writeFileSync(themesFile(), JSON.stringify(lib, null, 2), 'utf8')
+}
+
+/** 随包预装主题包的版本：新增/替换预设时 +1，老用户升级只补该版本里的新主题 */
+const THEME_SEED_VERSION = 1
+
+/** 种子记账文件所在：随包主题目录（打包态 resourcesPath，开发态 app/resources） */
+function bundledThemesDir(): string {
+  return app.isPackaged
+    ? join(process.resourcesPath, 'themes')
+    : join(app.getAppPath(), 'resources', 'themes')
+}
+
+/**
+ * 首启种子：把随包预装的排版主题（extraResources 带过来的 themes/*.json）合入自定义主题库。
+ * 与 seedBundledSkills 同构，但落点是单个 settings/customThemes.json 而非一目录一资产，
+ * 没法靠「同名已存在」区分「没种过」和「用户删过」——故另记 themeSeed.json 版本戳：
+ * 同一版本只种一次，用户删掉预装主题后重启不复活；版本 +1 时才再补一轮新增。
+ * 合入时只补库里不存在的主题名，用户改过或同名的主题一律不动。
+ */
+export function seedBundledThemes(): void {
+  const dir = bundledThemesDir()
+  if (!existsSync(dir)) return
+  const marker = join(getAppPaths().settings, 'themeSeed.json')
+  try {
+    const seen = JSON.parse(readFileSync(marker, 'utf8')) as { version?: unknown }
+    if (typeof seen.version === 'number' && seen.version >= THEME_SEED_VERSION) return
+  } catch {
+    // 无记账文件 = 从未种过，继续
+  }
+  const lib = readLibrary()
+  let added = 0
+  for (const file of readdirSync(dir).filter((n) => n.endsWith('.json'))) {
+    let pack: { themes?: Record<string, { category?: string; theme?: ArticleTheme }> }
+    try {
+      pack = JSON.parse(readFileSync(join(dir, file), 'utf8'))
+    } catch {
+      continue // 坏包跳过，不能因一个文件把首启卡住
+    }
+    for (const [name, entry] of Object.entries(pack.themes ?? {})) {
+      if (!entry?.theme || lib.themes[name]) continue
+      const cat = (entry.category ?? name).trim()
+      try {
+        validateThemeName(name)
+        validateThemeName(cat)
+      } catch {
+        continue // 包内名称非法（目录穿越等）：跳过该条
+      }
+      lib.themes[name] = { category: cat, theme: entry.theme }
+      added++
+    }
+  }
+  if (added) writeLibrary(lib)
+  try {
+    writeFileSync(marker, JSON.stringify({ version: THEME_SEED_VERSION, added }), 'utf8')
+  } catch {
+    // 记账写不进去（只读盘等）顶多多跑一次种子，不阻塞启动
+  }
 }
 
 /** 主题库全量结构（主题库页签用） */
