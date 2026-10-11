@@ -308,6 +308,24 @@ export default function CreationWizard({
     }
   }, [seed, outlineFromCard])
 
+  /** 选题画像随立项落 project.json：选题看板按 topic 全等认关联（权威），工程名之后被改散也认得出。
+   *  只补空缺不覆盖——日历拖拽立项已写下的关联不作数与否不该由这里翻案 */
+  const stampTopic = useCallback(
+    async (targetProject: string) => {
+      if (!seed) return
+      try {
+        const metaNow = await window.api.invoke('project:readMeta', targetProject)
+        if (metaNow.topic) return
+        metaNow.topic = { angle: seed.card.angle, audience: seed.card.audience, source_material: [] }
+        await window.api.invoke('project:writeMeta', targetProject, metaNow)
+        onProjectsChanged()
+      } catch {
+        // 画像写失败不阻塞立项
+      }
+    },
+    [seed, onProjectsChanged]
+  )
+
   const writeArticle = useCallback(
     async (targetProject: string) => {
       setError(null)
@@ -357,13 +375,14 @@ export default function CreationWizard({
     try {
       // 主进程会再清洗一道（如去结尾点），后续操作必须用它返回的最终名
       const created = await window.api.invoke('project:create', name, category)
+      await stampTopic(created.name)
       onProjectsChanged()
       await onOpenProject(created.name)
       await writeArticle(created.name)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     }
-  }, [projName, category, onProjectsChanged, onOpenProject, writeArticle, onToast])
+  }, [projName, category, onProjectsChanged, onOpenProject, writeArticle, onToast, stampTopic])
 
   /** 立项并生成贴图：建工程标记 cards 形态 → 大纲提炼卡片组 → 打开工程（贴图面板自动补渲 PNG） */
   const createCards = useCallback(
@@ -384,6 +403,7 @@ export default function CreationWizard({
         metaNow.format = 'cards'
         metaNow.status = 'drafting'
         await window.api.invoke('project:writeMeta', created.name, metaNow)
+        await stampTopic(created.name)
         onProjectsChanged()
         const { promise, abort } = chatOnce(cardsMessages(outline, '大纲', format, skill), (full) => {
           setStreamText(`已生成 ${full.length} 字…`)
@@ -403,7 +423,7 @@ export default function CreationWizard({
         abortRef.current = null
       }
     },
-    [projName, outline, skill, category, onProjectsChanged, onOpenProject, onToast]
+    [projName, outline, skill, category, onProjectsChanged, onOpenProject, onToast, stampTopic]
   )
 
   /** 写入当前已打开工程（正文非空时确认覆盖） */
@@ -413,8 +433,10 @@ export default function CreationWizard({
     // 新建工程的默认正文只有一行标题，不算「有内容」
     const hasContent = cur && cur.split('\n').filter((l) => l.trim()).length > 1
     if (hasContent && !(await confirmAction(`「${project}」已有正文，生成将覆盖，确定继续？`, { okLabel: '覆盖生成' }))) return
+    // 老工程没挂选题画像时补上：这条大纲的正文写进了它，关联即成事实（已有画像不抢）
+    await stampTopic(project)
     await writeArticle(project)
-  }, [project, writeArticle])
+  }, [project, writeArticle, stampTopic])
 
   const abort = useCallback(() => {
     abortRef.current?.()

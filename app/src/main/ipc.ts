@@ -183,7 +183,14 @@ export function registerIpc(): void {
     watchedProject = null
   })
   handle('project:readFile', (project, file) => store.readTextFile(project, file))
-  handle('project:writeFile', (project, file, content) => store.writeTextFile(project, file, content))
+  handle('project:writeFile', (project, file, content) => {
+    const r = store.writeTextFile(project, file, content)
+    // 审阅报告落盘 = 进审阅（选题看板「已成稿」的依据），与会话路径 save_review 同规则
+    if (file === 'review.md' && store.advanceStatus(project, 'reviewing')) {
+      broadcast('file:external-change', { project, file: 'project.json' })
+    }
+    return r
+  })
   handle('project:readMeta', (project) => store.readMeta(project))
   handle('project:writeMeta', (project, meta) => store.writeMeta(project, meta))
   // ---- 左栏工作树：资产清单 + 按需监听 ----

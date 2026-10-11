@@ -23,6 +23,7 @@ import type {
   ProjectAssets,
   ProjectData,
   ProjectMeta,
+  ProjectStatus,
   ProjectSummary,
   ProjectTextFile
 } from '@shared/types'
@@ -420,13 +421,36 @@ export function writeMeta(name: string, meta: ProjectMeta): void {
   writeTracked(metaPath(name), JSON.stringify(next, null, 2) + '\n')
 }
 
+// ---------- 工程状态机 ----------
+// PRD §status：ideating → drafting → reviewing → ready。状态是工程现实的结果（同 shared/ideaStage.ts 的立场，
+// 选题看板「已成稿」泳道吃的就是它），由语义事件触发推进：正文落盘=撰写、审阅报告落盘=审阅、
+// 交付物产出（导出/复制/推送）=可发布。白名单放行转移，跳步与倒挂一律不动——
+// 审阅后又改稿会退回 drafting（reviewing→drafting），ready 是终态（已推平台的草稿不因本地改动撤销）。
+
+const STATUS_FLOW: Record<ProjectStatus, ProjectStatus[]> = {
+  ideating: ['drafting', 'reviewing', 'ready'],
+  drafting: ['reviewing', 'ready'],
+  reviewing: ['drafting', 'ready'],
+  ready: []
+}
+
+/** 推进工程状态；转移不在白名单则不写盘返回 false。走 writeMeta（盖 updated_at，列表/看板随之刷新） */
+export function advanceStatus(name: string, to: ProjectStatus): boolean {
+  const meta = readMeta(name)
+  if (!STATUS_FLOW[meta.status]?.includes(to) || meta.status === to) return false
+  writeMeta(name, { ...meta, status: to })
+  return true
+}
+
 /** 记录导出/复制/推送成功时刻（创作向导「导出」步的完成事实源）。
- *  刻意不走 writeMeta：纯盖章不是内容编辑，不该盖 updated_at 扰动工作树「最近编辑」排序。
+ *  纯盖章刻意不走 writeMeta：不该盖 updated_at 扰动工作树「最近编辑」排序；
+ *  但「交付物已产出」同时是状态机的 ready 事实，推进走 advanceStatus（该盖的盖）。
  *  失败静默——工程目录消失等边缘情况下，盖章不应让已成功的导出报错 */
 export function stampExported(name: string): void {
   try {
     const meta = readMeta(name)
     writeTracked(metaPath(name), JSON.stringify({ ...meta, lastExportAt: new Date().toISOString() }, null, 2) + '\n')
+    advanceStatus(name, 'ready')
   } catch {
     // 忽略：无法盖章时不阻塞导出
   }

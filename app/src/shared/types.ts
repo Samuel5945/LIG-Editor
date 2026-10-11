@@ -593,7 +593,7 @@ export interface IdeaProjectRef {
   status: ProjectStatus
   category?: string
   plannedAt?: string
-  /** project.json 的 topic：日历立项由机器写入，是权威关联 */
+  /** project.json 的 topic：立项时由机器写入（日历拖拽立项 / 脑暴向导带选题种子），是权威关联 */
   topicAngle?: string
   topicAudience?: string
 }

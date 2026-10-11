@@ -25,8 +25,8 @@ export const IDEA_STAGES: IdeaStageMeta[] = [
 /**
  * 选题 → 状态。
  * 命中工程的顺序：
- * 1. `topic.angle + topic.audience` 全等——日历上「拖选题到日期」立项时由机器写下的，是权威关联
- * 2. 工程名精确等于按立项规则复算出的候选名（脑暴立项只设名字，没有 topic）
+ * 1. `topic.angle + topic.audience` 全等——立项时由机器写下的（日历拖拽立项、脑暴向导带选题种子立项），是权威关联
+ * 2. 工程名精确等于按立项规则复算出的候选名（手工新建工程等没有 topic 的兜底）
  * 两条都不命中即待立项。
  */
 export function ideaStageOf(idea: IdeaEntry, projects: IdeaProjectRef[]): IdeaStageInfo {

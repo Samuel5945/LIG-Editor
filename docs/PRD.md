@@ -175,7 +175,7 @@ C:\Users\PC\Desktop\tuwen-editor\workspace\<分类>\<项目名>\
 }
 ```
 
-- `status`：`ideating | drafting | reviewing | ready`
+- `status`：`ideating | drafting | reviewing | ready`。状态是工程现实的结果，由语义事件经 `advanceStatus` 白名单推进（`main/projectStore.ts`，可单测）：**正文落盘**（write_article / patch_article / 向导成文）→ `drafting`；**审阅报告落盘**（save_review / UI 写 `review.md`）→ `reviewing`；**交付物产出**（导出 HTML/Word/PDF、复制富文本、推公众号草稿，即 `stampExported`）→ `ready`。审阅后又改稿退回 `drafting`；`ready` 是终态，已推平台的草稿不因本地改动撤销
 - `format`：`article`（默认）/ `cards`（中央区切到贴图面板）
 - `plannedAt`：本地日期 `YYYY-MM-DD`，缺省 = 未排期（§7.8）
 - 排版八项（`accent` / 两个字号 / 两个排列 / 四个装饰）均为**可选覆盖**：未设置 = 跟随分类主题；`h2Num: "none"` 与 `bodyBg: "none"` 是**哨兵值**，表示"显式关掉主题自带项"，与"未覆盖"语义不同
@@ -377,7 +377,7 @@ C:\Users\PC\Desktop\tuwen-editor\workspace\<分类>\<项目名>\
 | 已成稿 | 对应工程已进 `reviewing` / `ready` |
 
 对应工程的匹配顺序（`shared/ideaStage.ts`，纯函数可单测）：
-1. `topic.angle + topic.audience` 全等——日历上「拖选题到日期」立项时由机器写入 `project.json.topic`，是权威关联
+1. `topic.angle + topic.audience` 全等——立项时由机器写入 `project.json.topic`，是权威关联：日历上「拖选题到日期」立项（`scheduleIdea`）与脑暴向导带选题种子立项/写入工程（`CreationWizard.stampTopic`，只补空缺不覆盖）都会写。工程名之后被用户改散，topic 关联不掉链
 2. 工程名**精确等于按立项规则复算出的候选名**：`sanitizeProjectName(标题)`，或同名去重时的 `sanitizeProjectName(「标题 MMDD」)`（MMDD 取自该工程排期日期）。刻意不用「以标题开头」的前缀猜——那会把标题为「iPhone」的选题认到叫「iPhone 15 评测」的工程上，看板就会显示假状态
 
 已排期那道按发布日先后排序，其余按评分降序；卡片可「打开工程」直连命中工程，未立项的给「去日历排期」一步跳过去。左栏选题库仍是列表视图，两者共用同一份库数据。

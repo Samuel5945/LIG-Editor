@@ -100,13 +100,9 @@ function projectSkill(project: string): string | null {
   }
 }
 
-/** 正文已落盘但状态还停在脑暴时推进到撰写（原 generate 工具的职责） */
+/** 正文已落盘但状态还停在脑暴时推进到撰写（原 generate 工具的职责）；审阅后又改稿则退回撰写 */
 function ensureDrafting(project: string): void {
-  const meta = store.readMeta(project)
-  if (meta.status === 'ideating') {
-    store.writeMeta(project, { ...meta, status: 'drafting' })
-    notifyChange(project, 'project.json')
-  }
+  if (store.advanceStatus(project, 'drafting')) notifyChange(project, 'project.json')
 }
 
 const P = {
@@ -373,6 +369,8 @@ export const TOOLS: ToolDef[] = [
       const project = projectArg(a)
       store.writeTextFile(project, 'review.md', str(a, 'report').trim() + '\n')
       notifyChange(project, 'review.md')
+      // 审阅报告落盘 = 进审阅（选题看板「已成稿」的依据），与 UI 写 review.md 同规则（ipc project:writeFile）
+      if (store.advanceStatus(project, 'reviewing')) notifyChange(project, 'project.json')
       return { ok: true }
     }
   },
@@ -778,14 +776,25 @@ export const TOOLS: ToolDef[] = [
       },
       required: ['project']
     },
-    handler: (a) => pushDraft(projectArg(a), str(a, 'variant', false) === 'night' ? 'night' : 'day')
+    handler: async (a) => {
+      const project = projectArg(a)
+      const r = await pushDraft(project, str(a, 'variant', false) === 'night' ? 'night' : 'day')
+      // 与 UI 推送同规：成功即盖章（顺带推进 ready）
+      if (r.ok) store.stampExported(project)
+      return r
+    }
   },
   {
     name: 'push_cards',
     description:
       '把贴图组推送到公众号草稿箱（图片消息形态，读者可左右滑动看图）：每张卡片 PNG 传永久素材，配文用发布配文，标题取封面卡标题。需全部卡片已渲染、最多 20 张；AppID/AppSecret 与 IP 白名单要求同 push_draft',
     inputSchema: { type: 'object', properties: { project: P.project }, required: ['project'] },
-    handler: (a) => pushCards(projectArg(a))
+    handler: async (a) => {
+      const project = projectArg(a)
+      const r = await pushCards(project)
+      if (r.ok) store.stampExported(project)
+      return r
+    }
   }
 ]
 

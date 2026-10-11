@@ -530,12 +530,13 @@ export default function App(): JSX.Element {
 
   useEffect(() => {
     const offFile = window.api.on('file:external-change', async ({ project, file }) => {
-      if (project !== currentRef.current) return
       if (file === 'project.json') {
+        // 任何工程的状态/排期/标题变了，工作树/看板/日历都吃工程列表——不限当前打开的工程
         refreshProjects()
-        refreshMeta()
+        if (project === currentRef.current) refreshMeta()
         return
       }
+      if (project !== currentRef.current) return
       if (file !== 'article.md') return
       const external = await window.api.invoke('project:readFile', project, 'article.md')
       if (external === articleRef.current) {
