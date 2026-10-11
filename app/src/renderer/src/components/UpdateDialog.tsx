@@ -13,7 +13,7 @@ interface UpdateDialogProps {
 
 /** 下载入口：只渲染该源实际给出的链接，外链走主进程 setWindowOpenHandler → 系统浏览器 */
 const DOWNLOADS: { key: keyof UpdateInfo['downloads']; label: string; sub: string; icon: IconName }[] = [
-  { key: 'quark', label: '夸克网盘', sub: '免登录直连', icon: 'cloud' },
+  { key: 'quark', label: '夸克网盘', sub: '无需提取码', icon: 'cloud' },
   { key: 'baidu', label: '百度网盘', sub: '会员不限速', icon: 'cloud' },
   { key: 'github', label: 'GitHub', sub: 'Releases 源', icon: 'github' },
   { key: 'site', label: '官网详情页', sub: '更新说明全文', icon: 'globe' }
