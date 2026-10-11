@@ -1,6 +1,7 @@
 import { net } from 'electron'
 import type { ImageGenOptions, ProviderConfig } from '@shared/types'
 import { isSenseNovaProvider } from '@shared/providerSites'
+import { ratioToSenseNovaSize } from '@shared/imageRatio'
 import { getImageProvider } from './settingsStore'
 import { apiUserAgent } from './apiUa'
 
@@ -13,6 +14,8 @@ import { apiUserAgent } from './apiUa'
  *   轮询 GET /v1/tasks/{id} 至终态，取 result.images[0].url[0] 下载转 base64；
  *   size 传比例（16:9 等）、resolution 传清晰度档位（1k/2k/4k，nano-banana/imagen-4 不带
  *   resolution、seedream-5.0-pro 仅 1K/2K），不支持 response_format
+ * 商汤（images 端点）：档位不认，但支持任意 32 倍数像素尺寸——ratio 意图（3:4 等）
+ *   由 imageRatio.ts 换算成精确像素，竖版构图不再退化成方图
  */
 
 export async function generateImage(prompt: string, opts: ImageGenOptions = {}): Promise<string> {
@@ -33,8 +36,12 @@ function headers(apiKey: string): Record<string, string> {
 
 async function generateViaImagesApi(provider: ProviderConfig, prompt: string, opts: ImageGenOptions): Promise<string> {
   const url = provider.baseUrl.replace(/\/+$/, '') + '/images/generations'
-  // 标准 OpenAI 只认 1024x1024 这类精确尺寸，档位式（1K/2K）回退默认值
-  const size = /^\d+x\d+$/.test(opts.size ?? '') ? opts.size : '1024x1024'
+  // 精确像素尺寸（1024x1024 这类）直接用；档位式（1K/2K）标准端点不认。
+  // 商汤例外：支持任意 32 倍数像素尺寸，把比例意图（3:4 等）换算成精确像素，
+  // 否则贴图卡片的竖版意图会退化成方图再被裁切（见 imageRatio.ts）
+  const exact = /^\d+x\d+$/.test(opts.size ?? '') ? opts.size : null
+  const senseNovaSize = isSenseNovaProvider(provider) ? ratioToSenseNovaSize(opts.ratio) : null
+  const size = exact ?? senseNovaSize ?? '1024x1024'
   const resp = await net.fetch(url, {
     method: 'POST',
     headers: headers(provider.apiKey),

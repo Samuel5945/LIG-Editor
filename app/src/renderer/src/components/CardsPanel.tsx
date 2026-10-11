@@ -12,6 +12,8 @@ import { Segmented } from '../ui/primitives'
 import { confirmAction } from '../confirm'
 import {
   CARD_FORMAT_LABEL,
+  buildAiCardPrompt,
+  buildCardBgPrompt,
   cardsPlainText,
   parseCardItems,
   type CardDeck,
@@ -232,7 +234,9 @@ const CardsPanel = forwardRef<CardsPanelHandle, CardsPanelProps>(function CardsP
       }
       setBgBusy(i)
       try {
-        const b64 = await window.api.invoke('image:generate', card.bgPrompt.trim(), { size: '1K', ratio: '3:4' })
+        // bgPrompt 只交代画面主体，构图留白/禁文字/平台调性由组装函数统一补齐
+        const prompt = buildCardBgPrompt(card, deckRef.current?.format ?? 'wechat')
+        const b64 = await window.api.invoke('image:generate', prompt, { size: '1K', ratio: '3:4' })
         // 时间戳命名，避免换序后新背图覆盖别的卡还在引用的旧图
         const rel = await window.api.invoke('project:saveAsset', project, `assets/card-bg-${Date.now()}.png`, b64)
         const cur = deckRef.current
@@ -257,9 +261,8 @@ const CardsPanel = forwardRef<CardsPanelHandle, CardsPanelProps>(function CardsP
       const cur = deckRef.current
       const card = cur?.cards[i]
       if (!cur || !card) return
-      const points = card.body.split('\n').map((s) => s.trim()).filter(Boolean).join('；')
-      const style = card.bgPrompt.trim() || (cur.format === 'wechat' ? '米白底色、书面克制、纸面质感' : '暖色渐变、活泼小红书风、圆角卡片感')
-      const prompt = `设计一张 3:4 竖版中文图文卡片成品，把以下文字直接排版进画面，汉字必须清晰可读、无错字无乱码：标题「${card.title}」${points ? `；要点：${points}` : ''}。视觉风格：${style}。文字与背景融合自然，构图留白考究，不要出现水印。`
+      // 文字直接画进图里：版式层级/字号约束/禁乱码由组装函数统一交代
+      const prompt = buildAiCardPrompt(card, cur.format)
       setAiBusy(i)
       try {
         const b64 = await window.api.invoke('image:generate', prompt, { size: '1K', ratio: '3:4' })

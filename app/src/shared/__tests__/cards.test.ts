@@ -3,6 +3,8 @@ import {
   CARD_H,
   CARD_W,
   autoFontScale,
+  buildAiCardPrompt,
+  buildCardBgPrompt,
   cardHtml,
   cardsPlainText,
   hexToRgba,
@@ -137,10 +139,23 @@ describe('cardHtml', () => {
   it('bgSrc 非空时插入背图与遮罩，空则不插', () => {
     const withBg = cardHtml(card(), { format: 'xhs', index: 0, total: 3, bgSrc: '../assets/card-bg-1.png' })
     const noBg = cardHtml(card(), { format: 'xhs', index: 0, total: 3, bgSrc: '' })
-    expect(withBg).toContain('<img class="bg" src="../assets/card-bg-1.png">')
+    expect(withBg).toContain('<img class="bg" src="../assets/card-bg-1.png"')
     expect(withBg).toContain('class="veil"')
     expect(noBg).not.toContain('class="bg"')
     expect(noBg).not.toContain('class="veil"')
+  })
+
+  it('背图按透出强度反向虚化：默认柔焦，拉满则原样透出', () => {
+    const soft = cardHtml(card(), { format: 'wechat', index: 1, total: 3, bgSrc: '../assets/b.png' })
+    expect(soft).toContain('filter: blur(5.1px) saturate(0.94)')
+    const clear = cardHtml(card({ bgOpacity: 100 }), { format: 'wechat', index: 1, total: 3, bgSrc: '../assets/b.png' })
+    expect(clear).not.toContain('filter: blur')
+  })
+
+  it('公众号风角标框线：四角 L 形页角，非整圈边框', () => {
+    const html = cardHtml(card(), { format: 'wechat', index: 1, total: 3, bgSrc: '' })
+    expect(html).toContain('border-left: 3px solid')
+    expect(html).not.toContain('border: 3px solid')
   })
 
   it('强调色覆盖：公众号页码/色条、小红书角标/色条/划线跟随，非法值回默认', () => {
@@ -176,6 +191,55 @@ describe('cardHtml', () => {
     const html = cardHtml(card(), { format: 'wechat', index: 1, total: 3, bgSrc: '' })
     expect(html).toContain('scrollHeight > box.clientHeight')
     expect(html).toContain('style.zoom')
+  })
+})
+
+describe('buildCardBgPrompt', () => {
+  it('bgPrompt 原文入词，补 3:4 竖版、留白构图与禁文字约束', () => {
+    const p = buildCardBgPrompt({ bgPrompt: '清晨窗台上的咖啡与笔记本', dark: false }, 'wechat')
+    expect(p).toContain('竖版 3:4')
+    expect(p).toContain('清晨窗台上的咖啡与笔记本')
+    expect(p).toContain('负空间')
+    expect(p).toContain('不得出现任何文字')
+    expect(p).toContain('水印')
+  })
+
+  it('深色卡切深色调性词，平台调性不同', () => {
+    const wcDark = buildCardBgPrompt({ bgPrompt: '夜色书桌', dark: true }, 'wechat')
+    expect(wcDark).toContain('深棕暗调')
+    const xhsLight = buildCardBgPrompt({ bgPrompt: '春日野餐', dark: false }, 'xhs')
+    expect(xhsLight).toContain('柔粉奶油调')
+    const xhsDark = buildCardBgPrompt({ bgPrompt: '春日野餐', dark: true }, 'xhs')
+    expect(xhsDark).toContain('深紫夜调')
+  })
+
+  it('bgPrompt 留空时兜底平台默认画面，不产出空主体', () => {
+    const p = buildCardBgPrompt({ bgPrompt: '   ', dark: false }, 'xhs')
+    expect(p).toContain('柔和渐变色块')
+    const wc = buildCardBgPrompt({ bgPrompt: '', dark: false }, 'wechat')
+    expect(wc).toContain('素雅纸纹肌理')
+  })
+})
+
+describe('buildAiCardPrompt', () => {
+  it('标题与要点逐级入词，交代字号层级与禁乱码约束', () => {
+    const p = buildAiCardPrompt({ title: '存钱第一步', body: '先存再花\n别信月底剩多少', bgPrompt: '' }, 'xhs')
+    expect(p).toContain('竖版 3:4')
+    expect(p).toContain('标题「存钱第一步」')
+    expect(p).toContain('要点「先存再花；别信月底剩多少」')
+    expect(p).toContain('字号明显小于标题')
+    expect(p).toContain('无乱码')
+  })
+
+  it('bgPrompt 有值作风格，留空兜底平台调性', () => {
+    const styled = buildAiCardPrompt({ title: 'T', body: 'a', bgPrompt: '莫兰迪色静物' }, 'wechat')
+    expect(styled).toContain('莫兰迪色静物')
+    const fallback = buildAiCardPrompt({ title: 'T', body: 'a', bgPrompt: '' }, 'wechat')
+    expect(fallback).toContain('米白暖纸调')
+    const xhs = buildAiCardPrompt({ title: 'T', body: '', bgPrompt: '' }, 'xhs')
+    expect(xhs).toContain('柔粉奶油调')
+    // 无要点时不输出「要点」段
+    expect(xhs).not.toContain('要点「')
   })
 })
 

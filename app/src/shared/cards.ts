@@ -184,14 +184,18 @@ export function cardHtml(card: CardItem, opts: CardHtmlOptions): string {
     format === 'wechat'
       ? `rgba(${dark ? '24, 21, 17' : '246, 242, 234'}, ${veilAlpha})`
       : `rgba(${dark ? '26, 23, 31' : '255, 255, 255'}, ${veilAlpha})`
+  // 公众号纸面加一层同调性的顶部渐晕（强调色衍生、极淡），纯平底色不再发闷
+  const paper = dark ? '#221f1a' : '#f6f2ea'
   const baseBg =
     format === 'wechat'
-      ? dark
-        ? '#221f1a'
-        : '#f6f2ea'
+      ? `radial-gradient(130% 100% at 50% 0%, ${hexToRgba(accent || (dark ? '#d9ab5f' : '#b0803c'), dark ? 0.08 : 0.06) ?? paper} 0%, rgba(0, 0, 0, 0) 55%), ${paper}`
       : dark
         ? 'linear-gradient(160deg, #2b2233 0%, #241f2b 52%, #1b2230 100%)'
         : 'linear-gradient(160deg, #ffe9ec 0%, #fff6e8 52%, #e8f3ff 100%)'
+  // 背图按透出强度反向虚化：默认 15% 时虚成柔焦底，文字必清晰；拉满则原样透出
+  const blur = Math.round((1 - seen / 100) * 60) / 10
+  const bgStyle =
+    blur > 0.2 ? ` style="filter: blur(${blur}px) saturate(0.94); transform: scale(1.06);"` : ''
   return `<!doctype html>
 <html>
 <head>
@@ -201,7 +205,7 @@ export function cardHtml(card: CardItem, opts: CardHtmlOptions): string {
   html, body { width: ${CARD_W}px; height: ${CARD_H}px; overflow: hidden; }
   body {
     position: relative;
-    font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+    font-family: "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
     background: ${baseBg};
     -webkit-font-smoothing: antialiased;
   }
@@ -212,7 +216,7 @@ export function cardHtml(card: CardItem, opts: CardHtmlOptions): string {
 </style>
 </head>
 <body>
-${bgSrc ? `<img class="bg" src="${esc(bgSrc)}">` : ''}
+${bgSrc ? `<img class="bg" src="${esc(bgSrc)}"${bgStyle}>` : ''}
 ${bgSrc ? '<div class="veil"></div>' : ''}
 <div class="stage">
 ${inner}
@@ -234,7 +238,11 @@ ${inner}
 `
 }
 
-/** 公众号风：米白纸面、细框、衬线气质、无 emoji 装饰；dark 时切浅色字配深底 */
+/**
+ * 公众号风：米白纸面 + 四角框线（书页角标）+ 页眉页脚细线，衬在纸面渐晕上；
+ * 书面、克制、无 emoji 装饰。dark 时切浅色字配深底。
+ * 版式骨架：外框 56px 留白 → 页眉（页码/眉标）→ 垂直居中的正文区 → 页脚饰线。
+ */
 function wechatInner(
   title: string,
   lines: string[],
@@ -248,38 +256,65 @@ function wechatInner(
 ): string {
   const fz = (n: number): number => Math.round((n * scale) / 100)
   const c = dark
-    ? { frame: '#6f6552', eyebrow: '#c9b98f', title: '#f4efe4', sub: '#c9c0b0', accent: '#d9ab5f', divider: '#5a5342', body: '#e0d9c9' }
-    : { frame: '#c8bda6', eyebrow: '#a4936f', title: '#26221c', sub: '#6f6555', accent: '#b0803c', divider: '#d9cfba', body: '#464035' }
-  // 强调色覆盖着色点：封面色条/页码/要点序号/纸面框线（框线走半透明衍生压饱和度，保住书面气质）；正文色不动
+    ? { tick: '#6f6552', eyebrow: '#c9b98f', title: '#f4efe4', sub: '#c9c0b0', accent: '#d9ab5f', line: '#5a5342', body: '#e0d9c9' }
+    : { tick: '#c8bda6', eyebrow: '#a4936f', title: '#26221c', sub: '#6f6555', accent: '#b0803c', line: '#d9cfba', body: '#464035' }
+  // 强调色覆盖着色点：角框线/页码/短划/菱形饰/要点序号（角框走半透明衍生压饱和度，保住书面气质）；正文色不动
   if (accent) {
     c.accent = accent
-    c.frame = hexToRgba(accent, dark ? 0.6 : 0.5) ?? accent
+    c.tick = hexToRgba(accent, dark ? 0.6 : 0.5) ?? accent
   }
-  const frame = `margin: 56px; border: 3px solid ${c.frame}; flex: 1; display: flex; flex-direction: column; padding: 88px 96px;`
-  if (cover) {
-    return `<div style="${frame} justify-content: center; text-align: center;">
-  <div style="font-size: ${fz(30)}px; letter-spacing: 14px; color: ${c.eyebrow}; margin-bottom: 72px;">${tag || '图 文 卡 片'}</div>
-  <h1 style="font-size: ${fz(88)}px; line-height: 1.35; font-weight: 700; color: ${c.title};">${title}</h1>
-  <div style="width: 120px; height: 4px; background: ${c.accent}; margin: 64px auto;"></div>
-  ${lines.map((l) => `<p style="font-size: ${fz(38)}px; line-height: 1.8; color: ${c.sub};">${l}</p>`).join('\n  ')}
-</div>`
-  }
+  // 四角 L 形框线：比整圈边框轻，报纸版式的「页角」意象
+  const tick = (pos: string, edge: string): string =>
+    `<i style="position: absolute; ${pos}; width: 64px; height: 64px; ${edge}: 3px solid ${c.tick};"></i>`
+  const ticks = `${tick('left: 0; top: 0', 'border-left')} ${tick('right: 0; top: 0', 'border-right')} ${tick('left: 0; bottom: 0', 'border-left')} ${tick('right: 0; bottom: 0', 'border-right')}`
+  const frame = `position: relative; margin: 56px; flex: 1; display: flex; flex-direction: column; padding: 96px 100px;`
+  // 线—菱形—线分隔饰：比一根光秃秃的色条更有「印刷品」的完成度
+  const diamondRule = (w: number, d: number): string =>
+    `<div style="display: flex; align-items: center; gap: 20px;">
+    <span style="width: ${w}px; height: 1px; background: ${c.line};"></span>
+    <span style="width: ${d}px; height: ${d}px; background: ${c.accent}; transform: rotate(45deg);"></span>
+    <span style="width: ${w}px; height: 1px; background: ${c.line};"></span>
+  </div>`
   const num = (k: number): string =>
     numbered
-      ? `<span style="color: ${c.accent}; font-weight: 700; margin-right: 20px;">${String(k + 1).padStart(2, '0')}</span>`
+      ? `<span style="color: ${c.accent}; font-weight: 700; margin-right: 20px; letter-spacing: 2px;">${String(k + 1).padStart(2, '0')}</span>`
       : ''
-  // 内容卡整块垂直居中：行数少时不再堆在左上角
-  return `<div style="${frame} justify-content: center;">
-  <div style="display: flex; align-items: baseline; gap: 24px; margin-bottom: 56px;">
-    <span style="font-size: ${fz(34)}px; color: ${c.accent}; font-weight: 700;">${pageNo}</span>
-    <span style="flex: 1; height: 2px; background: ${c.divider};"></span>
+  if (cover) {
+    // 封面：眉标（线—字—线）+ 大标题 + 菱形分隔 + 副题，整体居中
+    return `<div style="${frame} align-items: center;">
+  ${ticks}
+  <div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;">
+    <div style="display: flex; align-items: center; gap: 32px; margin-bottom: 72px;">
+      <span style="width: 72px; height: 1px; background: ${c.line};"></span>
+      <span style="font-size: ${fz(30)}px; letter-spacing: 14px; margin-right: -14px; color: ${c.eyebrow};">${tag || '图 文 卡 片'}</span>
+      <span style="width: 72px; height: 1px; background: ${c.line};"></span>
+    </div>
+    <h1 style="font-size: ${fz(96)}px; line-height: 1.32; font-weight: 700; letter-spacing: 2px; color: ${c.title};">${title}</h1>
+    <div style="margin: 64px 0 56px;">${diamondRule(96, 12)}</div>
+    ${lines.map((l) => `<p style="font-size: ${fz(38)}px; line-height: 1.9; color: ${c.sub};">${l}</p>`).join('\n  ')}
   </div>
-  <h2 style="font-size: ${fz(60)}px; line-height: 1.4; font-weight: 700; color: ${c.title}; margin-bottom: 56px;">${title}</h2>
-  ${lines.map((l, k) => `<p style="font-size: ${fz(40)}px; line-height: 2; color: ${c.body}; margin-bottom: 20px;">${num(k)}${l}</p>`).join('\n  ')}
+</div>`
+  }
+  // 内容卡：页眉页码压顶，正文区垂直居中（行数少时不堆在左上角），页脚饰线收底
+  return `<div style="${frame}">
+  ${ticks}
+  <div style="display: flex; align-items: baseline; gap: 24px; margin-bottom: 48px;">
+    <span style="font-size: ${fz(34)}px; color: ${c.accent}; font-weight: 700; letter-spacing: 3px;">${pageNo}</span>
+    <span style="flex: 1; height: 1px; background: ${c.line};"></span>
+  </div>
+  <div style="flex: 1; display: flex; flex-direction: column; justify-content: center;">
+    <h2 style="font-size: ${fz(60)}px; line-height: 1.4; font-weight: 700; color: ${c.title}; margin-bottom: 20px;">${title}</h2>
+    <div style="width: 64px; height: 5px; background: ${c.accent}; margin-bottom: 56px;"></div>
+    ${lines.map((l, k) => `<p style="font-size: ${fz(40)}px; line-height: 1.95; color: ${c.body}; margin-bottom: 20px;">${num(k)}${l}</p>`).join('\n  ')}
+  </div>
+  <div style="display: flex; justify-content: center;">${diamondRule(140, 8)}</div>
 </div>`
 }
 
-/** 小红书风：暖渐变底、圆角内卡、高亮色（页码排序交给平台）；dark 时内卡变深、文字切浅色 */
+/**
+ * 小红书风：暖渐变底 + 圆角内卡，卡面四角加同调性的虚线圆/色点涂鸦，
+ * 角标装进药丸章、要点序号装进圆角色块——网感、活泼但不闹。dark 时内卡变深、文字切浅色。
+ */
 function xhsInner(
   title: string,
   lines: string[],
@@ -300,24 +335,81 @@ function xhsInner(
     c.bar = accent
     c.mark = hexToRgba(accent, dark ? 0.38 : 0.3) ?? c.mark
   }
-  const card = `margin: 64px; background: ${c.cardBg}; border-radius: 48px; box-shadow: 0 24px 64px rgba(160,110,90,0.18); flex: 1; display: flex; flex-direction: column; padding: 88px 84px;`
+  const card = `margin: 64px; background: ${c.cardBg}; border-radius: 48px; box-shadow: 0 32px 80px rgba(160,110,90,0.2); flex: 1; display: flex; flex-direction: column; padding: 96px 88px; position: relative; overflow: hidden;`
+  // 角部涂鸦：虚线圆 + 实色点 + 出血色晕，都从色条色半透明衍生，与强调色联动
+  const decor = `
+  <span style="position: absolute; right: -70px; top: -70px; width: 220px; height: 220px; border: 3px dashed ${hexToRgba(c.bar, dark ? 0.45 : 0.35) ?? c.bar}; border-radius: 50%;"></span>
+  <span style="position: absolute; right: 110px; top: 130px; width: 16px; height: 16px; border-radius: 50%; background: ${hexToRgba(c.bar, 0.5) ?? c.bar};"></span>
+  <span style="position: absolute; left: -50px; bottom: -50px; width: 160px; height: 160px; border-radius: 50%; background: ${hexToRgba(c.bar, dark ? 0.2 : 0.12) ?? c.bar};"></span>`
   const num = (k: number): string =>
     numbered
-      ? `<span style="color: ${c.badge}; font-weight: 800; margin-right: 20px;">${String(k + 1).padStart(2, '0')}</span>`
+      ? `<span style="display: inline-block; vertical-align: -6px; width: ${fz(52)}px; height: ${fz(52)}px; line-height: ${fz(52)}px; border-radius: 14px; background: ${hexToRgba(c.badge, dark ? 0.22 : 0.12) ?? 'transparent'}; color: ${c.badge}; font-weight: 800; font-size: ${fz(30)}px; text-align: center; margin-right: 24px;">${String(k + 1).padStart(2, '0')}</span>`
       : ''
   return cover
     ? `<div style="${card} justify-content: center; text-align: center;">
-  <div style="font-size: ${fz(34)}px; color: ${c.badge}; font-weight: 700; letter-spacing: 6px; margin-bottom: 56px;">✦ ${tag || '干货分享'} ✦</div>
-  <h1 style="font-size: ${fz(92)}px; line-height: 1.3; font-weight: 800; color: ${c.title};">${title}</h1>
-  <div style="margin-top: 64px;">
-  ${lines.map((l) => `<p style="font-size: ${fz(40)}px; line-height: 1.8; color: ${c.sub};">${l}</p>`).join('\n  ')}
+  ${decor}
+  <div style="position: relative; flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+    <div style="display: inline-flex; background: ${hexToRgba(c.badge, dark ? 0.16 : 0.1) ?? 'transparent'}; border-radius: 999px; padding: 18px 48px; margin-bottom: 64px;">
+      <span style="font-size: ${fz(32)}px; color: ${c.badge}; font-weight: 700; letter-spacing: 6px; margin-right: -6px;">✦ ${tag || '干货分享'} ✦</span>
+    </div>
+    <h1 style="font-size: ${fz(92)}px; line-height: 1.3; font-weight: 800; color: ${c.title};">${title}</h1>
+    <div style="width: 120px; height: 10px; border-radius: 5px; background: ${c.bar}; margin-top: 56px;"></div>
+    <div style="margin-top: 56px;">
+    ${lines.map((l) => `<p style="font-size: ${fz(40)}px; line-height: 1.8; color: ${c.sub};">${l}</p>`).join('\n  ')}
+    </div>
   </div>
 </div>`
     : `<div style="${card} justify-content: center;">
-  <h2 style="font-size: ${fz(62)}px; line-height: 1.4; font-weight: 800; color: ${c.title}; margin-bottom: 24px;">
-    <span style="background: linear-gradient(transparent 62%, ${c.mark} 62%);">${title}</span>
-  </h2>
-  <div style="width: 88px; height: 8px; border-radius: 4px; background: ${c.bar}; margin-bottom: 48px;"></div>
-  ${lines.map((l, k) => `<p style="font-size: ${fz(42)}px; line-height: 1.9; color: ${c.body}; margin-bottom: 22px;">${num(k)}${l}</p>`).join('\n  ')}
+  ${decor}
+  <div style="position: relative; flex: 1; display: flex; flex-direction: column; justify-content: center;">
+    <h2 style="font-size:${fz(62)}px; line-height: 1.4; font-weight: 800; color: ${c.title}; margin-bottom: 24px;">
+      <span style="background: linear-gradient(transparent 62%, ${c.mark} 62%);">${title}</span>
+    </h2>
+    <div style="width: 88px; height: 8px; border-radius: 4px; background: ${c.bar}; margin-bottom: 48px;"></div>
+    ${lines.map((l, k) => `<p style="font-size:${fz(42)}px; line-height: 1.9; color: ${c.body}; margin-bottom: 24px;">${num(k)}${l}</p>`).join('\n  ')}
+  </div>
 </div>`
+}
+
+// ---------- 生图提示词组装（面向商汤 u1.5 系的中文结构化写法：约束前置、短句分号相连） ----------
+
+/** 平台 × 深浅的背图调性词：bgPrompt 只描述画面主体，调性与约束由这里统一补齐 */
+const CARD_TONE: Record<CardFormat, { light: string; dark: string }> = {
+  wechat: {
+    light: '米白暖纸调、低饱和、柔和漫射光、安静克制的书面质感',
+    dark: '深棕暗调、沉稳内敛、局部微光、夜读氛围'
+  },
+  xhs: {
+    light: '柔粉奶油调、明快温暖、轻盈通透的生活感',
+    dark: '深紫夜调、朦胧霓虹微光、安静的氛围感'
+  }
+}
+
+/** 卡背图生图提示词：背图只是垫在文字下的氛围底图，构图必须给文字留位、严禁出现文字元素 */
+export function buildCardBgPrompt(card: Pick<CardItem, 'bgPrompt' | 'dark'>, format: CardFormat): string {
+  const subject = card.bgPrompt.trim() || (format === 'wechat' ? '素雅纸纹肌理' : '柔和渐变色块')
+  return [
+    `竖版 3:4 氛围背景图：${subject}`,
+    `构图主体靠画面边缘，中部留出大面积柔和负空间供文字排布`,
+    `色调：${CARD_TONE[format][card.dark ? 'dark' : 'light']}`,
+    `光线柔和、整体低对比、质感细腻`,
+    `画面中不得出现任何文字、字母、数字、标志或水印`
+  ].join('；')
+}
+
+/** AI 整卡成图提示词：文字直接画进图里，逐级交代版式、字号层级与禁乱码约束 */
+export function buildAiCardPrompt(card: Pick<CardItem, 'title' | 'body' | 'bgPrompt'>, format: CardFormat): string {
+  const points = card.body
+    .split('\n')
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .join('；')
+  const style = card.bgPrompt.trim() || CARD_TONE[format].light
+  return [
+    `设计一张竖版 3:4 中文图文卡片成品，把以下文字直接排版进画面`,
+    `标题「${card.title}」用大号醒目字体${points ? `；要点「${points}」逐行排版，字号明显小于标题` : ''}`,
+    `视觉风格：${style}`,
+    `版式层级分明、留白充足、文字与背景融合自然`,
+    `汉字必须清晰可读、无错字、无乱码；除上述文案外画面中不出现任何其它文字、标志或水印`
+  ].join('；')
 }
