@@ -2,6 +2,7 @@ import { net } from 'electron'
 import type { ImageGenOptions, ProviderConfig } from '@shared/types'
 import { isSenseNovaProvider } from '@shared/providerSites'
 import { ratioToSenseNovaSize } from '@shared/imageRatio'
+import { mergeAbortSignals } from '@shared/abort'
 import { getImageProvider } from './settingsStore'
 import { apiUserAgent } from './apiUa'
 
@@ -18,13 +19,18 @@ import { apiUserAgent } from './apiUa'
  *   由 imageRatio.ts 换算成精确像素，竖版构图不再退化成方图
  */
 
-export async function generateImage(prompt: string, opts: ImageGenOptions = {}): Promise<string> {
+export async function generateImage(
+  prompt: string,
+  opts: ImageGenOptions = {},
+  /** 界面「停止」传入的取消信号（ipc 层按 reqId 建 controller）：与内部超时合并，取消即中断请求 */
+  external?: AbortSignal
+): Promise<string> {
   const provider = getImageProvider()
   if (!provider) throw new Error('未配置图像供应商，请先在「模型接入」中设置')
   if (!provider.imageModel) throw new Error(`供应商「${provider.name}」未填图像模型`)
-  if (provider.imageApi === 'agnes-images') return generateViaAgnesImages(provider, prompt, opts)
-  if (provider.imageApi === 'apimart-images') return generateViaApimartImages(provider, prompt, opts)
-  return generateViaImagesApi(provider, prompt, opts)
+  if (provider.imageApi === 'agnes-images') return generateViaAgnesImages(provider, prompt, opts, external)
+  if (provider.imageApi === 'apimart-images') return generateViaApimartImages(provider, prompt, opts, external)
+  return generateViaImagesApi(provider, prompt, opts, external)
 }
 
 /** UA 覆盖为纯 ASCII：中文 UA 会被商汤 gRPC 网关 500（见 apiUa.ts） */
@@ -34,7 +40,7 @@ function headers(apiKey: string): Record<string, string> {
   return h
 }
 
-async function generateViaImagesApi(provider: ProviderConfig, prompt: string, opts: ImageGenOptions): Promise<string> {
+async function generateViaImagesApi(provider: ProviderConfig, prompt: string, opts: ImageGenOptions, external?: AbortSignal): Promise<string> {
   const url = provider.baseUrl.replace(/\/+$/, '') + '/images/generations'
   // 精确像素尺寸（1024x1024 这类）直接用；档位式（1K/2K）标准端点不认。
   // 商汤例外：支持任意 32 倍数像素尺寸，把比例意图（3:4 等）换算成精确像素，
@@ -54,14 +60,14 @@ async function generateViaImagesApi(provider: ProviderConfig, prompt: string, op
       // 商汤 images 端点的扩展参数：关闭右下角水印（其他 OpenAI 兼容网关会忽略未知字段）
       ...(isSenseNovaProvider(provider) ? { watermark: false } : {})
     }),
-    signal: AbortSignal.timeout(180_000)
+    signal: mergeAbortSignals(180_000, external)
   })
   if (!resp.ok) throw new Error(`生图失败 HTTP ${resp.status}：${(await resp.text()).slice(0, 200)}`)
-  return extractImagesResult((await resp.json()) as ImagesResponse)
+  return extractImagesResult((await resp.json()) as ImagesResponse, external)
 }
 
 /** Agnes images 变体：size 用 1K/2K 档位 + ratio；禁止顶层 response_format，用 return_base64 */
-async function generateViaAgnesImages(provider: ProviderConfig, prompt: string, opts: ImageGenOptions): Promise<string> {
+async function generateViaAgnesImages(provider: ProviderConfig, prompt: string, opts: ImageGenOptions, external?: AbortSignal): Promise<string> {
   const url = provider.baseUrl.replace(/\/+$/, '') + '/images/generations'
   const resp = await net.fetch(url, {
     method: 'POST',
@@ -73,10 +79,10 @@ async function generateViaAgnesImages(provider: ProviderConfig, prompt: string, 
       ratio: opts.ratio ?? '4:3',
       return_base64: true
     }),
-    signal: AbortSignal.timeout(180_000)
+    signal: mergeAbortSignals(180_000, external)
   })
   if (!resp.ok) throw new Error(`生图失败 HTTP ${resp.status}：${(await resp.text()).slice(0, 200)}`)
-  return extractImagesResult((await resp.json()) as ImagesResponse)
+  return extractImagesResult((await resp.json()) as ImagesResponse, external)
 }
 
 // ---- APIMart 异步任务制（gpt-image-2 / nano-banana 等）----
@@ -134,8 +140,12 @@ function apimartResolution(model: string, size?: string): string {
   }
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms))
+function sleep(ms: number, external?: AbortSignal): Promise<void> {
+  return new Promise((r) => {
+    if (external?.aborted) return r()
+    const t = setTimeout(r, ms)
+    external?.addEventListener('abort', () => { clearTimeout(t); r() }, { once: true })
+  })
 }
 
 /** APIMart 基址归一：裸域（api.apimart.ai）自动补 /v1；已带 /v1 的不重复拼接 */
@@ -144,7 +154,7 @@ function apimartBase(baseUrl: string): string {
   return /\/v1$/.test(base) ? base : `${base}/v1`
 }
 
-async function generateViaApimartImages(provider: ProviderConfig, prompt: string, opts: ImageGenOptions): Promise<string> {
+async function generateViaApimartImages(provider: ProviderConfig, prompt: string, opts: ImageGenOptions, external?: AbortSignal): Promise<string> {
   const base = apimartBase(provider.baseUrl)
   const model = provider.imageModel
   // 提交生图任务：size 传比例（16:9 等），resolution 传清晰度档位（仅支持的模型）；不支持 response_format
@@ -158,7 +168,7 @@ async function generateViaApimartImages(provider: ProviderConfig, prompt: string
     method: 'POST',
     headers: headers(provider.apiKey),
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(60_000)
+    signal: mergeAbortSignals(60_000, external)
   })
   const submit = (await submitResp.json()) as ApimartSubmitResponse
   if (!submitResp.ok || submit.error || (submit.code !== undefined && submit.code !== 200)) {
@@ -167,14 +177,15 @@ async function generateViaApimartImages(provider: ProviderConfig, prompt: string
   const taskId = submit.data?.[0]?.task_id
   if (!taskId) throw new Error('生图提交失败：响应缺少 task_id')
 
-  // 轮询任务结果：gpt-image-2 单张可达 200s+，留 300s 窗口、每 3s 查一次
+  // 轮询任务结果：gpt-image-2 单张可达 200s+，留 300s 窗口、每 3s 查一次；
+  // 等待与每轮请求都挂合并信号：用户「停止」时不必空转到本轮结束
   const deadline = Date.now() + 300_000
   while (Date.now() < deadline) {
-    await sleep(3000)
+    await sleep(3000, external)
     const taskResp = await net.fetch(`${base}/tasks/${taskId}`, {
       method: 'GET',
       headers: headers(provider.apiKey),
-      signal: AbortSignal.timeout(30_000)
+      signal: mergeAbortSignals(30_000, external)
     })
     const task = (await taskResp.json()) as ApimartTaskResponse
     const status = task.data?.status
@@ -182,11 +193,13 @@ async function generateViaApimartImages(provider: ProviderConfig, prompt: string
     if (status === 'completed' || status === 'succeeded' || status === 'success') {
       const imgUrl = task.data?.result?.images?.[0]?.url?.[0]
       if (!imgUrl) throw new Error('生图完成但响应中没有图片 URL')
-      return downloadToBase64(imgUrl)
+      return downloadToBase64(imgUrl, external)
     }
     if (status === 'failed' || status === 'cancelled' || status === 'error') {
       throw new Error(`生图失败：${task.data?.error?.message ?? `任务状态 ${status}`}`)
     }
+    // 用户停止：立刻退出轮询，不等下一轮
+    if (external?.aborted) throw new DOMException('已取消', 'AbortError')
     // submitted / pending / processing → 继续轮询
   }
   throw new Error('生图超时（300 秒未完成），可到 APIMart 后台按任务 ID 查看')
@@ -196,16 +209,16 @@ interface ImagesResponse {
   data?: { b64_json?: string | null; url?: string | null }[]
 }
 
-async function extractImagesResult(data: ImagesResponse): Promise<string> {
+async function extractImagesResult(data: ImagesResponse, external?: AbortSignal): Promise<string> {
   const item = data.data?.[0]
   if (item?.b64_json) return item.b64_json
-  if (item?.url) return downloadToBase64(item.url)
+  if (item?.url) return downloadToBase64(item.url, external)
   throw new Error('生图响应中没有图片数据')
 }
 
-async function downloadToBase64(url: string): Promise<string> {
+async function downloadToBase64(url: string, external?: AbortSignal): Promise<string> {
   // 国内版 Agnes 常无视 return_base64 返国际图床 URL（agnes-ai.space），直连很慢，超时要留足
-  const resp = await net.fetch(url, { signal: AbortSignal.timeout(180_000) })
+  const resp = await net.fetch(url, { signal: mergeAbortSignals(180_000, external) })
   if (!resp.ok) throw new Error(`下载生成图失败 HTTP ${resp.status}`)
   return Buffer.from(await resp.arrayBuffer()).toString('base64')
 }

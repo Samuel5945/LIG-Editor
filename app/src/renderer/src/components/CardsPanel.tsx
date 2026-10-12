@@ -78,16 +78,26 @@ const CardsPanel = forwardRef<CardsPanelHandle, CardsPanelProps>(function CardsP
   // 全局长任务提示（转风格/扩写中，禁用编辑）
   const [busy, setBusy] = useState<string | null>(null)
   const [renderingIdx, setRenderingIdx] = useState<number | null>(null)
+  // 整组渲染进度 + 停止旗标：逐张循环之间检查，中途可停（剩余卡片留待「未渲染」状态单独补渲）
+  const [renderProgress, setRenderProgress] = useState<{ done: number; total: number } | null>(null)
+  const renderAbortRef = useRef(false)
   // 推送草稿箱进行中（传图较慢，防重复点击）
   const [pushing, setPushing] = useState(false)
   const [bgBusy, setBgBusy] = useState<number | null>(null)
   // AI 整卡成图进行中的卡序
   const [aiBusy, setAiBusy] = useState<number | null>(null)
+  // 在途生图（背图/整卡）：reqId 供「停止」经 image:cancel 中断主进程请求；旗标区分「已取消」与真失败
+  const [genStop, setGenStop] = useState<{ label: string; reqId: string } | null>(null)
+  const genCancelFlag = useRef(false)
   // 另一格式的存档版（转风格时自动备份）：非空则露出零成本「切回」入口
   const [archived, setArchived] = useState<CardDeck | null>(null)
   // 强调色选色条展开状态与取色器待应用颜色
   const [showAccent, setShowAccent] = useState(false)
   const [customColor, setCustomColor] = useState('')
+  // 批量开关条：全部序号 / 全部深色底反白（勾选后点「应用到全组」才整组重渲）
+  const [showBatch, setShowBatch] = useState(false)
+  const [batchNumbered, setBatchNumbered] = useState(false)
+  const [batchDark, setBatchDark] = useState(false)
   // 渲染完成后自增，给 asset:// 图片 URL 加参破缓存
   const [version, setVersion] = useState(0)
   const [dirtyN, setDirtyN] = useState(0)
@@ -107,18 +117,27 @@ const CardsPanel = forwardRef<CardsPanelHandle, CardsPanelProps>(function CardsP
 
   // ---- 读写与渲染 ----
 
-  /** 逐张离屏渲染（主进程串行队列），完毕后重读磁盘同步 png 字段 */
+  /** 逐张离屏渲染（主进程串行队列），完毕后重读磁盘同步 png 字段；中途「停止」只停剩余队列 */
   const renderSeq = useCallback(
     async (indices: number[]) => {
+      renderAbortRef.current = false
+      setRenderProgress({ done: 0, total: indices.length })
+      let done = 0
       for (const i of indices) {
+        if (renderAbortRef.current) break
         setRenderingIdx(i)
         try {
           await window.api.invoke('cards:render', project, i)
         } catch (err) {
           onToast(`第 ${i + 1} 张渲染失败：${err instanceof Error ? err.message : err}`)
         }
+        done += 1
+        setRenderProgress({ done, total: indices.length })
       }
+      renderAbortRef.current = false
       setRenderingIdx(null)
+      setRenderProgress(null)
+      if (done < indices.length) onToast(`已停止渲染，剩余 ${indices.length - done} 张未渲染（可单张补渲）`)
       const fresh = await window.api.invoke('cards:read', project)
       if (fresh) setDeck(fresh)
       setVersion((v) => v + 1)
@@ -235,10 +254,14 @@ const CardsPanel = forwardRef<CardsPanelHandle, CardsPanelProps>(function CardsP
         return
       }
       setBgBusy(i)
+      // reqId → 主进程建 controller，「停止」按钮经 image:cancel 真中断请求（不空等 180s 超时）
+      const reqId = `card-bg-${Date.now()}`
+      genCancelFlag.current = false
+      setGenStop({ label: `正在生成第 ${i + 1} 张的背图…`, reqId })
       try {
         // bgPrompt 只交代画面主体，构图留白/禁文字/平台调性由组装函数统一补齐
         const prompt = buildCardBgPrompt(card, deckRef.current?.format ?? 'wechat')
-        const b64 = await window.api.invoke('image:generate', prompt, { size: '1K', ratio: '3:4' })
+        const b64 = await window.api.invoke('image:generate', prompt, { size: '1K', ratio: '3:4' }, reqId)
         // 时间戳命名，避免换序后新背图覆盖别的卡还在引用的旧图
         const rel = await window.api.invoke('project:saveAsset', project, `assets/card-bg-${Date.now()}.png`, b64)
         const cur = deckRef.current
@@ -248,8 +271,11 @@ const CardsPanel = forwardRef<CardsPanelHandle, CardsPanelProps>(function CardsP
         await window.api.invoke('cards:write', project, next)
         await renderSeq([i])
       } catch (err) {
-        onToast(`背图生成失败：${err instanceof Error ? err.message : err}`)
+        onToast(
+          genCancelFlag.current ? '已取消背图生成' : `背图生成失败：${err instanceof Error ? err.message : err}`
+        )
       } finally {
+        setGenStop(null)
         setBgBusy(null)
       }
     },
@@ -266,8 +292,11 @@ const CardsPanel = forwardRef<CardsPanelHandle, CardsPanelProps>(function CardsP
       // 文字直接画进图里：版式层级/字号约束/禁乱码由组装函数统一交代
       const prompt = buildAiCardPrompt(card, cur.format)
       setAiBusy(i)
+      const reqId = `card-ai-${Date.now()}`
+      genCancelFlag.current = false
+      setGenStop({ label: `正在 AI 成图（第 ${i + 1} 张）…`, reqId })
       try {
-        const b64 = await window.api.invoke('image:generate', prompt, { size: '1K', ratio: '3:4' })
+        const b64 = await window.api.invoke('image:generate', prompt, { size: '1K', ratio: '3:4' }, reqId)
         const rel = await window.api.invoke('project:saveAsset', project, `assets/card-ai-${Date.now()}.png`, b64)
         const now = deckRef.current
         if (!now?.cards[i]) return
@@ -276,8 +305,9 @@ const CardsPanel = forwardRef<CardsPanelHandle, CardsPanelProps>(function CardsP
         await window.api.invoke('cards:write', project, next)
         await renderSeq([i])
       } catch (err) {
-        onToast(`AI 成图失败：${err instanceof Error ? err.message : err}`)
+        onToast(genCancelFlag.current ? '已取消 AI 成图' : `AI 成图失败：${err instanceof Error ? err.message : err}`)
       } finally {
+        setGenStop(null)
         setAiBusy(null)
       }
     },
@@ -371,6 +401,47 @@ const CardsPanel = forwardRef<CardsPanelHandle, CardsPanelProps>(function CardsP
     },
     [restructure]
   )
+
+  /** 复制第 i 张：文案与背图描述照搬，AI 成图与渲染产物不复用（新卡走排版重渲） */
+  const dupCard = useCallback(
+    (i: number) => {
+      const cards = [...(deckRef.current?.cards ?? [])]
+      const src = cards[i]
+      if (!src) return
+      cards.splice(i + 1, 0, { ...src, mode: undefined, aiImage: '', renderedZoom: undefined, png: '' })
+      void restructure(cards)
+    },
+    [restructure]
+  )
+
+  /** 批量开关应用到全组：封面卡不带要点序号（模板层也对齐），整组重渲 */
+  const applyBatch = useCallback(async () => {
+    await flush()
+    const cur = deckRef.current
+    if (!cur?.cards.length) return
+    const next = {
+      ...cur,
+      cards: cur.cards.map((c, i) => ({
+        ...c,
+        numbered: i > 0 && batchNumbered ? true : undefined,
+        dark: batchDark ? true : undefined
+      }))
+    }
+    setDeck(next)
+    await window.api.invoke('cards:write', project, next)
+    setShowBatch(false)
+    await renderSeq(next.cards.map((_, i) => i))
+    const labels = [batchNumbered && '要点序号', batchDark && '深色底反白'].filter(Boolean)
+    onToast(labels.length ? `已应用到全组：${labels.join('、')}` : '已应用到全组：两项均关闭')
+  }, [project, flush, renderSeq, batchNumbered, batchDark, onToast])
+
+  /** 打开批量条时按当前卡片组回填勾选（避免打开就显示错的初值） */
+  const openBatch = useCallback(() => {
+    const cards = deckRef.current?.cards ?? []
+    setBatchNumbered(cards.length > 1 && cards.slice(1).every((c) => c.numbered))
+    setBatchDark(cards.length > 0 && cards.every((c) => c.dark))
+    setShowBatch((v) => !v)
+  }, [])
 
   // ---- 全局操作：转风格 / 扩写成文章 ----
 
@@ -649,6 +720,14 @@ const CardsPanel = forwardRef<CardsPanelHandle, CardsPanelProps>(function CardsP
             style={{ background: deck.accent || (deck.format === 'wechat' ? '#b0803c' : '#ff2e63') }}
           />
         </button>
+        <button
+          onClick={openBatch}
+          disabled={globalBusy || !deck.cards.length}
+          title="批量开关：要点序号、深色底反白一次应用到全组（整组重渲）"
+          className={`whitespace-nowrap rounded px-2 py-0.5 hover:bg-panel-3 disabled:opacity-40 ${showBatch ? 'bg-panel-3 text-ink' : ''}`}
+        >
+          <Icon name="sliders" size={12} className="mr-1.5" />批量
+        </button>
         {/* 版式分段控件（§5.8）：当前版高亮，点另一段即执行「切回/转成」，
             不再让用户从两个动词按钮里猜哪条路不花 token */}
         <Segmented
@@ -737,12 +816,79 @@ const CardsPanel = forwardRef<CardsPanelHandle, CardsPanelProps>(function CardsP
         </div>
       )}
 
+      {/* 批量开关条：勾选后点「应用到全组」一次生效（避免每次勾选都整组重渲） */}
+      {showBatch && (
+        <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-panel-3 bg-panel-2 px-4 py-1.5 text-ink-dim">
+          <span className="text-[10px]">批量</span>
+          <label className="flex cursor-pointer items-center gap-1.5 text-[10px]" title="给所有内容卡加 01/02 编号（封面卡不生效）">
+            <input
+              type="checkbox"
+              checked={batchNumbered}
+              onChange={(e) => setBatchNumbered(e.target.checked)}
+              disabled={globalBusy}
+              className="accent-accent"
+            />
+            全部要点序号
+          </label>
+          <label className="flex cursor-pointer items-center gap-1.5 text-[10px]" title="背图整体偏深时全组切深色底反白">
+            <input
+              type="checkbox"
+              checked={batchDark}
+              onChange={(e) => setBatchDark(e.target.checked)}
+              disabled={globalBusy}
+              className="accent-accent"
+            />
+            全部深色底反白
+          </label>
+          <button
+            onClick={() => void applyBatch()}
+            disabled={globalBusy}
+            className="rounded bg-accent px-2 py-0.5 text-white hover:opacity-90 disabled:opacity-40"
+          >
+            应用到全组
+          </button>
+        </div>
+      )}
+
       {/* 长任务横幅 */}
       {busy && (
         <div className="flex items-center gap-2 border-b border-panel-3 bg-panel-2 px-4 py-1.5 text-ink-dim">
           <span className="animate-pulse"></span>
           <span className="min-w-0 flex-1 truncate">{busy}</span>
           <button onClick={() => abortRef.current?.()} className="rounded px-2 py-0.5 text-st-bad hover:bg-panel-3">
+            停止
+          </button>
+        </div>
+      )}
+      {/* 生图进行中：停止经 image:cancel 真中断主进程请求 */}
+      {genStop && (
+        <div className="flex items-center gap-2 border-b border-panel-3 bg-panel-2 px-4 py-1.5 text-ink-dim">
+          <Icon name="spinner" size={12} className="animate-spin text-accent" />
+          <span className="min-w-0 flex-1 truncate">{genStop.label}</span>
+          <button
+            onClick={() => {
+              genCancelFlag.current = true
+              void window.api.invoke('image:cancel', genStop.reqId)
+            }}
+            className="rounded px-2 py-0.5 text-st-bad hover:bg-panel-3"
+          >
+            停止
+          </button>
+        </div>
+      )}
+      {/* 整组渲染进度：逐张离屏渲染，可中途停止（剩余卡片留待补渲） */}
+      {renderProgress && (
+        <div className="flex items-center gap-2 border-b border-panel-3 bg-panel-2 px-4 py-1.5 text-ink-dim">
+          <Icon name="spinner" size={12} className="animate-spin text-accent" />
+          <span className="min-w-0 flex-1 truncate">
+            正在渲染 {Math.min(renderProgress.done + 1, renderProgress.total)} / {renderProgress.total} 张…
+          </span>
+          <button
+            onClick={() => {
+              renderAbortRef.current = true
+            }}
+            className="rounded px-2 py-0.5 text-st-bad hover:bg-panel-3"
+          >
             停止
           </button>
         </div>
@@ -809,6 +955,9 @@ const CardsPanel = forwardRef<CardsPanelHandle, CardsPanelProps>(function CardsP
                   </button>
                   <button onClick={() => insertCard(i)} disabled={globalBusy} title="在此卡下方插入新卡片" className="inline-flex h-[22px] w-[22px] items-center justify-center rounded hover:bg-panel-3 hover:text-accent disabled:opacity-30">
                     <Icon name="plus" size={12} />
+                  </button>
+                  <button onClick={() => dupCard(i)} disabled={globalBusy} title="复制本张（文案与背图描述照搬，新卡走排版重渲）" className="inline-flex h-[22px] w-[22px] items-center justify-center rounded hover:bg-panel-3 hover:text-accent disabled:opacity-30">
+                    <Icon name="copy" size={12} />
                   </button>
                   <button onClick={() => deleteCard(i)} disabled={globalBusy} title="删除本张" className="inline-flex h-[22px] w-[22px] items-center justify-center rounded hover:bg-panel-3 hover:text-st-bad disabled:opacity-30">
                     <Icon name="trash" size={12} />

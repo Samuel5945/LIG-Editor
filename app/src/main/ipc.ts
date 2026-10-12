@@ -253,7 +253,25 @@ export function registerIpc(): void {
   handle('web:research', (queries) => webResearch(queries))
 
   // ---- 三配图管线（M6）----
-  handle('image:generate', (prompt, opts) => generateImage(prompt, opts))
+  // 生图请求注册表：渲染层传 reqId + 点「停止」经 image:cancel 中断主进程侧 fetch
+  // （信号跨进程传不了，按 reqId 在主进程建 controller；用完即摘，防泄漏）
+  const imageGenControllers = new Map<string, AbortController>()
+  handle('image:generate', async (prompt, opts, reqId) => {
+    if (!reqId) return generateImage(prompt, opts)
+    const controller = new AbortController()
+    imageGenControllers.set(reqId, controller)
+    try {
+      return await generateImage(prompt, opts, controller.signal)
+    } finally {
+      imageGenControllers.delete(reqId)
+    }
+  })
+  handle('image:cancel', (reqId) => {
+    const controller = imageGenControllers.get(reqId)
+    if (!controller) return false
+    controller.abort()
+    return true
+  })
   handle('figure:saveHtml', (project, html, relPath) => saveFigureHtml(project, html, relPath))
   handle('figure:readHtml', (project, relPath) => readFigureHtml(project, relPath))
   handle('figure:render', (project, htmlRelPath) => renderFigure(project, htmlRelPath))

@@ -807,8 +807,11 @@ export interface IpcApi {
   /** 审阅级深度检索：多查询+新闻源+深抓正文；配了搜索 API 则走 API */
   'web:research': (queries: string[]) => WebSearchResult[]
   // ---- 三配图管线（M6）----
-  /** AI 生图：返回图片 base64（不落盘，预览确认后经 project:saveAsset 入 assets/） */
-  'image:generate': (prompt: string, opts?: ImageGenOptions) => string
+  /** AI 生图：返回图片 base64（不落盘，预览确认后经 project:saveAsset 入 assets/）；
+   *  传 reqId 后可用 image:cancel 按该 id 中断在途请求（界面「停止」按钮） */
+  'image:generate': (prompt: string, opts?: ImageGenOptions, reqId?: string) => string
+  /** 取消在途生图：按 reqId 中断；找不到在途请求（已完成或未开始）返回 false */
+  'image:cancel': (reqId: string) => boolean
   /** 保存图表 HTML 源码；relPath 缺省时新建 figures/fig-N.html，返回相对路径 */
   'figure:saveHtml': (project: string, html: string, relPath?: string) => string
   /** 读图表 HTML 源码（改源码重渲染编辑用） */
