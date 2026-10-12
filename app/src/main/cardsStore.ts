@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync } from 'fs'
 import { join } from 'path'
-import { CARD_H, CARD_W, cardHtml, type CardDeck, type CardFormat } from '@shared/cards'
+import { CARD_H, CARD_W, cardHtml, normalizeDeck, type CardDeck, type CardFormat } from '@shared/cards'
 import { projectDir, saveAsset, writeTracked } from './projectStore'
 import { renderHtmlFixed } from './figureRender'
 
@@ -8,7 +8,8 @@ import { renderHtmlFixed } from './figureRender'
  * 贴图卡片存储与渲染（cards.json + cards/格式/card-N.html|png）
  * - readCards/writeCards：卡片组落盘（own-write 标记避免 watcher 回环）
  * - 存档 cards-格式.json：转风格前备份原版，支持零成本互切
- * - renderCard：模板注入 → cards/格式/card-N.html → 固定 1242×1656 离屏截图 → 同目录 PNG
+ * - renderCard：模板注入 → cards/格式/card-N.html → 固定 1242×1656 离屏截图 → 同目录 PNG，
+ *   并把页内溢出保护实测的缩字系数回写 renderedZoom（编辑区「已缩字」预警数据源）
  */
 
 function cardsPath(project: string): string {
@@ -18,30 +19,6 @@ function cardsPath(project: string): string {
 /** 非当前格式的存档文件：转风格/互切时读写 */
 function archivePath(project: string, format: CardFormat): string {
   return join(projectDir(project), `cards-${format}.json`)
-}
-
-/** 磁盘 JSON → 规范化 CardDeck（字段白名单重建，新增字段必须在这里透传） */
-function normalizeDeck(raw: Partial<CardDeck>): CardDeck | null {
-  if (!Array.isArray(raw.cards)) return null
-  return {
-    format: raw.format === 'xhs' ? 'xhs' : 'wechat',
-    accent: typeof raw.accent === 'string' && raw.accent ? raw.accent : undefined,
-    caption: typeof raw.caption === 'string' && raw.caption ? raw.caption : undefined,
-    cards: raw.cards.map((c) => ({
-      tag: c?.tag ?? '',
-      title: c?.title ?? '',
-      body: c?.body ?? '',
-      bgPrompt: c?.bgPrompt ?? '',
-      bgImage: c?.bgImage ?? '',
-      bgOpacity: typeof c?.bgOpacity === 'number' ? c.bgOpacity : undefined,
-      dark: c?.dark === true ? true : undefined,
-      fontScale: typeof c?.fontScale === 'number' ? c.fontScale : undefined,
-      numbered: c?.numbered === true ? true : undefined,
-      mode: c?.mode === 'ai' ? ('ai' as const) : undefined,
-      aiImage: c?.aiImage ?? '',
-      png: c?.png ?? ''
-    }))
-  }
 }
 
 export function readCards(project: string): CardDeck | null {
@@ -72,6 +49,7 @@ export async function renderCard(project: string, index: number): Promise<string
   if (!deck || !deck.cards[index]) throw new Error(`卡片不存在：#${index + 1}`)
   const card = deck.cards[index]
   let base64: string
+  let renderedZoom: number | undefined
   if (card.mode === 'ai' && card.aiImage) {
     // AI 整卡成图：不走排版模板，直接把成图拷贝为产物
     base64 = readFileSync(join(projectDir(project), card.aiImage)).toString('base64')
@@ -90,13 +68,17 @@ export async function renderCard(project: string, index: number): Promise<string
     // writeTracked 不建目录，首次渲染前目录还不存在
     mkdirSync(dir, { recursive: true })
     writeTracked(htmlAbs, html)
-    base64 = await renderHtmlFixed(htmlAbs, CARD_W, CARD_H)
+    const rendered = await renderHtmlFixed(htmlAbs, CARD_W, CARD_H)
+    base64 = rendered.base64
+    renderedZoom = rendered.zoom
   }
   const pngRel = saveAsset(project, `cards/${deck.format}/card-${index + 1}.png`, base64)
   // 渲染期间文案可能又改了，回写前重读最新 deck
   const latest = readCards(project)
   if (latest?.cards[index]) {
     latest.cards[index].png = pngRel
+    // 缩字系数只在排版渲染时有意义；AI 整卡模式清掉旧值避免提示过期
+    latest.cards[index].renderedZoom = renderedZoom
     writeCards(project, latest)
   }
   return pngRel

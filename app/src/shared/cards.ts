@@ -32,6 +32,8 @@ export interface CardItem {
   aiImage?: string
   /** 要点序号：内容卡每行前加 01/02 强调色编号（封面卡不生效） */
   numbered?: boolean
+  /** 上次渲染的整块缩字系数（页内溢出保护实测，1 = 未缩字）：排版模式渲染后由主进程回写，编辑区据此提示 */
+  renderedZoom?: number
   /** 渲染产物 cards/ 相对路径；空 = 未渲染 */
   png: string
 }
@@ -77,6 +79,37 @@ export function cardsPlainText(cards: CardItem[]): string {
     null,
     2
   )
+}
+
+/**
+ * 磁盘 JSON → 规范化 CardDeck：字段白名单重建，白名单外的字段一律丢弃，
+ * 新增字段必须在这里透传（cards.json 是不可信外部数据，类型错误在这里拦下而不是炸渲染——
+ * 字符串字段同样严判类型，"tag": 123 这类数字透传进模板会在转义时抛异常）。
+ * 纯函数放 shared：主进程读盘的唯一闸口，单测可直接验证字段透传。
+ */
+export function normalizeDeck(raw: Partial<CardDeck>): CardDeck | null {
+  if (!Array.isArray(raw.cards)) return null
+  const str = (v: unknown): string => (typeof v === 'string' ? v : '')
+  return {
+    format: raw.format === 'xhs' ? 'xhs' : 'wechat',
+    accent: str(raw.accent) || undefined,
+    caption: str(raw.caption) || undefined,
+    cards: raw.cards.map((c) => ({
+      tag: str(c?.tag),
+      title: str(c?.title),
+      body: str(c?.body),
+      bgPrompt: str(c?.bgPrompt),
+      bgImage: str(c?.bgImage),
+      bgOpacity: typeof c?.bgOpacity === 'number' ? c.bgOpacity : undefined,
+      dark: c?.dark === true ? true : undefined,
+      fontScale: typeof c?.fontScale === 'number' ? c.fontScale : undefined,
+      numbered: c?.numbered === true ? true : undefined,
+      mode: c?.mode === 'ai' ? ('ai' as const) : undefined,
+      aiImage: str(c?.aiImage),
+      renderedZoom: typeof c?.renderedZoom === 'number' ? c.renderedZoom : undefined,
+      png: str(c?.png)
+    }))
+  }
 }
 
 // ---------- 对话换强调色指令（与 skill-install 同构：围栏指令块 → 确认卡片） ----------
@@ -144,6 +177,12 @@ const bodyLines = (body: string): string[] =>
     .map((l) => l.trim())
     .filter(Boolean)
     .map((l) => esc(l).replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>'))
+
+// 衬线点缀字体栈（公众号风眉标/页码）：只引用系统或用户已安装字体的**字体名**，仓库不内嵌任何
+// 字体文件，无 redistribution 授权问题（宋体系与 Georgia 为 Windows/macOS 系统自带）；
+// 全部缺席时回退系统 serif，不影响版式成立。
+const SERIF_FONT = '"Noto Serif SC", "Source Han Serif SC", "Songti SC", "SimSun", serif'
+const NUM_FONT = 'Georgia, "Times New Roman", serif'
 
 export interface CardHtmlOptions {
   format: CardFormat
@@ -222,7 +261,8 @@ ${bgSrc ? '<div class="veil"></div>' : ''}
 ${inner}
 </div>
 <script>
-  // 溢出保护：文字装不下时逐档缩小内容块（zoom 连同间距等比缩），截图前同步完成
+  // 溢出保护：文字装不下时逐档缩小内容块（zoom 连同间距等比缩），截图前同步完成；
+  // 最终系数挂在 window.__cardZoom 上，主进程截图后回读并写回 cards.json（编辑区据此提示「已缩字」）
   (function () {
     var box = document.querySelector('.stage').firstElementChild
     if (!box) return
@@ -231,6 +271,7 @@ ${inner}
       z -= 0.05
       box.style.zoom = z
     }
+    window.__cardZoom = z
   })()
 </script>
 </body>
@@ -280,13 +321,13 @@ function wechatInner(
       ? `<span style="color: ${c.accent}; font-weight: 700; margin-right: 20px; letter-spacing: 2px;">${String(k + 1).padStart(2, '0')}</span>`
       : ''
   if (cover) {
-    // 封面：眉标（线—字—线）+ 大标题 + 菱形分隔 + 副题，整体居中
+    // 封面：眉标（线—字—线，衬线字提升书面气）+ 大标题 + 菱形分隔 + 副题，整体居中
     return `<div style="${frame} align-items: center;">
   ${ticks}
   <div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;">
     <div style="display: flex; align-items: center; gap: 32px; margin-bottom: 72px;">
       <span style="width: 72px; height: 1px; background: ${c.line};"></span>
-      <span style="font-size: ${fz(30)}px; letter-spacing: 14px; margin-right: -14px; color: ${c.eyebrow};">${tag || '图 文 卡 片'}</span>
+      <span style="font-family: ${SERIF_FONT}; font-size: ${fz(30)}px; letter-spacing: 14px; margin-right: -14px; color: ${c.eyebrow};">${tag || '图 文 卡 片'}</span>
       <span style="width: 72px; height: 1px; background: ${c.line};"></span>
     </div>
     <h1 style="font-size: ${fz(96)}px; line-height: 1.32; font-weight: 700; letter-spacing: 2px; color: ${c.title};">${title}</h1>
@@ -295,11 +336,11 @@ function wechatInner(
   </div>
 </div>`
   }
-  // 内容卡：页眉页码压顶，正文区垂直居中（行数少时不堆在左上角），页脚饰线收底
+  // 内容卡：页眉页码压顶（衬线数字更有刊物页码的完成度），正文区垂直居中，页脚饰线收底
   return `<div style="${frame}">
   ${ticks}
   <div style="display: flex; align-items: baseline; gap: 24px; margin-bottom: 48px;">
-    <span style="font-size: ${fz(34)}px; color: ${c.accent}; font-weight: 700; letter-spacing: 3px;">${pageNo}</span>
+    <span style="font-family: ${NUM_FONT}; font-size: ${fz(34)}px; color: ${c.accent}; font-weight: 700; letter-spacing: 3px;">${pageNo}</span>
     <span style="flex: 1; height: 1px; background: ${c.line};"></span>
   </div>
   <div style="flex: 1; display: flex; flex-direction: column; justify-content: center;">
@@ -373,7 +414,11 @@ function xhsInner(
 
 // ---------- 生图提示词组装（面向商汤 u1.5 系的中文结构化写法：约束前置、短句分号相连） ----------
 
-/** 平台 × 深浅的背图调性词：bgPrompt 只描述画面主体，调性与约束由这里统一补齐 */
+/**
+ * 平台 × 深浅的兜底调性词：**只在 bgPrompt 缺省时注入**。贴图生成契约（prompts.ts）要求
+ * bgPrompt 自带「整组色调风格统一」的画面描述——bgPrompt 有值时再叠加这里的色相词会自相矛盾，
+ * 还会把公众号浅色卡锁死在米白暖纸里，蓝绿青等色彩世界全出不来。
+ */
 const CARD_TONE: Record<CardFormat, { light: string; dark: string }> = {
   wechat: {
     light: '米白暖纸调、低饱和、柔和漫射光、安静克制的书面质感',
@@ -385,16 +430,30 @@ const CARD_TONE: Record<CardFormat, { light: string; dark: string }> = {
   }
 }
 
-/** 卡背图生图提示词：背图只是垫在文字下的氛围底图，构图必须给文字留位、严禁出现文字元素 */
+/**
+ * 卡背图生图提示词。原则：**色相交给 bgPrompt，功能约束由模板兜底**——
+ * - 有 bgPrompt：只补与色相无关的品质词（构图留白/柔光/细腻）保文字可读性；
+ *   深色卡加明度提示（亮图压深遮罩会发灰，功能性），浅色卡才压低对比（深色卡的夜色氛围需要光比）。
+ * - 无 bgPrompt：退回平台兜底调性，保证永不出空 prompt。
+ */
 export function buildCardBgPrompt(card: Pick<CardItem, 'bgPrompt' | 'dark'>, format: CardFormat): string {
-  const subject = card.bgPrompt.trim() || (format === 'wechat' ? '素雅纸纹肌理' : '柔和渐变色块')
-  return [
-    `竖版 3:4 氛围背景图：${subject}`,
-    `构图主体靠画面边缘，中部留出大面积柔和负空间供文字排布`,
-    `色调：${CARD_TONE[format][card.dark ? 'dark' : 'light']}`,
-    `光线柔和、整体低对比、质感细腻`,
-    `画面中不得出现任何文字、字母、数字、标志或水印`
-  ].join('；')
+  const subject = card.bgPrompt.trim()
+  const parts: string[] = ['竖版 3:4 氛围背景图']
+  if (subject) {
+    parts.push(
+      `画面：${subject}`,
+      '构图简洁、大块面，主体靠画面边缘，中部留出大面积柔和负空间供文字排布',
+      '光线柔和、质感细腻',
+      card.dark ? '整体明度压暗、夜色氛围' : '低饱和、整体低对比'
+    )
+  } else {
+    parts.push(
+      CARD_TONE[format][card.dark ? 'dark' : 'light'],
+      '构图简洁，主体靠画面边缘，中部留出大面积柔和负空间供文字排布'
+    )
+  }
+  parts.push('画面中不得出现任何文字、字母、数字、标志或水印')
+  return parts.join('；')
 }
 
 /** AI 整卡成图提示词：文字直接画进图里，逐级交代版式、字号层级与禁乱码约束 */

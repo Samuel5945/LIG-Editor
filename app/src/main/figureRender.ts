@@ -127,12 +127,18 @@ export function captureHtmlPreview(
   })
 }
 
+/** 固定画布离屏渲染结果：PNG base64 + 页内溢出保护实测的缩字系数（无缩字脚本的页面恒为 1） */
+export interface FixedRenderResult {
+  base64: string
+  zoom: number
+}
+
 /**
- * 固定画布离屏渲染（贴图卡片、封面用）：不量内容尺寸，直接按给定视口截图，返回 PNG base64。
+ * 固定画布离屏渲染（贴图卡片、封面用）：不量内容尺寸，直接按给定视口截图；缩字系数供编辑区溢出预警。
  * 要出 2 倍图请在 HTML 里自己套 transform: scale(2)（见 shared/coverTemplates 的 scale）——
  * 这里不设 zoomFactor：离屏窗口上实测它不生效，页面仍按 1× 画在画布左上角，其余是白底。
  */
-export function renderHtmlFixed(absHtml: string, width: number, height: number): Promise<string> {
+export function renderHtmlFixed(absHtml: string, width: number, height: number): Promise<FixedRenderResult> {
   return enqueue(async () => {
     const win = new BrowserWindow({
       show: false,
@@ -150,7 +156,12 @@ export function renderHtmlFixed(absHtml: string, width: number, height: number):
       // 等背图解码绘制稳定
       await sleep(500)
       const image = await win.webContents.capturePage()
-      return image.toPNG().toString('base64')
+      // 卡片页内脚本把最终缩字系数挂在 window.__cardZoom；无该脚本的页面（封面等）undefined → 1
+      const zoom = (await win.webContents.executeJavaScript('window.__cardZoom ?? 1', true)) as unknown
+      return {
+        base64: image.toPNG().toString('base64'),
+        zoom: typeof zoom === 'number' && zoom > 0 && zoom <= 1 ? zoom : 1
+      }
     } finally {
       win.destroy()
     }

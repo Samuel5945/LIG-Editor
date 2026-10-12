@@ -9,8 +9,10 @@ import {
   cardsPlainText,
   hexToRgba,
   isHexColor,
+  normalizeDeck,
   parseAccentDirective,
   parseCardItems,
+  type CardDeck,
   type CardItem
 } from '../cards'
 
@@ -187,10 +189,21 @@ describe('cardHtml', () => {
     expect(cover).not.toContain('>01</span>')
   })
 
-  it('溢出保护：页内自带缩字脚本', () => {
+  it('溢出保护：页内自带缩字脚本，最终系数写到 __cardZoom 供主进程回读', () => {
     const html = cardHtml(card(), { format: 'wechat', index: 1, total: 3, bgSrc: '' })
     expect(html).toContain('scrollHeight > box.clientHeight')
     expect(html).toContain('style.zoom')
+    expect(html).toContain('window.__cardZoom = z')
+  })
+
+  it('衬线点缀：公众号眉标用宋体系栈、页码用衬线数字栈，小红书不引入（口语气质用无衬线）', () => {
+    const cover = cardHtml(card(), { format: 'wechat', index: 0, total: 3, bgSrc: '' })
+    expect(cover).toContain('Noto Serif SC')
+    const body = cardHtml(card(), { format: 'wechat', index: 1, total: 3, bgSrc: '' })
+    expect(body).toContain('Georgia')
+    const xhs = cardHtml(card(), { format: 'xhs', index: 0, total: 3, bgSrc: '' })
+    expect(xhs).not.toContain('Noto Serif SC')
+    expect(xhs).not.toContain('Georgia')
   })
 })
 
@@ -198,26 +211,37 @@ describe('buildCardBgPrompt', () => {
   it('bgPrompt 原文入词，补 3:4 竖版、留白构图与禁文字约束', () => {
     const p = buildCardBgPrompt({ bgPrompt: '清晨窗台上的咖啡与笔记本', dark: false }, 'wechat')
     expect(p).toContain('竖版 3:4')
-    expect(p).toContain('清晨窗台上的咖啡与笔记本')
+    expect(p).toContain('画面：清晨窗台上的咖啡与笔记本')
     expect(p).toContain('负空间')
     expect(p).toContain('不得出现任何文字')
     expect(p).toContain('水印')
   })
 
-  it('深色卡切深色调性词，平台调性不同', () => {
+  it('bgPrompt 有值时不注入平台色相词——色相交给画面描述，只补色相无关的品质词', () => {
+    const wcLight = buildCardBgPrompt({ bgPrompt: '深海蓝色海底世界，光束穿透水面', dark: false }, 'wechat')
+    expect(wcLight).not.toContain('米白暖纸调')
+    expect(wcLight).not.toContain('色调：')
+    expect(wcLight).toContain('低饱和')
+    expect(wcLight).toContain('低对比')
+    // 深色卡不压低对比（夜色氛围需要光比），改带明度提示
     const wcDark = buildCardBgPrompt({ bgPrompt: '夜色书桌', dark: true }, 'wechat')
-    expect(wcDark).toContain('深棕暗调')
-    const xhsLight = buildCardBgPrompt({ bgPrompt: '春日野餐', dark: false }, 'xhs')
-    expect(xhsLight).toContain('柔粉奶油调')
-    const xhsDark = buildCardBgPrompt({ bgPrompt: '春日野餐', dark: true }, 'xhs')
-    expect(xhsDark).toContain('深紫夜调')
+    expect(wcDark).not.toContain('深棕暗调')
+    expect(wcDark).not.toContain('低对比')
+    expect(wcDark).toContain('明度压暗')
   })
 
-  it('bgPrompt 留空时兜底平台默认画面，不产出空主体', () => {
-    const p = buildCardBgPrompt({ bgPrompt: '   ', dark: false }, 'xhs')
-    expect(p).toContain('柔和渐变色块')
-    const wc = buildCardBgPrompt({ bgPrompt: '', dark: false }, 'wechat')
-    expect(wc).toContain('素雅纸纹肌理')
+  it('bgPrompt 留空时才兜底平台调性词（含色相），浅色深色各归其位', () => {
+    const wcLight = buildCardBgPrompt({ bgPrompt: '', dark: false }, 'wechat')
+    expect(wcLight).toContain('米白暖纸调')
+    const wcDark = buildCardBgPrompt({ bgPrompt: '   ', dark: true }, 'wechat')
+    expect(wcDark).toContain('深棕暗调')
+    const xhsLight = buildCardBgPrompt({ bgPrompt: '', dark: false }, 'xhs')
+    expect(xhsLight).toContain('柔粉奶油调')
+    const xhsDark = buildCardBgPrompt({ bgPrompt: '', dark: true }, 'xhs')
+    expect(xhsDark).toContain('深紫夜调')
+    // 兜底路径同样带禁文字与留白约束，永不出空 prompt
+    expect(xhsDark).toContain('负空间')
+    expect(xhsDark).toContain('水印')
   })
 })
 
@@ -240,6 +264,94 @@ describe('buildAiCardPrompt', () => {
     expect(xhs).toContain('柔粉奶油调')
     // 无要点时不输出「要点」段
     expect(xhs).not.toContain('要点「')
+  })
+})
+
+describe('normalizeDeck', () => {
+  // 构造带白名单外字段的原始 JSON（模拟手写/旧版本/损坏数据的容错路径）
+  const rawCard = (extra: Record<string, unknown> = {}): unknown => ({
+    tag: '角标',
+    title: '标题',
+    body: '正文',
+    bgPrompt: '画面',
+    bgImage: 'assets/a.png',
+    bgOpacity: 30,
+    dark: true,
+    fontScale: 110,
+    numbered: true,
+    mode: 'ai',
+    aiImage: 'assets/b.png',
+    renderedZoom: 0.85,
+    png: 'cards/xhs/card-1.png',
+    hackerField: 'x',
+    fontScaleTypo: '110',
+    ...extra
+  })
+
+  it('白名单字段逐项透传，白名单外字段与类型不符字段丢弃', () => {
+    const deck = normalizeDeck({ format: 'xhs', accent: '#16a085', caption: '配文', cards: [rawCard()] as CardItem[] })
+    expect(deck).toEqual({
+      format: 'xhs',
+      accent: '#16a085',
+      caption: '配文',
+      cards: [
+        {
+          tag: '角标',
+          title: '标题',
+          body: '正文',
+          bgPrompt: '画面',
+          bgImage: 'assets/a.png',
+          bgOpacity: 30,
+          dark: true,
+          fontScale: 110,
+          numbered: true,
+          mode: 'ai',
+          aiImage: 'assets/b.png',
+          renderedZoom: 0.85,
+          png: 'cards/xhs/card-1.png'
+        }
+      ]
+    })
+  })
+
+  it('类型不符的数值/布尔/枚举字段兜底丢弃，字符串字段补空串', () => {
+    const deck = normalizeDeck({
+      cards: [
+        {
+          tag: 123,
+          title: '标题',
+          bgOpacity: '30',
+          dark: 'yes',
+          fontScale: null,
+          numbered: 0,
+          mode: 'layout-typo',
+          renderedZoom: '0.8'
+        }
+      ] as unknown as CardItem[]
+    })
+    expect(deck!.cards[0]).toEqual({
+      tag: '',
+      title: '标题',
+      body: '',
+      bgPrompt: '',
+      bgImage: '',
+      bgOpacity: undefined,
+      dark: undefined,
+      fontScale: undefined,
+      numbered: undefined,
+      mode: undefined,
+      aiImage: '',
+      renderedZoom: undefined,
+      png: ''
+    })
+  })
+
+  it('format 非法回 wechat；accent/caption 空串归 undefined；cards 非数组返回 null', () => {
+    expect(normalizeDeck({ format: 'red' as CardDeck['format'], cards: [] })!.format).toBe('wechat')
+    expect(normalizeDeck({ accent: '', cards: [] })!.accent).toBeUndefined()
+    expect(normalizeDeck({ caption: '', cards: [] })!.caption).toBeUndefined()
+    expect(normalizeDeck({ cards: 'oops' as unknown as CardItem[] })).toBeNull()
+    expect(normalizeDeck({})).toBeNull()
   })
 })
 

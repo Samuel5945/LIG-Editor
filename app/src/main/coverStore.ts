@@ -242,7 +242,8 @@ export async function renderCoverTemplate(project: string, args: RenderCoverArgs
 
   const hiWidth = OUT.wide.w * SUPERSAMPLE
   const hiHeight = OUT.wide.h * SUPERSAMPLE
-  const hi = Buffer.from(await renderHtmlFixed(htmlAbs, hiWidth, hiHeight), 'base64')
+  const { base64: hiPng } = await renderHtmlFixed(htmlAbs, hiWidth, hiHeight)
+  const hi = Buffer.from(hiPng, 'base64')
   const { default: sharp } = await import('sharp')
   // capturePage 给的是「DIP × 设备像素比」：HiDPI 屏上请求 2350×1000 实收 4700×2000。
   // 裁剪一律按解码后的实测尺寸算，绝不拿请求尺寸猜——猜错就是把方图裁到左上角的文字区里。
@@ -297,7 +298,8 @@ export async function renderCoverHtml(
   const h = Math.round(args.height ?? COVER_WIDE.h)
   const focal = clamp01(args.focal ?? DEFAULT_FOCAL)
   // 手写 HTML 自己锁死画布尺寸，没有超采样可言（模板那条路的 scale 是版式自己套的 transform）
-  const hi = Buffer.from(await renderHtmlFixed(absHtml, w, h), 'base64')
+  const { base64: customPng } = await renderHtmlFixed(absHtml, w, h)
+  const hi = Buffer.from(customPng, 'base64')
   const saved = saveAsset(project, args.out?.trim() || `assets/cover-custom-${Date.now()}.png`, hi.toString('base64'))
   const { default: sharp } = await import('sharp')
   // capturePage 返回的是「DIP × 设备像素比」：请求 1175×500 在 2x 屏上实收 2350×1000。

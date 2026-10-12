@@ -91,6 +91,8 @@ const CardsPanel = forwardRef<CardsPanelHandle, CardsPanelProps>(function CardsP
   // 渲染完成后自增，给 asset:// 图片 URL 加参破缓存
   const [version, setVersion] = useState(0)
   const [dirtyN, setDirtyN] = useState(0)
+  // 大图预览：点缩略图弹出全尺寸成品（←/→ 切卡、Esc/点背景关闭）
+  const [preview, setPreview] = useState<number | null>(null)
   const abortRef = useRef<(() => void) | null>(null)
   const deckRef = useRef<CardDeck | null>(null)
   deckRef.current = deck
@@ -586,6 +588,19 @@ const CardsPanel = forwardRef<CardsPanelHandle, CardsPanelProps>(function CardsP
     cardRefs.current[index]?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }, [])
 
+  // 大图预览打开时的键盘导航：←/→ 切卡、Esc 关闭（挂 window，关弹窗即摘）
+  useEffect(() => {
+    if (preview === null) return
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') setPreview(null)
+      if (e.key === 'ArrowLeft') setPreview((p) => (p === null ? p : Math.max(0, p - 1)))
+      if (e.key === 'ArrowRight')
+        setPreview((p) => (p === null ? p : Math.min((deckRef.current?.cards.length ?? 1) - 1, p + 1)))
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [preview !== null]) // eslint-disable-line react-hooks/exhaustive-deps -- 只随开关挂/摘，内部全用函数式更新
+
   // 暴露给右栏贴图审阅面板与对话改色指令（经 App 转发）
   useImperativeHandle(handleRef, () => ({ flush, refine, scrollToCard, setAccent }), [flush, refine, scrollToCard, setAccent])
 
@@ -666,14 +681,17 @@ const CardsPanel = forwardRef<CardsPanelHandle, CardsPanelProps>(function CardsP
             <Icon name="undo" size={12} className="mr-1.5" />回到文章
           </button>
         )}
-        <button
-          onClick={pushToDraft}
-          disabled={globalBusy || pushing || !deck.cards.length}
-          title="以图片消息形态推送到公众号草稿箱（读者可左右滑动看图）；推送账号按工程所属分类的绑定决定，账号在「设置-推送设置」里管理"
-          className="whitespace-nowrap rounded px-2 py-0.5 hover:bg-panel-3 disabled:opacity-40"
-        >
-          {pushing ? '推送中…' : '推送草稿箱'}
-        </button>
+        {/* 推送草稿箱是公众号的分发通道，小红书卡组隐藏（配文 + 图片文件夹手动发布） */}
+        {deck.format === 'wechat' && (
+          <button
+            onClick={pushToDraft}
+            disabled={globalBusy || pushing || !deck.cards.length}
+            title="以图片消息形态推送到公众号草稿箱（读者可左右滑动看图）；推送账号按工程所属分类的绑定决定，账号在「设置-推送设置」里管理"
+            className="whitespace-nowrap rounded px-2 py-0.5 hover:bg-panel-3 disabled:opacity-40"
+          >
+            {pushing ? '推送中…' : '推送草稿箱'}
+          </button>
+        )}
         <button onClick={openFolder} className="ml-auto whitespace-nowrap rounded px-2 py-0.5 hover:bg-panel-3" title="渲染好的 PNG 按平台分目录存在工程 cards/ 下，直接取用发布">
           <Icon name="folder" size={12} className="mr-1.5" />打开图片文件夹
         </button>
@@ -686,7 +704,10 @@ const CardsPanel = forwardRef<CardsPanelHandle, CardsPanelProps>(function CardsP
           {PRESET_ACCENTS.map((p) => (
             <button
               key={p.color}
-              onClick={() => void setAccent(p.color)}
+              onClick={() => {
+                setCustomColor('')
+                void setAccent(p.color)
+              }}
               disabled={globalBusy}
               title={p.name}
               className={`h-5 w-5 rounded-full border-2 disabled:opacity-40 ${deck.accent === p.color ? 'border-ink' : 'border-transparent hover:border-ink-dim'}`}
@@ -737,14 +758,16 @@ const CardsPanel = forwardRef<CardsPanelHandle, CardsPanelProps>(function CardsP
             }}
             className="group/card mb-3 flex gap-3 rounded-xl border border-panel-3 bg-panel-2 p-3 shadow-[0_1px_6px_rgba(0,0,0,.18)] transition-[transform,border-color,box-shadow] duration-150 hover:-translate-y-px hover:border-accent"
           >
-            {/* 预览缩略图 */}
+            {/* 预览缩略图：点击全尺寸查看 */}
             <div className="shrink-0">
               {card.png && renderingIdx !== i ? (
                 <img
                   src={assetUrl(card.png)}
                   alt={card.title}
-                  className="w-44 rounded border border-panel-3"
+                  className="w-44 cursor-zoom-in rounded border border-panel-3"
                   style={{ aspectRatio: '3 / 4', objectFit: 'cover' }}
+                  onClick={() => setPreview(i)}
+                  title="点击查看大图（←/→ 切卡，Esc 关闭）"
                 />
               ) : (
                 <div
@@ -765,6 +788,15 @@ const CardsPanel = forwardRef<CardsPanelHandle, CardsPanelProps>(function CardsP
                   <span className="rounded bg-accent/20 px-1.5 py-0.5 text-[10px] text-accent">AI 成图</span>
                 ) : (
                   card.bgImage && <span className="text-[10px]">已有背图</span>
+                )}
+                {/* 溢出预警：页内溢出保护实测缩字系数 <1 时提示，数据由渲染回写（renderedZoom） */}
+                {card.mode !== 'ai' && card.renderedZoom !== undefined && card.renderedZoom < 0.98 && (
+                  <span
+                    className="rounded bg-st-draft/15 px-1.5 py-0.5 text-[10px] text-st-draft"
+                    title={`内容超出画布，成片已整块缩小到 ${Math.round(card.renderedZoom * 100)}%；可精简要点或把「文字大小」调小`}
+                  >
+                    已缩字 {Math.round(card.renderedZoom * 100)}%
+                  </span>
                 )}
                 {/* 逐张操作 hover 显现（§5.8，与选题卡/工作树同规则）：常态只留缩略图与文案，
                     键鼠用户靠 focus-within 也能唤出 */}
@@ -945,6 +977,44 @@ const CardsPanel = forwardRef<CardsPanelHandle, CardsPanelProps>(function CardsP
           </div>
         )}
       </div>
+
+      {/* 大图预览：点缩略图全尺寸查看成品；点背景/Esc 关闭，←/→ 切卡 */}
+      {preview !== null && deck.cards[preview]?.png && (
+        <div
+          className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-black/85 p-6"
+          onClick={() => setPreview(null)}
+        >
+          <img
+            src={assetUrl(deck.cards[preview].png)}
+            alt={deck.cards[preview].title}
+            className="max-h-[82vh] max-w-full rounded-lg shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+          <div className="flex items-center gap-3 text-xs text-white/85" onClick={(e) => e.stopPropagation()}>
+            <button
+              onClick={() => setPreview(Math.max(0, preview - 1))}
+              disabled={preview === 0}
+              className="rounded bg-white/10 px-2.5 py-1 hover:bg-white/20 disabled:opacity-30"
+            >
+              ← 上一张
+            </button>
+            <span className="tabular-nums">
+              {preview + 1} / {deck.cards.length}
+              {deck.cards[preview].mode === 'ai' ? '（AI 成图）' : ''}
+            </span>
+            <button
+              onClick={() => setPreview(Math.min(deck.cards.length - 1, preview + 1))}
+              disabled={preview === deck.cards.length - 1}
+              className="rounded bg-white/10 px-2.5 py-1 hover:bg-white/20 disabled:opacity-30"
+            >
+              下一张 →
+            </button>
+            <button onClick={() => setPreview(null)} className="rounded bg-white/10 px-2.5 py-1 hover:bg-white/20">
+              关闭（Esc）
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 })

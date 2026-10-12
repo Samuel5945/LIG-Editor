@@ -722,7 +722,7 @@ export const TOOLS: ToolDef[] = [
         const absHtml = absOf(project, card.png.replace(/\.png$/i, '.html'))
         if (!existsSync(absHtml))
           throw new Error(`卡片源码不在：${card.png.replace(/\.png$/i, '.html')}（重新 render_card index:${i}）`)
-        const base64 = await renderHtmlFixed(absHtml, CARD_W, CARD_H)
+        const { base64 } = await renderHtmlFixed(absHtml, CARD_W, CARD_H)
         return {
           target,
           index: i,
@@ -740,7 +740,7 @@ export const TOOLS: ToolDef[] = [
         const absHtml = absOf(project, 'covers/cover-wide.html')
         if (!existsSync(absHtml))
           throw new Error('封面源码不在（covers/cover-wide.html）：先 render_cover_template 出一套')
-        const base64 = await renderHtmlFixed(absHtml, COVER_WIDE.w, COVER_WIDE.h)
+        const { base64 } = await renderHtmlFixed(absHtml, COVER_WIDE.w, COVER_WIDE.h)
         return {
           target,
           png: meta.cover.main,
