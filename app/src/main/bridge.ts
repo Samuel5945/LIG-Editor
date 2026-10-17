@@ -2,6 +2,7 @@ import { createServer, type Server } from 'http'
 import { randomBytes } from 'crypto'
 import { join } from 'path'
 import { existsSync, unlinkSync, writeFileSync } from 'fs'
+import { app } from 'electron'
 import { getAppPaths } from './paths'
 import { callTool, TOOLS } from './capabilityCore'
 
@@ -30,7 +31,7 @@ export function startBridge(): void {
       res.end(JSON.stringify(body))
     }
     if (req.url === '/health') {
-      reply(200, { ok: true, app: 'LIG-Editor' })
+      reply(200, { ok: true, app: 'LIG-Editor', version: app.getVersion() })
       return
     }
     if (req.headers.authorization !== `Bearer ${token}`) {
@@ -68,7 +69,11 @@ export function startBridge(): void {
     if (!addr || typeof addr === 'string') return
     writeFileSync(
       bridgeFile(),
-      JSON.stringify({ port: addr.port, token, pid: process.pid, started_at: new Date().toISOString() }, null, 2),
+      JSON.stringify(
+        { port: addr.port, token, pid: process.pid, version: app.getVersion(), started_at: new Date().toISOString() },
+        null,
+        2
+      ),
       'utf-8'
     )
   })

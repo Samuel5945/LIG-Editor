@@ -66,6 +66,17 @@ export function renderFigure(project: string, htmlRelPath: string): Promise<stri
 }
 
 async function renderOnce(project: string, absHtml: string): Promise<string> {
+  const { base64 } = await captureAtContentSize(absHtml, 1600, 2400)
+  const pngRel = `assets/${basename(absHtml, '.html')}.png`
+  return saveAsset(project, pngRel, base64)
+}
+
+/** 离屏加载 HTML → 等字体/脚本稳定 → 两轮量内容真实边界再截图；返回 base64 与实际尺寸（排队、落盘归调用方） */
+async function captureAtContentSize(
+  absHtml: string,
+  widthCap: number,
+  heightCap: number
+): Promise<{ base64: string; width: number; height: number }> {
   const win = new BrowserWindow({
     show: false,
     width: 920,
@@ -85,17 +96,35 @@ async function renderOnce(project: string, absHtml: string): Promise<string> {
       (await win.webContents.executeJavaScript(MEASURE_SCRIPT, true)) as { w: number; h: number }
     // 两轮：先按内容定宽，重排后再定高，避免响应式内容换行导致高度失真
     const first = await measure()
-    win.setContentSize(clamp(first.w, 320, 1600), clamp(first.h, 200, 2400))
+    win.setContentSize(clamp(first.w, 320, widthCap), clamp(first.h, 200, heightCap))
     await sleep(200)
     const final = await measure()
-    win.setContentSize(clamp(final.w, 320, 1600), clamp(final.h, 200, 2400))
+    const w = clamp(final.w, 320, widthCap)
+    const h = clamp(final.h, 200, heightCap)
+    win.setContentSize(w, h)
     await sleep(200)
     const image = await win.webContents.capturePage()
-    const pngRel = `assets/${basename(absHtml, '.html')}.png`
-    return saveAsset(project, pngRel, image.toPNG().toString('base64'))
+    return { base64: image.toPNG().toString('base64'), width: w, height: h }
   } finally {
     win.destroy()
   }
+}
+
+/** 预览截图（Agent 自证排版用）：任意本地 HTML 绝对路径 → 按内容尺寸截图 → PNG base64，不写工程 assets。
+ *  与图表/卡片渲染共用同一条串行队列，避免同时开多个离屏窗口。
+ *  高度上限比图表宽：长正文要能整篇截出来，撞上限时由调用方如实告诉 Agent 截到哪儿 */
+export function captureHtmlPreview(
+  absHtml: string,
+  widthCap = 780,
+  heightCap = 6000
+): Promise<{ base64: string; width: number; height: number; height_capped: boolean }> {
+  if (!existsSync(absHtml)) throw new Error(`待截图的 HTML 不存在：${absHtml}`)
+  const wCap = clamp(widthCap, 320, 1600)
+  const hCap = clamp(heightCap, 400, 20000)
+  return enqueue(async () => {
+    const r = await captureAtContentSize(absHtml, wCap, hCap)
+    return { ...r, height_capped: r.height >= hCap }
+  })
 }
 
 /** 固定画布离屏渲染（贴图卡片用）：不量内容尺寸，直接按给定视口截图，返回 PNG base64 */

@@ -1,7 +1,9 @@
 import { basename, isAbsolute, join } from 'path'
 import { existsSync, readFileSync } from 'fs'
 import type { ArticleTheme, IdeaCard, TitleCandidate } from '@shared/types'
-import { isHexColor } from '@shared/cards'
+import { CARD_H, CARD_W, isHexColor, type CardDeck, type CardFormat, type CardItem } from '@shared/cards'
+import { COVER_SQUARE, COVER_TEMPLATES, COVER_WIDE } from '@shared/coverTemplates'
+import { sanitizeProjectName } from '@shared/projectName'
 import {
   clampThemeNumbers,
   metaPatchToThemeKeys,
@@ -19,15 +21,18 @@ import {
   titleMessages
 } from '@shared/prompts'
 import { coerceArrayArg } from '@shared/llmText'
+import { agentGuide, GUIDE_LABELS, GUIDE_TOPICS, type AgentGuideTopic } from '@shared/agentGuides'
 import * as store from './projectStore'
 import { generateImage } from './imageGen'
-import { renderFigure, saveFigureHtml } from './figureRender'
+import { captureHtmlPreview, renderFigure, renderHtmlFixed, saveFigureHtml } from './figureRender'
+import { readArchivedCards, readCards, renderCard, writeArchivedCards, writeCards } from './cardsStore'
+import { renderCoverTemplate } from './coverStore'
 import { exportArticleHtml, exportPlatformHtml } from './exporter'
 import { exportDocx, exportPdf } from './docExport'
 import { pushCards, pushDraft } from './wechatPublish'
-import { readSkill } from './skillStore'
-import { saveTheme } from './themeStore'
-import { broadcast } from './ipc'
+import { listSkills, parseDescription, readSkill, saveSkill } from './skillStore'
+import { deleteTheme, listLibrary, saveTheme, setActiveTheme } from './themeStore'
+import { broadcast, pauseProjectWatcher, resumeProjectWatcher } from './ipc'
 
 /**
  * CapabilityCore（M8）：M2-M7 能力的无 UI 门面
@@ -44,6 +49,9 @@ export interface ToolDef {
   description: string
   inputSchema: { type: 'object'; properties: Record<string, unknown>; required?: string[] }
   handler: (args: Record<string, unknown>) => unknown
+  /** 只给外部 Agent 用：结果体量大或形态不适合塞进对话文本（如 render_preview 的 PNG base64），
+   *  内部对话副驾驶的工具面按此排除——编辑器的实时预览本来就在作者眼前，再灌几百 KB base64 只是烧 token */
+  headlessOnly?: boolean
 }
 
 /** Agent 写完文件通知 GUI（若在运行）刷新 */
@@ -109,12 +117,67 @@ const P = {
   project: { type: 'string', description: '工程名（workspace 下的目录名）；工程名含引号冒号等标点时可改传 dir' }
 } as const
 
+/** 工程内相对路径 → 绝对路径：外部 Agent 的读文件/看图能力只认绝对路径，
+ *  只给相对路径时它得先 list_projects 拿 root 再自己拼（实测多花两轮调用） */
+function absOf(project: string, rel: string): string {
+  return join(store.projectDir(project), rel)
+}
+
+/** 数字入参容错：模型常把下标写成 "2" 或 2.0，类型差异不该判成缺参 */
+function num(a: Record<string, unknown>, key: string): number {
+  const v = a[key]
+  const n = typeof v === 'number' ? v : typeof v === 'string' && v.trim() ? Number(v) : NaN
+  if (!Number.isFinite(n)) throw new Error(`缺少参数 ${key}：需传数字下标（从 0 开始）`)
+  return Math.trunc(n)
+}
+
+/** 破坏性操作门槛：外部 Agent 走 MCP 时没有应用内确认框，只能靠显式 confirm 把决定权交回作者 */
+function requireConfirm(a: Record<string, unknown>, what: string): void {
+  if (a.confirm === true || a.confirm === 'true' || a.confirm === 1) return
+  throw new Error(`未执行「${what}」：这一步不可恢复。先把要删掉的具体内容和影响说给作者听，取得同意后再带 confirm:true 重发`)
+}
+
+/** 贴图风格入参：只认 wechat / xhs，其它写法直接报错列可选值，不静默按缺省走 */
+function cardFormatArg(v: unknown, fallback: CardFormat): CardFormat {
+  if (v === undefined || v === null || v === '') return fallback
+  const s = String(v).trim()
+  if (s === 'wechat' || s === 'xhs') return s
+  throw new Error(`非法贴图风格：${s}（只能传 wechat 或 xhs）`)
+}
+
 export const TOOLS: ToolDef[] = [
   {
     name: 'list_projects',
     description: '列出 workspace 下的全部图文工程（名称/状态/分类/更新时间）',
     inputSchema: { type: 'object', properties: {} },
     handler: () => store.listProjects()
+  },
+  {
+    name: 'get_guide',
+    description:
+      '取一本手册再动手：pipeline 全流程编排 / markdown 正文语法 / theme 排版字段与取值口径 / cards 贴图卡组 / publish 导出推送前置。不确定键名、取值范围或下一步该调哪个工具时先查这里，别凭印象造键名',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        topic: {
+          type: 'string',
+          enum: GUIDE_TOPICS,
+          description: '手册分段；省略时只返回可查清单（正文一册几百到几千字，按需一次取一册）'
+        }
+      }
+    },
+    handler: (a) => {
+      const raw = str(a, 'topic', false)
+      if (!raw)
+        return {
+          topics: GUIDE_TOPICS.map((t) => ({ topic: t, title: GUIDE_LABELS[t] })),
+          hint: '带 topic 再调一次取正文；只取这一轮真要用的那册'
+        }
+      const guide = agentGuide(raw)
+      if (!guide)
+        throw new Error(`没有这本手册：${raw}（可查：${GUIDE_TOPICS.join(' / ')}）`)
+      return { topic: raw, title: GUIDE_LABELS[raw as AgentGuideTopic], guide }
+    }
   },
   {
     name: 'create_project',
@@ -148,7 +211,15 @@ export const TOOLS: ToolDef[] = [
       },
       required: ['project', 'category']
     },
-    handler: (a) => store.setProjectCategory(projectArg(a), str(a, 'category'))
+    handler: async (a) => {
+      const project = projectArg(a)
+      // 工程目录整体迁移：先停监听、迁完按新路径重挂，与 IPC 的 project:setCategory 共用同一套收尾
+      const was = await pauseProjectWatcher(project)
+      const meta = store.setProjectCategory(project, str(a, 'category'))
+      if (was) resumeProjectWatcher(project)
+      broadcast('workspace:changed', null)
+      return meta
+    }
   },
   {
     name: 'get_project',
@@ -178,7 +249,7 @@ export const TOOLS: ToolDef[] = [
   {
     name: 'write_article',
     description:
-      '整体覆写 article.md 正文。markdown 子集：#/##/### 标题、段落、**加粗**、> 引用、--- 分隔线、![alt](assets/x.png) 图片（后跟 <!-- caption: 图注 -->）、<!-- fig-suggest: 详细画面描述 | 简短图注 --> 配图占位。手动样式（与编辑器选中片段设置同源）：<span style="color:#e63946;background-color:#fef3c7;font-size:18px">文本</span>——color 字色 / background-color 背景高亮 / font-size 字号（12-24px），可叠加 **加粗**，编辑器与公众号导出均渲染',
+      '整体覆写 article.md 正文。markdown 子集、图片图注、配图占位、手动字色底色字号的具体写法先调 get_guide 带 topic=markdown 取那一册；只改一句或某段压短请改用 patch_article，不要整篇重写',
     inputSchema: {
       type: 'object',
       properties: { project: P.project, content: { type: 'string', description: '正文 markdown 全文' } },
@@ -427,47 +498,51 @@ export const TOOLS: ToolDef[] = [
   {
     name: 'set_theme',
     description:
-      '设置工程排版覆盖（写入 project.json，编辑器/导出/推送同源生效，与顶栏控件一致）。字段独立可传：accent 强调色 / bodyFontSize 正文字号 / headingFontSize 标题字号（H1=+6 H2=+0 H3=-3）/ bodyAlign 正文排列（indent 首行缩进 / flush 顶格两端对齐 / center 居中）/ headingAlign 标题排列（center 居中 / left 左）/ 标题版式四项 h1Style（bar 短横 / pill 胶囊色块字底 / underline 下划线 / banner 报头横幅，配 h1Bg 横幅底色）、h2Style（leftbar 左竖条 / block 色块标签 / underline 下划线 / plain 纯文字）、h2Num（H2 自动序号：01 / 1. / 1、 / 一、 / 壹、 / ① 圈号；none 显式关闭）、h3Mark（diamond 菱形 / dot 圆点 / none 无）/ bodyBg 文章背景卡（浅色系十六进制 #rrggbb；none 去卡片纯白底；夜间由公众号逻辑自动变深）/ pageBg 页面纸底（正文卡之下的纸色外壳，日报纸感）/ imgStyle 图片形态（inset 常规 / fullwidth 通栏撑满 / half 半宽居中）/ imgFrame 图片边框（none 无 / line 细边框 / shadow 柔和投影）/ imgGap 图片外间距（0-48px）/ captionAlign 图注排列（center / left）。引用底色 quoteBg / 引用文字色 quoteText / 分隔线颜色 hrColor / H2 条色 h2Border（均十六进制，不设则按强调色或中性灰派生）。传 null = 恢复默认（跟随分类主题）。数值字段越界会被夹到区间内（行高 1.5-3 / 段距 0-48 / 圆角 0-40 / 图片间距 0-48 / 字号 10-40），夹取结果写在返回的 hint 里，必须照实转述给用户，不要说成已按原值设置',
+      '设置工程排版覆盖（写 project.json，编辑器/导出/推送同源生效，与顶栏控件一致）。字段各自独立：不传=不动，传 null=恢复「跟随分类主题」；数值越界会被夹进区间、非法值不写入，夹取与丢弃都如实进 hint / ignoredKeys / droppedKeys，必须照实转述给作者。键位多、口径细，动手前先调 get_guide 带 topic=theme 取字段表，别凭印象造键名',
     inputSchema: {
       type: 'object',
       properties: {
         project: P.project,
-        accent: { type: ['string', 'null'], description: '强调色十六进制（#rrggbb）；null 恢复默认' },
-        bodyFontSize: { type: ['number', 'null'], description: '正文字号 px（10-40）；null 跟随主题' },
-        headingFontSize: { type: ['number', 'null'], description: '标题字号 px（12-40）；null 跟随主题' },
-        bodyAlign: { type: ['string', 'null'], enum: ['indent', 'flush', 'center', null], description: '正文排列；null 跟随主题' },
-        headingAlign: { type: ['string', 'null'], enum: ['center', 'left', null], description: '标题排列；null 跟随主题' },
-        h1Style: { type: ['string', 'null'], enum: ['bar', 'pill', 'underline', 'banner', null], description: 'H1 装饰；banner 报头横幅（通栏色块，配 h1Bg）；null 跟随主题' },
-        h1Bg: { type: ['string', 'null'], description: '报头横幅底色十六进制（配 h1Style: banner，缺省跟强调色）；null 跟随主题' },
-        h2Style: { type: ['string', 'null'], enum: ['leftbar', 'block', 'underline', 'plain', null], description: 'H2 装饰；null 跟随主题' },
-        h2Num: { type: ['string', 'null'], enum: ['01', '1.', '1、', '一、', '壹、', '①', 'none', null], description: 'H2 自动序号格式；none 显式关闭；null 跟随主题' },
-        h3Mark: { type: ['string', 'null'], enum: ['diamond', 'dot', 'none', null], description: 'H3 前缀标记；null 跟随主题' },
-        bodyBg: { type: ['string', 'null'], description: '文章背景卡十六进制（#rrggbb，建议浅色系）；none 去卡片；null 跟随主题' },
-        pageBg: { type: ['string', 'null'], description: '页面纸底十六进制（正文卡之下的纸色外壳）；null 跟随主题' },
-        fontFamily: { type: ['string', 'null'], description: '正文字体栈（如 "Microsoft YaHei", sans-serif）；null 跟随主题' },
-        lineHeight: { type: ['number', 'null'], description: '正文行高（1.5-3，非法值回落）；null 跟随主题' },
-        letterSpacing: { type: ['string', 'number', 'null'], description: '字距（如 0.02em 或 0.5px；给裸数字按 px 处理）；null 跟随主题' },
-        pGap: { type: ['number', 'null'], description: '段落间距 px（0-48）；null 跟随主题' },
-        bodyText: { type: ['string', 'null'], description: '正文文字色十六进制；null 跟随主题' },
-        headingColor: { type: ['string', 'null'], description: '标题文字色十六进制；显式设置后不随强调色重链；null 跟随主题' },
-        quoteStyle: { type: ['string', 'null'], enum: ['leftbar', 'card', 'quotes', 'dashcard', null], description: '引用形态；null 跟随主题' },
-        quoteBorder: { type: ['string', 'null'], description: '虚线引用卡边框色十六进制；null 跟随主题' },
-        quoteBg: { type: ['string', 'null'], description: '引用区底色十六进制（不设=按强调色派生浅底）；null 跟随主题' },
-        quoteText: { type: ['string', 'null'], description: '引用文字色十六进制（不设=按背景亮度自适应）；null 跟随主题' },
-        hrColor: { type: ['string', 'null'], description: '分隔线颜色十六进制（不设=中性灰）；null 跟随主题' },
-        h2Border: { type: ['string', 'null'], description: 'H2 左竖条/下划线颜色十六进制（不设=跟随强调色）；null 跟随主题' },
-        hrStyle: { type: ['string', 'null'], enum: ['line', 'dot', 'long', null], description: '分隔线形态；null 跟随主题' },
-        strongStyle: { type: ['string', 'null'], enum: ['color', 'highlight', 'plain', null], description: '加粗强调方式；null 跟随主题' },
-        strongBg: { type: ['string', 'null'], description: '高亮加粗底色十六进制；null 跟随主题' },
-        strongColor: { type: ['string', 'null'], description: '加粗强调色十六进制；显式设置后不随强调色重链；null 跟随主题' },
-        imgRadius: { type: ['number', 'null'], description: '图片圆角 px（0-40）；null 跟随主题' },
-        bodyRadius: { type: ['number', 'null'], description: '正文容器圆角 px（0-40）；null 跟随主题' },
-        bodyPadding: { type: ['string', 'number', 'null'], description: '正文容器内边距（如 20px 22px；给裸数字按 px 处理）；null 跟随主题' },
-        tableStyle: { type: ['string', 'null'], enum: ['bordered', 'striped', 'plain', null], description: '表格风格；null 跟随主题' },
-        tableHeaderBg: { type: ['string', 'null'], description: '表头背景色十六进制；null 跟随主题' },
-        tableBorder: { type: ['string', 'null'], description: '表格边框色十六进制；null 跟随主题' },
-        tableHeaderText: { type: ['string', 'null'], description: '表头文字色十六进制；null 跟随主题' },
-        h2Bg: { type: ['string', 'null'], description: 'H2 色块标签背景色十六进制；null 跟随主题' }
+        accent: { type: ['string', 'null'], description: '强调色 #rrggbb；改它会重链标题装饰线/引用边线/加粗色' },
+        bodyFontSize: { type: ['number', 'null'], description: '正文字号 10-40' },
+        headingFontSize: { type: ['number', 'null'], description: '标题字号 12-40（H1+6/H2+0/H3-3）' },
+        bodyAlign: { type: ['string', 'null'], enum: ['indent', 'flush', 'center', null] },
+        headingAlign: { type: ['string', 'null'], enum: ['center', 'left', null] },
+        h1Style: { type: ['string', 'null'], enum: ['bar', 'pill', 'underline', 'banner', null] },
+        h1Bg: { type: ['string', 'null'], description: '报头横幅底色（配 h1Style=banner）' },
+        h2Style: { type: ['string', 'null'], enum: ['leftbar', 'block', 'underline', 'plain', null] },
+        h2Num: { type: ['string', 'null'], enum: ['01', '1.', '1、', '一、', '壹、', '①', 'none', null], description: 'H2 序号；none=显式关闭' },
+        h3Mark: { type: ['string', 'null'], enum: ['diamond', 'dot', 'none', null] },
+        bodyBg: { type: ['string', 'null'], description: '正文卡底色，浅色系；none=去卡纯白' },
+        pageBg: { type: ['string', 'null'], description: '正文卡之下的纸底色' },
+        fontFamily: { type: ['string', 'null'], description: '正文字体栈' },
+        lineHeight: { type: ['number', 'null'], description: '行高 1.5-3' },
+        letterSpacing: { type: ['string', 'number', 'null'], description: '字距；裸数字按 px' },
+        pGap: { type: ['number', 'null'], description: '段间距 0-48' },
+        bodyText: { type: ['string', 'null'] },
+        headingColor: { type: ['string', 'null'], description: '设后不随 accent 重链' },
+        quoteStyle: { type: ['string', 'null'], enum: ['leftbar', 'card', 'quotes', 'dashcard', null] },
+        quoteBorder: { type: ['string', 'null'] },
+        quoteBg: { type: ['string', 'null'], description: '不设=按 accent 派生浅底' },
+        quoteText: { type: ['string', 'null'], description: '不设=按底色亮度自适应' },
+        hrColor: { type: ['string', 'null'], description: '不设=中性灰' },
+        h2Border: { type: ['string', 'null'] },
+        hrStyle: { type: ['string', 'null'], enum: ['line', 'dot', 'long', null] },
+        strongStyle: { type: ['string', 'null'], enum: ['color', 'highlight', 'plain', null] },
+        strongBg: { type: ['string', 'null'] },
+        strongColor: { type: ['string', 'null'], description: '设后不随 accent 重链' },
+        imgRadius: { type: ['number', 'null'], description: '图片圆角 0-40' },
+        imgStyle: { type: ['string', 'null'], enum: ['inset', 'fullwidth', 'half', null] },
+        imgFrame: { type: ['string', 'null'], enum: ['none', 'line', 'shadow', null] },
+        imgGap: { type: ['number', 'null'], description: '图片外间距 0-48' },
+        captionAlign: { type: ['string', 'null'], enum: ['center', 'left', null] },
+        bodyRadius: { type: ['number', 'null'], description: '正文容器圆角 0-40' },
+        bodyPadding: { type: ['string', 'number', 'null'], description: '正文容器内边距；裸数字按 px' },
+        tableStyle: { type: ['string', 'null'], enum: ['bordered', 'striped', 'plain', null] },
+        tableHeaderBg: { type: ['string', 'null'] },
+        tableBorder: { type: ['string', 'null'] },
+        tableHeaderText: { type: ['string', 'null'] },
+        h2Bg: { type: ['string', 'null'], description: 'H2 色块标签底色' }
       },
       required: ['project']
     },
@@ -506,7 +581,7 @@ export const TOOLS: ToolDef[] = [
       // 那样会把成功报成失败，和把失败报成成功一样误导作者
       const droppedKeys = invalid.filter((k) => k in norm.patch && norm.patch[k] !== null)
       const reports = [...notes, ...coerced]
-      if (ignoredKeys.length) reports.push(`不认识的参数已忽略：${ignoredKeys.join('、')}（可用键见本工具说明）`)
+      if (ignoredKeys.length) reports.push(`不认识的参数已忽略：${ignoredKeys.join('、')}（可用键与取值口径调 get_guide 带 topic=theme 取字段表）`)
       if (droppedKeys.length)
         reports.push(`以下字段值不合法，未写入：${droppedKeys.join('、')}（色值要 #rrggbb、数值不带单位、枚举取说明里的形态）`)
       return reports.length ? { ok: true, hint: reports.join('；'), ignoredKeys, droppedKeys } : { ok: true }
@@ -515,7 +590,7 @@ export const TOOLS: ToolDef[] = [
   {
     name: 'save_theme_preset',
     description:
-      '为分类设计并保存整套排版主题（写入自定义主题库，一个分类可存多套主题，保存即激活为该分类当前主题——该分类下打开工程即套用）。name 为主题名；category 为归属分类（缺省与主题同名，同名分类目录自动创建）。theme 为完整 ArticleTheme 主题对象：accent 必填（十六进制强调色 #rrggbb，rgb()/rgba()/8位hex/渐变串自动转换）；常用字段 fontFamily 字体栈 / lineHeight 行高 1.5-3 / letterSpacing 字距 / fontSize 正文字号 / headingFontSize 标题字号 / bodyBg 正文背景卡（浅色系） / pageBg 页面纸底 / h1Bg 报头横幅底色（配 h1Style: banner） / bodyRadius 圆角 / bodyPadding 内边距 / pGap 段间距 / h1Style·h2Style·h2Num·h3Mark 标题版式 / quoteStyle·quoteBorder·quoteBg·quoteText 引用 / hrStyle·hrColor 分隔线 / h2Border H2 条色 / hrStyle 分隔线 / strongStyle·strongBg·strongColor 加粗 / tableStyle·tableHeaderBg·tableBorder·tableHeaderText 表格 / imgRadius 图片圆角 / imgStyle 图片形态（inset/fullwidth/half） / imgFrame 图片边框投影 / imgGap 图片外间距 / captionAlign 图注排列 / bodyText·headingColor·h2Bg 色系。非法或缺失字段自动回落默认调性',
+      '为分类设计并保存整套排版主题（写入自定义主题库，一个分类可存多套，保存即激活为该分类当前主题）。name 是主题名、category 是归属分类（缺省与主题同名并自动建目录）、theme 是完整主题对象（accent 必填）。动手前先调 get_guide 带 topic=theme 取键名与取值口径；不认识或被丢弃的键会如实进 unknownKeys / droppedKeys，未写入的部分不得声称已生效',
     inputSchema: {
       type: 'object',
       properties: {
@@ -524,7 +599,7 @@ export const TOOLS: ToolDef[] = [
         theme: {
           type: 'object',
           description:
-            '完整排版主题对象，**键名必须严格用下面这些**（accent 必填）：accent / fontFamily / lineHeight(1.5-3) / letterSpacing / fontSize(10-40) / headingFontSize(10-40) / bodyAlign / headingAlign / h1Style / h1Bg / h2Style / h2Num / h3Mark / bodyBg / pageBg / pGap(0-48) / bodyText / headingColor / quoteStyle / quoteBorder / hrStyle / strongStyle / strongBg / strongColor / imgRadius(0-40) / imgStyle(inset|fullwidth|half) / imgFrame(none|line|shadow) / imgGap(0-48) / captionAlign(center|left) / bodyRadius(0-40) / bodyPadding / tableStyle / tableHeaderBg / tableBorder / tableHeaderText / h2Bg / quoteBg / quoteText / hrColor / h2Border。accent 传 #rrggbb 即可（rgb()/rgba()、8位hex、渐变串自动转换成 hex）。不要自造键名（如 text_color / font_family / paragraph_spacing），不认识的键会在结果里照实列出',
+            '完整排版主题对象，键名严格照 get_guide 的 theme 段那批（accent 必填，其余可缺省）。色值传 #rrggbb 即可，rgb()/rgba()/8位hex/渐变串会自动转成 hex。不要自造键名（如 text_color / font_family / paragraph_spacing），不认识的键会在结果里照实列出',
           additionalProperties: false
         }
       },
@@ -613,7 +688,89 @@ export const TOOLS: ToolDef[] = [
       if (html) rel = saveFigureHtml(project, html, rel || undefined)
       else if (!rel) throw new Error('html 与 path 至少提供一个')
       const png = await renderFigure(project, rel)
-      return { html_path: rel, png_path: png }
+      // 绝对路径一并给：宿主的读图能力只认绝对路径，光给相对路径它还得自己拼 root
+      return { html_path: rel, png_path: png, html_abs: absOf(project, rel), png_abs: absOf(project, png) }
+    }
+  },
+  {
+    name: 'render_preview',
+    headlessOnly: true,
+    description:
+      '把工程成品截图回传给你自己看（正文排版 / 封面 / 单张贴图卡），改完排版再截一次对比——这是唯一能自证「设了到底有没有变化」的路径。target：article 正文（缺省）/ cover 封面 / card 贴图卡；返回 PNG，同时给绝对路径给能读本地文件的宿主',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project: P.project,
+        target: { type: 'string', enum: ['article', 'cover', 'card'], description: '截什么；缺省 article' },
+        variant: { type: 'string', enum: ['day', 'night'], description: 'target=article 的配色，缺省 day（日间排版）' },
+        width: { type: 'number', description: 'target=article 的截图宽度 320-1600，缺省 780（手机竖屏口径）' },
+        index: { type: 'number', description: 'target=card 时的卡片下标，从 0 开始' }
+      },
+      required: ['project']
+    },
+    handler: async (a) => {
+      const project = projectArg(a)
+      const target = (str(a, 'target', false) || 'article') as 'article' | 'cover' | 'card'
+      if (target === 'card') {
+        const deck = readCards(project)
+        if (!deck || !deck.cards.length) throw new Error('该工程没有贴图卡组：先 write_cards')
+        const i = num(a, 'index')
+        const card = deck.cards[i]
+        if (!card)
+          throw new Error(`卡片下标越界：${i}（本工程共 ${deck.cards.length} 张，合法范围 0-${deck.cards.length - 1}）`)
+        if (!card.png) throw new Error(`第 ${i + 1} 张还没有 PNG：先 render_card index:${i}`)
+        const absHtml = absOf(project, card.png.replace(/\.png$/i, '.html'))
+        if (!existsSync(absHtml))
+          throw new Error(`卡片源码不在：${card.png.replace(/\.png$/i, '.html')}（重新 render_card index:${i}）`)
+        const base64 = await renderHtmlFixed(absHtml, CARD_W, CARD_H)
+        return {
+          target,
+          index: i,
+          png: card.png,
+          png_abs: absOf(project, card.png),
+          width: CARD_W,
+          height: CARD_H,
+          mime: 'image/png',
+          image_base64: base64
+        }
+      }
+      if (target === 'cover') {
+        const meta = store.readMeta(project)
+        if (!meta.cover?.main) throw new Error('该工程还没有封面：先 render_cover_template 出一套')
+        const absHtml = absOf(project, 'covers/cover-wide.html')
+        if (!existsSync(absHtml))
+          throw new Error('封面源码不在（covers/cover-wide.html）：先 render_cover_template 出一套')
+        const base64 = await renderHtmlFixed(absHtml, COVER_WIDE.w, COVER_WIDE.h)
+        return {
+          target,
+          png: meta.cover.main,
+          png_abs: absOf(project, meta.cover.main),
+          width: COVER_WIDE.w,
+          height: COVER_WIDE.h,
+          mime: 'image/png',
+          image_base64: base64
+        }
+      }
+      const variant = (str(a, 'variant', false) || 'day') as 'day' | 'night'
+      const rawW = a.width
+      const w = typeof rawW === 'number' || (typeof rawW === 'string' && rawW.trim()) ? Number(rawW) : 780
+      // 预览复用导出器：它会落一份 article.html（与 export_html 同一产物，下次导出覆盖），
+      // 否则要另起一条「拼 HTML 不落盘」的分支，排版口径就有两份真相了
+      const absHtml = exportArticleHtml(project, variant)
+      const shot = await captureHtmlPreview(absHtml, Number.isFinite(w) ? w : 780)
+      return {
+        target,
+        variant,
+        html: 'article.html',
+        html_abs: absHtml,
+        width: shot.width,
+        height: shot.height,
+        mime: 'image/png',
+        image_base64: shot.base64,
+        hint: shot.height_capped
+          ? `正文比截图上限还长，本次只截到 ${shot.height}px；看全篇请 export_html 后直接读 article.html`
+          : undefined
+      }
     }
   },
   {
@@ -633,7 +790,8 @@ export const TOOLS: ToolDef[] = [
       const project = projectArg(a)
       const base64 = await generateImage(str(a, 'prompt'), { ratio: str(a, 'ratio', false) || undefined })
       const rel = str(a, 'path', false) || `assets/gen-${Date.now()}.png`
-      return { path: store.saveAsset(project, rel, base64) }
+      const saved = store.saveAsset(project, rel, base64)
+      return { path: saved, path_abs: absOf(project, saved) }
     }
   },
   {
@@ -655,28 +813,34 @@ export const TOOLS: ToolDef[] = [
       if (!/\.(png|jpe?g|webp|gif)$/i.test(source)) throw new Error('仅支持 png/jpg/webp/gif')
       const rel = str(a, 'path', false) || `assets/${basename(source)}`
       const base64 = readFileSync(source).toString('base64')
-      return { path: store.saveAsset(project, rel, base64) }
+      const saved = store.saveAsset(project, rel, base64)
+      return { path: saved, path_abs: absOf(project, saved) }
     }
   },
   {
     name: 'set_cover',
-    description: '设置工程封面（写入 project.json）：main 为 2.35:1 主封面，square 为 1:1 方图',
+    description: '设置工程封面（写入 project.json）：main 为 2.35:1 主封面，square 为 1:1 方图。路径传工程内相对路径，也收 generate_image / import_image 刚返回的绝对路径',
     inputSchema: {
       type: 'object',
       properties: {
         project: P.project,
-        main: { type: 'string', description: '主封面相对路径（assets/ 内）' },
-        square: { type: 'string', description: '1:1 方图相对路径（可选，缺省同 main）' }
+        main: { type: 'string', description: '主封面路径（assets/ 内相对路径，或工程内绝对路径）' },
+        square: { type: 'string', description: '1:1 方图路径（可选，缺省同 main）' }
       },
       required: ['project', 'main']
     },
     handler: (a) => {
       const project = projectArg(a)
-      const main = str(a, 'main')
+      const main = relAsset(project, str(a, 'main'))
+      const squareRaw = str(a, 'square', false)
+      const square = squareRaw ? relAsset(project, squareRaw) : main
       if (!existsSync(join(store.projectDir(project), main))) throw new Error(`封面图不存在：${main}`)
       const meta = store.readMeta(project)
-      store.writeMeta(project, { ...meta, cover: { main, square: str(a, 'square', false) || main } })
-      return { ok: true }
+      store.writeMeta(project, { ...meta, cover: { main, square } })
+      // 封面落盘必须广播：漏了这一步，作者改了封面但封面墙/预览还是旧图，看起来就像「设了没反应」
+      notifyChange(project, 'project.json')
+      broadcast('workspace:assets-changed', { project })
+      return { ok: true, cover: { main, square }, main_abs: absOf(project, main), square_abs: absOf(project, square) }
     }
   },
   {
@@ -707,7 +871,7 @@ export const TOOLS: ToolDef[] = [
   {
     name: 'export_html',
     description:
-      '把 article.md 导出为 HTML 文件，返回绝对路径。缺省导出 article.html（公众号排版）；variant 配色模式：auto 读者端自动昼夜（prefers-color-scheme 媒体查询，读者系统深色自动看夜间配色，适合部署自有网页/博客）/ day 固定日间配色（浅卡深字）/ night 固定夜间配色（日间排版按公众号夜间逻辑算法变深，深卡浅字）。公众号推送不支持媒体查询，若要复制到公众号请用 day/night 固定配色。platform 指定分发目标（zhihu/toutiao/baijiahao）时改为导出 article-<platform>.html 平台适配稿（按平台编辑器净化规则简化排版，图片相对路径），适合多平台分发前的稿源',
+      '把 article.md 导出为 HTML 文件，返回绝对路径。variant 配色：auto 读者端自动昼夜（prefers-color-scheme，适合部署自有网页/博客）/ day 固定日间（浅卡深字）/ night 固定夜间；公众号不吃媒体查询，要贴公众号只能用 day 或 night。platform 传知乎/头条/百家号时改导出平台适配稿，适合多平台分发前拿稿源。推送与导出的完整口径见 get_guide 的 publish 段',
     inputSchema: {
       type: 'object',
       properties: {
@@ -767,7 +931,7 @@ export const TOOLS: ToolDef[] = [
   {
     name: 'push_draft',
     description:
-      '把工程推送到公众号草稿箱：正文本地图片自动上传微信 CDN，封面传永久素材，draft/add 入草稿。variant 配色（公众号读者统一看一套，二选一）：day 固定日间配色（浅卡深字，缺省；读者微信夜间会自动变深，推荐）/ night 固定夜间配色（算法变深深卡浅字，公众号夜间可能显示异常）。用哪个公众号按工程所属分类的绑定决定（未绑定走默认账号），账号在应用「设置 → 推送设置」里管理，且本机公网 IP 需已加入公众平台白名单',
+      '把工程推送到公众号草稿箱：正文本地图片自动上传微信 CDN，封面传永久素材，draft/add 入草稿。variant 配色二选一（缺省 day）。账号、分类绑定与本机公网 IP 白名单等前置条件先读 get_guide 的 publish 段；前置不满足时的失败文本要照实转述给作者，不要说成已入草稿',
     inputSchema: {
       type: 'object',
       properties: {
@@ -795,6 +959,491 @@ export const TOOLS: ToolDef[] = [
       if (r.ok) store.stampExported(project)
       return r
     }
+  },
+
+  // ---- 贴图卡组编排（此前只有 push_cards：Agent 能推不能读、不能写、不能出图）----
+  {
+    name: 'read_cards',
+    description:
+      '读贴图卡组 cards.json：format/accent/caption 与每张卡的标题、正文、背景、模式、已渲染 PNG 路径。要改就先读再整体 write_cards 回写；archive 传 wechat/xhs 读那份风格的存档（转风格前的备份）',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project: P.project,
+        archive: { type: 'string', enum: ['wechat', 'xhs'], description: '读该风格的存档版；不传 = 读当前 cards.json' }
+      },
+      required: ['project']
+    },
+    handler: (a) => {
+      const project = projectArg(a)
+      const archive =
+        a.archive === undefined || a.archive === null || a.archive === '' ? null : cardFormatArg(a.archive, 'wechat')
+      const deck = archive ? readArchivedCards(project, archive) : readCards(project)
+      if (!deck) {
+        throw new Error(
+          archive
+            ? `没有 ${archive} 风格的存档（cards-${archive}.json 不存在）：当前卡组请不带 archive 调 read_cards`
+            : '该工程还没有贴图卡组：先 write_cards 建组；不确定工程形态就看 get_project 的 meta.format'
+        )
+      }
+      const rendered = deck.cards.filter((c) => c.png).length
+      return {
+        ...deck,
+        card_count: deck.cards.length,
+        rendered_count: rendered,
+        root: store.projectDir(project),
+        hint:
+          rendered < deck.cards.length
+            ? `${deck.cards.length - rendered} 张还没有 PNG：推送贴图草稿要求全部出图，调 render_card 带 all:true`
+            : undefined
+      }
+    }
+  },
+  {
+    name: 'write_cards',
+    description:
+      '整体写入贴图卡组 cards.json（覆盖式，传完整卡组而不是追加）。每张卡可带 title/body/tag/bgPrompt/bgImage/bgOpacity/dark/fontScale/numbered/mode/aiImage，字段口径见 get_guide 的 cards 段；写完不会自动出图，要 render_card。archive 传 true 则只存档到 cards-<format>.json（转风格前留原版），不动当前卡组',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project: P.project,
+        deck: {
+          type: 'object',
+          description: '完整卡组 {format, cards:[…], accent?, caption?}；把 format/cards/accent/caption 平铺在本层参数里也收',
+          properties: {
+            format: { type: 'string', enum: ['wechat', 'xhs'], description: '贴图风格：wechat 公众号长卡 / xhs 小红书方卡' },
+            accent: { type: 'string', description: '整套卡强调色 #rrggbb' },
+            caption: { type: 'string', description: '发布配文（push_cards 用的就是它）' },
+            cards: { type: 'array', description: '卡片列表，数组顺序即读者翻页顺序', items: { type: 'object' } }
+          },
+          required: ['format', 'cards']
+        },
+        archive: { type: 'boolean', description: 'true = 写到 cards-风格.json 存档（wechat/xhs 各一份），不动当前 cards.json' }
+      },
+      required: ['project']
+    },
+    handler: (a) => {
+      const project = projectArg(a)
+      // deck 收在对象里也收在顶层：模型两种包法都出现过，只认一种就是等它猜
+      const src = (a.deck && typeof a.deck === 'object' && !Array.isArray(a.deck) ? a.deck : a) as Record<string, unknown>
+      const cardsRaw = coerceArrayArg(src.cards, 'cards', '[{"title":"这页讲什么","body":"正文两三句"}]') as CardItem[]
+      const format = cardFormatArg(src.format, 'wechat')
+      const deck: CardDeck = {
+        format,
+        cards: cardsRaw.map((c, i) => {
+          if (!c || typeof c !== 'object' || Array.isArray(c)) throw new Error(`第 ${i + 1} 张卡片不是对象`)
+          const item = c as unknown as CardItem
+          if (!String(item.title ?? '').trim() && !String(item.body ?? '').trim())
+            throw new Error(`第 ${i + 1} 张卡片 title 和 body 都是空的：贴图卡至少要留下一句看得懂的话`)
+          return item
+        }),
+        accent: typeof src.accent === 'string' && src.accent.trim() ? src.accent.trim() : undefined,
+        caption: typeof src.caption === 'string' && src.caption.trim() ? src.caption.trim() : undefined
+      }
+      if (deck.accent && !isHexColor(deck.accent)) throw new Error(`deck.accent 需要 #rrggbb，收到：${deck.accent}`)
+      const asArchive = a.archive === true || a.archive === 'true'
+      if (asArchive) writeArchivedCards(project, deck)
+      else writeCards(project, deck)
+      // 读回一次：落盘走字段白名单重建，不认识的键会被丢掉。不报就等于让 Agent 拿着被削过的卡组
+      // 声称「按你要的排好了」——与 set_theme 的 unknownKeys 同一套诚信口径
+      const back = asArchive ? readArchivedCards(project, deck.format) : readCards(project)
+      const dropped: string[] = []
+      deck.cards.forEach((c, i) => {
+        const kept = back?.cards[i] as unknown as Record<string, unknown> | undefined
+        if (!kept) return
+        for (const k of Object.keys(c)) if (!(k in kept)) dropped.push(`第${i + 1}张.${k}`)
+      })
+      notifyChange(project, asArchive ? `cards-${deck.format}.json` : 'cards.json')
+      broadcast('workspace:assets-changed', { project })
+      const meta = store.readMeta(project)
+      let marked: string | undefined
+      if (!asArchive && meta.format !== 'cards') {
+        // 与向导立项同规：卡组非空即贴图形态，封面墙据此决定取卡还是取文章封面
+        store.writeMeta(project, { ...meta, format: 'cards' })
+        notifyChange(project, 'project.json')
+        marked = '工程已标记为贴图形态（format: cards）'
+      }
+      if (!asArchive) ensureDrafting(project)
+      const hint = [
+        asArchive
+          ? `卡组已存档到 cards-${deck.format}.json，当前 cards.json 未改动（读回用 read_cards 的 archive）`
+          : `${deck.cards.length} 张卡已写入 cards.json（${deck.format} 风格）；还没出图，render_card 带 all:true 一次渲染全部`,
+        marked,
+        dropped.length
+          ? `以下字段不认识、已被丢弃，不得向作者声称已生效：${dropped.join('、')}（卡组字段口径见 get_guide 的 cards 段）`
+          : undefined
+      ]
+        .filter(Boolean)
+        .join('；')
+      return { ok: true, format: deck.format, count: deck.cards.length, archived: asArchive, droppedKeys: dropped, hint }
+    }
+  },
+  {
+    name: 'render_card',
+    description:
+      '把贴图卡片渲染成 PNG（1242×1656 离屏截图，落 cards/风格/card-N.png 并回写该卡的 png 字段）。index 从 0 数；all 传 true 一次渲染全部卡片，push_cards 要求全部已出图',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project: P.project,
+        index: { type: 'number', description: '卡片下标，从 0 开始（不带 all 时必填）' },
+        all: { type: 'boolean', description: 'true = 渲染卡组里所有卡片' }
+      },
+      required: ['project']
+    },
+    handler: async (a) => {
+      const project = projectArg(a)
+      const deck = readCards(project)
+      if (!deck || !deck.cards.length) throw new Error('该工程没有可渲染的卡组：先 write_cards')
+      const wantAll = a.all === true || a.all === 'true'
+      const indexes = wantAll ? deck.cards.map((_, i) => i) : [num(a, 'index')]
+      for (const i of indexes) {
+        if (!Number.isInteger(i) || i < 0 || i >= deck.cards.length)
+          throw new Error(`卡片下标越界：${i}（本工程共 ${deck.cards.length} 张，合法范围 0-${deck.cards.length - 1}）`)
+      }
+      const rendered: { index: number; png: string; png_abs: string }[] = []
+      for (const i of indexes) {
+        const png = await renderCard(project, i)
+        rendered.push({ index: i, png, png_abs: absOf(project, png) })
+      }
+      notifyChange(project, 'cards.json')
+      broadcast('workspace:assets-changed', { project })
+      const missing = (readCards(project)?.cards ?? []).filter((c) => !c.png).length
+      return {
+        rendered,
+        missing_png: missing,
+        hint: missing ? `还有 ${missing} 张没有 PNG，push_cards 会被拦：再调一次 render_card all:true` : undefined
+      }
+    }
+  },
+  {
+    name: 'render_cover_template',
+    description:
+      '用封面模板直出双比例封面（2.35:1 主图 + 1:1 方图，落 assets/cover-235.png / cover-11.png 并自动写进 project.json 的 cover）。template：split 左文右图 / plain 大字版式 / left 左侧竖栏 / editorial 杂志留白；比 generate_image 出的图字准、可复现',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project: P.project,
+        template: { type: 'string', enum: COVER_TEMPLATES.map((t) => t.id), description: '版式 id（见本工具第一句的四选一）' },
+        title: { type: 'string', description: '封面大字（按长度自动断行缩字）' },
+        subtitle: { type: 'string', description: '副标题（可选）' },
+        accent: { type: 'string', description: '强调色 #rrggbb' },
+        bg: { type: 'string', description: '底图工程内相对路径（可选，如 assets/cover-bg.png；plain/editorial 不吃底图）' },
+        brand: { type: 'string', description: '右下品牌行（可选，如 @LIG人生如戏）' }
+      },
+      required: ['project', 'template', 'title', 'accent']
+    },
+    handler: async (a) => {
+      const project = projectArg(a)
+      const template = str(a, 'template')
+      const ids = COVER_TEMPLATES.map((t) => t.id)
+      if (!ids.includes(template)) throw new Error(`未知封面版式：${template}（可选：${ids.join(' / ')}）`)
+      const accent = str(a, 'accent')
+      if (!isHexColor(accent)) throw new Error(`accent 需要 #rrggbb，收到：${accent}`)
+      const bg = str(a, 'bg', false)
+      if (bg && !existsSync(absOf(project, bg)))
+        throw new Error(`底图不存在：${bg}（相对工程根的路径；先看 list_project_assets 有哪些图，或 generate_image 出一张）`)
+      const r = await renderCoverTemplate(project, {
+        template,
+        title: str(a, 'title'),
+        subtitle: str(a, 'subtitle', false) || undefined,
+        accent,
+        bg: bg || undefined,
+        brand: str(a, 'brand', false) || undefined
+      })
+      notifyChange(project, 'project.json')
+      broadcast('workspace:assets-changed', { project })
+      return { ...r, main_abs: absOf(project, r.main), square_abs: absOf(project, r.square) }
+    }
+  },
+
+  // ---- 选题库读取与立项（此前只有 save_ideas：能写进库，读不出来也立不了项）----
+  {
+    name: 'list_ideas',
+    description:
+      '读全局选题库：每条带 index/标题/角度/人群/评分/理由，以及这条选题现在走到哪一步（idle 未立项 / projected 已立项 / scheduled 已排期 / ready 已成稿）与对应工程名',
+    inputSchema: { type: 'object', properties: {} },
+    handler: () => {
+      const ideas = store.listIdeas()
+      let stages: ReturnType<typeof store.listIdeaStages> | null = null
+      let stageError: string | undefined
+      try {
+        stages = store.listIdeaStages()
+      } catch (err) {
+        // 任一工程 project.json 损坏时 store 直接抛：如实带出来，别让看板状态静默缺席
+        stageError = err instanceof Error ? err.message : String(err)
+      }
+      return {
+        count: ideas.length,
+        ideas,
+        stages,
+        hint: stageError
+          ? `阶段信息没算出来（有工程元数据读不出来）：${stageError}`
+          : ideas.length
+            ? '立项并排期用 schedule_idea（传 index + 日期）'
+            : '选题库是空的：brainstorm_prompt 出提示词 → 自己的模型跑完 → save_ideas 入库'
+      }
+    }
+  },
+  {
+    name: 'schedule_idea',
+    description:
+      '从选题库立项并排期：按 index 取那条选题，建工程（同名撞车自动加日期后缀）、写入内容日历排期、把选题画像落到 project.json；选题本身保留在库里不消耗',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        index: { type: 'number', description: '选题下标（list_ideas 返回的 index，从 0 开始）' },
+        date: { type: 'string', description: '排期日期 YYYY-MM-DD' },
+        category: { type: 'string', description: '目标分类（可选；缺省走分类级预设）' }
+      },
+      required: ['index', 'date']
+    },
+    handler: (a) => {
+      const r = store.scheduleIdea(num(a, 'index'), str(a, 'date'), str(a, 'category', false) || undefined)
+      broadcast('workspace:changed', null)
+      return { ...r, hint: `已立项为工程「${r.name}」并排期 ${r.plannedAt}；选题仍留在库里，看板记为已排期` }
+    }
+  },
+
+  // ---- 主题库读取与套用（此前只有 save_theme_preset：写得进、读不出、也切不了）----
+  {
+    name: 'list_themes',
+    description:
+      '读排版主题库：每套自定义主题的名字、归属分类、强调色、生效字段数，以及每个分类当前套用哪套（active 指针）。改主题前先读这个，别凭印象造主题名；detail=true 连完整主题对象一起给',
+    inputSchema: {
+      type: 'object',
+      properties: { detail: { type: 'boolean', description: 'true = 每套附完整字段对象（体积大，只在逐字段对照已有主题时开）' } }
+    },
+    handler: (a) => {
+      const lib = listLibrary()
+      const themes = Object.entries(lib.themes).map(([name, entry]) => ({
+        name,
+        category: entry.category,
+        accent: entry.theme.accent,
+        fields: Object.keys(entry.theme).length,
+        ...((a.detail === true || a.detail === 'true') ? { theme: entry.theme } : {})
+      }))
+      return {
+        count: themes.length,
+        themes,
+        active: Object.entries(lib.active).map(([category, name]) => ({ category, name })),
+        hint: themes.length
+          ? '切换套用 set_active_theme；删除 delete_theme；整套改写先 list_themes detail:true 读回来再存'
+          : '库里还没有自定义主题：save_theme_preset 存一套'
+      }
+    }
+  },
+  {
+    name: 'set_active_theme',
+    description:
+      '切换某分类当前套用的排版主题（该分类下打开工程即生效）；name 传 null = 解绑、回落分类默认调性。主题名必须已存在，写错会连库里现有名字一起报出来',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        category: { type: 'string', description: '分类名（workspace 下的一级目录名）' },
+        name: { type: ['string', 'null'], description: '主题名（list_themes 的 name）；null 解绑回默认' }
+      },
+      required: ['category']
+    },
+    handler: (a) => {
+      const category = str(a, 'category')
+      const raw = a.name
+      const name = raw === null || raw === undefined || raw === '' ? null : String(raw)
+      try {
+        setActiveTheme(category, name)
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        if (name && /主题不存在/.test(msg))
+          throw new Error(`${msg}。库里现有主题：${Object.keys(listLibrary().themes).join(' / ') || '（空，先 save_theme_preset 存一套）'}`)
+        throw err
+      }
+      broadcast('workspace:changed', null)
+      return {
+        ok: true,
+        category,
+        name,
+        hint: name ? `分类「${category}」现在套用主题「${name}」` : `分类「${category}」已解绑主题，回落默认调性`
+      }
+    }
+  },
+  {
+    name: 'delete_theme',
+    description:
+      '从主题库删一套自定义主题（同时解绑所有指向它的分类套用）。不可恢复，必须带 confirm:true；名字不存在时不报错，但会如实返回 deleted:false',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: '主题名（list_themes 的 name）' },
+        confirm: { type: 'boolean', description: '必须显式传 true：代表作者已同意删除' }
+      },
+      required: ['name']
+    },
+    handler: (a) => {
+      const name = str(a, 'name')
+      requireConfirm(a, `删除主题「${name}」`)
+      const before = Object.keys(listLibrary().themes)
+      deleteTheme(name)
+      const after = Object.keys(listLibrary().themes)
+      const deleted = before.includes(name) && !after.includes(name)
+      return {
+        deleted,
+        name,
+        hint: deleted
+          ? `主题「${name}」已删除，库里剩 ${after.length} 套`
+          : `主题「${name}」本来就不在库里，什么都没删（现有：${after.join(' / ') || '空'}）`
+      }
+    }
+  },
+
+  // ---- Skill 库读写（此前外部 Agent 只能在 *_prompt 结果里被动收到全文）----
+  {
+    name: 'list_skills',
+    description:
+      '列本机 Skill 库（注入系统提示的写作方法论文件）：名字/描述/绝对目录/是否启用。挂到工程用 set_project_skill，新建或改写用 save_skill',
+    inputSchema: { type: 'object', properties: {} },
+    handler: () => {
+      const skills = listSkills()
+      return {
+        count: skills.length,
+        skills,
+        hint: skills.some((s) => !s.enabled) ? '有停用的 Skill：停用状态下不会被注入提示词，要用先启用或直接 save_skill 覆盖' : undefined
+      }
+    }
+  },
+  {
+    name: 'save_skill',
+    description:
+      '新建或同名覆盖一个 Skill（content 传 SKILL.md 全文）。多工程复用同一套口径时，写成 Skill 比每次在对话里重复要求划算；存完用 set_project_skill 挂上',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'Skill 名（即目录名，不能含路径分隔符、盘符冒号或 ..）' },
+        content: { type: 'string', description: 'SKILL.md 全文（markdown）' }
+      },
+      required: ['name', 'content']
+    },
+    handler: (a) => {
+      const name = str(a, 'name')
+      if (/[\\/:*?"<>|]|\.\./.test(name)) throw new Error(`非法 Skill 名：${name}（不能含 \\ / : * ? " < > | 或 ..）`)
+      const content = str(a, 'content')
+      if (!content.trim()) throw new Error('content 为空：Skill 正文不能是空文件')
+      const saved = saveSkill(name, content)
+      const hit = listSkills().find((s) => s.name === saved)
+      return {
+        name: saved,
+        dir: hit?.dir,
+        description: parseDescription(content),
+        hint: '挂载到工程用 set_project_skill；挂载后本工程的脑暴/大纲/全文/审阅/标题提示词会自动带上这套方法论全文'
+      }
+    }
+  },
+  {
+    name: 'set_project_skill',
+    description:
+      '给工程挂载或换掉风格 Skill（写 project.json 的 style_skill）；skill 传 null = 取消挂载。挂载名必须来自 list_skills，写错会连可用名字一起报出来',
+    inputSchema: {
+      type: 'object',
+      properties: { project: P.project, skill: { type: ['string', 'null'], description: 'Skill 名；null 取消挂载' } },
+      required: ['project']
+    },
+    handler: (a) => {
+      const project = projectArg(a)
+      const raw = a.skill
+      const skill = raw === null || raw === undefined || raw === '' ? null : String(raw)
+      if (skill) {
+        try {
+          readSkill(skill)
+        } catch {
+          throw new Error(`Skill 不存在：${skill}。本机可用：${listSkills().map((s) => s.name).join(' / ') || '（空，先 save_skill 建一个）'}`)
+        }
+      }
+      const meta = store.readMeta(project)
+      store.writeMeta(project, { ...meta, style_skill: skill ?? undefined })
+      notifyChange(project, 'project.json')
+      return { ok: true, project, skill, hint: skill ? `已挂载风格 Skill「${skill}」` : '已取消挂载，本工程回到默认调性' }
+    }
+  },
+
+  // ---- 工程治理（Agent 能造垃圾也能收：改名、删除、素材清单、同名歧义）----
+  {
+    name: 'rename_project',
+    description:
+      '重命名工程（目录同步改名）。非法字符会被清掉、超 30 字会被截断，所以后续调用一定要用返回的 name；旧名字当场失效，同分类撞名报错',
+    inputSchema: {
+      type: 'object',
+      properties: { project: P.project, new_name: { type: 'string', description: '新工程名（也是新目录名）' } },
+      required: ['project', 'new_name']
+    },
+    handler: async (a) => {
+      const oldName = projectArg(a)
+      const input = str(a, 'new_name')
+      const target = sanitizeProjectName(input)
+      if (!target) throw new Error(`新工程名清完非法字符后是空的：${input}`)
+      const was = await pauseProjectWatcher(oldName)
+      const meta = store.renameProject(oldName, target)
+      if (was) resumeProjectWatcher(target)
+      broadcast('workspace:changed', null)
+      return {
+        name: target,
+        dir: store.projectDir(target),
+        meta,
+        hint: target !== input.trim() ? `名字按平台规则清洗过：「${input}」→「${target}」，请照清洗后的名字继续，不要说成原样改名` : undefined
+      }
+    }
+  },
+  {
+    name: 'delete_project',
+    description:
+      '删除整个工程目录（正文、配图、交付物一起没，不可恢复）。必须带 confirm:true；只是不想现在发就改用 schedule_set 取消排期或换个分类，别删稿',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project: P.project,
+        confirm: { type: 'boolean', description: '必须显式传 true：代表作者已同意删除这个工程' }
+      },
+      required: ['project']
+    },
+    handler: async (a) => {
+      const project = projectArg(a)
+      requireConfirm(a, `删除工程「${project}」`)
+      const dir = store.projectDir(project)
+      await pauseProjectWatcher(project)
+      store.deleteProject(project)
+      const gone = !existsSync(dir)
+      broadcast('workspace:changed', null)
+      return {
+        deleted: gone,
+        project,
+        dir,
+        hint: gone ? undefined : `目录没删掉：${dir} 可能被其它程序占用，或它本来就不存在`
+      }
+    }
+  },
+  {
+    name: 'list_project_assets',
+    description:
+      '列工程里已有的素材：assets 图片 / figures 图表 HTML / covers 封面 HTML / cards 卡片图 / 交付 产物，均为工程内相对路径，另附 root 绝对路径便于直接读文件',
+    inputSchema: { type: 'object', properties: { project: P.project }, required: ['project'] },
+    handler: (a) => {
+      const project = projectArg(a)
+      const r = store.listProjectAssets(project)
+      const total = Object.values(r).reduce((n, list) => n + list.length, 0)
+      return { ...r, root: store.projectDir(project), total, hint: total ? undefined : '这个工程还没有任何素材' }
+    }
+  },
+  {
+    name: 'find_duplicate_projects',
+    description:
+      '查同名工程：同一个名字散落在多个分类目录时，list_projects 会出现同名多条，按名字定位就有歧义。返回每组的绝对路径与更新时间，据此再决定改哪一个',
+    inputSchema: { type: 'object', properties: {} },
+    handler: () => {
+      const groups = store.findDuplicateProjects()
+      return {
+        count: groups.length,
+        groups,
+        hint: groups.length ? `${groups.length} 组同名工程：这一批调用请带 dir（绝对路径）而不是 project 名` : '没有同名工程'
+      }
+    }
   }
 ]
 
@@ -812,6 +1461,21 @@ for (const t of TOOLS) {
   }
 }
 
+/** 资源路径宽容：Agent 常把上一步返回的绝对路径原样传回 set_cover。
+ *  工程内的绝对路径折成相对路径；工程外的事先说清楚怎么补救，不留「封面图不存在」这种没法执行的报错 */
+function relAsset(project: string, p: string): string {
+  const root = store.projectDir(project)
+  const t = p.trim().replace(/\\/g, '/')
+  if (!isAbsolute(p)) return t
+  const prefix = root.replace(/\\/g, '/') + '/'
+  if (t.toLowerCase().startsWith(prefix.toLowerCase())) {
+    const rel = t.slice(prefix.length)
+    if (!existsSync(join(root, rel))) throw new Error(`封面图不存在：${p}（已按工程内路径找过，文件不在盘上）`)
+    return rel
+  }
+  throw new Error(`封面图不在本工程内：${p}。先 import_image 把它复制进 assets/，再传它返回的相对路径`)
+}
+
 /** 按名执行工具（MCP tools/call 与 HTTP bridge 共用入口） */
 export async function callTool(name: string, args: Record<string, unknown>): Promise<unknown> {
   const tool = TOOLS.find((t) => t.name === name)
@@ -819,10 +1483,11 @@ export async function callTool(name: string, args: Record<string, unknown>): Pro
   return tool.handler(args ?? {})
 }
 
-/** 对话副驾驶可执行工具清单（chat-tools v1）：排除提示词返回类——
- *  那批工具专为无头外部 Agent 设计（返回提示词、调用方自带模型），内部对话有自己的界面流 */
+/** 对话副驾驶可执行工具清单（chat-tools v1）：排除提示词返回类与 headlessOnly 类——
+ *  前者专为无头外部 Agent 设计（返回提示词、调用方自带模型），内部对话有自己的界面流；
+ *  后者的结果是大体积图片（render_preview），内部对话没有看图通道，作者本来就能直接看编辑器 */
 export function listExecTools(): { name: string; description: string; parameters: unknown }[] {
-  return TOOLS.filter((t) => !t.name.endsWith('_prompt')).map((t) => ({
+  return TOOLS.filter((t) => !t.name.endsWith('_prompt') && !t.headlessOnly).map((t) => ({
     name: t.name,
     description: t.description,
     parameters: t.inputSchema

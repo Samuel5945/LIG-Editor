@@ -175,7 +175,8 @@ export function toolsInventory(tools: ChatToolSchema[]): string {
   })
   return `可用工具（名字 → 用途）：${brief.join(' / ')}。
 凡是这些工具能做的事（改正文、写正文、排版、配图生图、设封面、导出、推送）都必须发起工具调用来完成，不能凭上下文里的正文自己复述——用户要 Word/HTML 时调 export_docx/export_html 并把返回的文件路径原样告知，绝不要把正文贴回对话代替文件。
-清单里存在的能力就是编辑器已经提供的能力，绝不能回答「编辑器不支持」「只能手动复制到 Word」；不确定参数就按上面的名字直接发起调用，由工具返回的错误信息来纠正。`
+清单里存在的能力就是编辑器已经提供的能力，绝不能回答「编辑器不支持」「只能手动复制到 Word」；不确定参数就按上面的名字直接发起调用，由工具返回的错误信息来纠正。
+字段名与取值口径不确定时先调 get_guide（topic 取 theme / markdown / cards / pipeline / publish）取那一册手册再动手，不要凭印象造键名——键名不认识会进返回的 ignoredKeys / droppedKeys，必须照实转述。`
 }
 
 /** 清单注入决策：只有「这个模型真的返回过原生 tool_calls」才敢省掉清单——

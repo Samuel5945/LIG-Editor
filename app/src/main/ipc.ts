@@ -61,10 +61,29 @@ export function queueOrBroadcastMd(p: string): void {
   }
 }
 
-export function registerIpc(): void {
-  // 当前被 watcher 监听的工程（删工程时判断是否需要先停监听）
-  let watchedProject: string | null = null
+/** 当前被 watcher 监听的工程（改名/删除/迁移分类时判断是否需要先停监听）。
+ *  模块级而非 registerIpc 闭包内：MCP 能力核绕过 IPC 直调 store 做同样的目录变动时，
+ *  必须复用同一套收尾，否则工程改完名，正打开着的那篇的热载监听还停在旧目录上 */
+let watchedProject: string | null = null
 
+/** 工程目录即将被改名/删除/迁移：先停监听并摘掉资产监听，返回原本是否在监听（调用方据此决定要不要重挂） */
+export async function pauseProjectWatcher(name: string): Promise<boolean> {
+  const was = watchedProject === name
+  if (was) {
+    await stopProjectWatch()
+    watchedProject = null
+  }
+  unwatchProjectAssets(name)
+  return was
+}
+
+/** 目录变动落定后按新路径重挂监听（仅当 pauseProjectWatcher 返回 true 才该调用） */
+export function resumeProjectWatcher(name: string): void {
+  watchProject(name, store.projectDir(name))
+  watchedProject = name
+}
+
+export function registerIpc(): void {
   handle('app:ping', () => 'pong')
   handle('app:getPaths', () => getAppPaths())
   // 拉取启动期间积压的拖拽/关联 .md：调用即视为渲染层已就绪，后续改走事件推送
@@ -123,53 +142,27 @@ export function registerIpc(): void {
   handle('project:renameCategory', async (oldName, newName) => {
     // 当前打开的工程若在被改名分类下，目录会迁移：先停监听，改名后按新路径重挂
     const p = watchedProject
-    if (p) {
-      await stopProjectWatch()
-      watchedProject = null
-    }
+    if (p) await pauseProjectWatcher(p)
     store.renameCategory(oldName, newName)
-    if (p) {
-      watchProject(p, store.projectDir(p))
-      watchedProject = p
-    }
+    if (p) resumeProjectWatcher(p)
   })
   handle('project:create', (name, category) => store.createProject(name, category))
   handle('project:setCategory', async (project, category) => {
     // 正在监听的工程目录被迁移：先停监听，迁移后按新路径重新挂上
-    const rewatching = watchedProject === project
-    if (rewatching) {
-      await stopProjectWatch()
-      watchedProject = null
-    }
-    unwatchProjectAssets(project)
+    const was = await pauseProjectWatcher(project)
     const meta = store.setProjectCategory(project, category)
-    if (rewatching) {
-      watchProject(project, store.projectDir(project))
-      watchedProject = project
-    }
+    if (was) resumeProjectWatcher(project)
     return meta
   })
   handle('project:delete', async (name) => {
-    if (watchedProject === name) {
-      await stopProjectWatch()
-      watchedProject = null
-    }
-    unwatchProjectAssets(name)
+    await pauseProjectWatcher(name)
     store.deleteProject(name)
   })
   handle('project:rename', async (oldName, newName) => {
     // 正在监听的工程目录被改名：先停监听，改完后按新目录重挂（同 setCategory 模式）
-    const rewatching = watchedProject === oldName
-    if (rewatching) {
-      await stopProjectWatch()
-      watchedProject = null
-    }
-    unwatchProjectAssets(oldName)
+    const was = await pauseProjectWatcher(oldName)
     const meta = store.renameProject(oldName, newName)
-    if (rewatching) {
-      watchProject(newName, store.projectDir(newName))
-      watchedProject = newName
-    }
+    if (was) resumeProjectWatcher(newName)
     return meta
   })
   handle('project:open', (name) => {

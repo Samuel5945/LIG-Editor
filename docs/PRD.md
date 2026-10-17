@@ -558,26 +558,40 @@ Word（`docx`）与 PDF（`printToPDF`）落工程内 `交付/`，用于对外�
 ### 10.1 接入方式
 
 - **MCP stdio**：`立格编辑器.exe --mcp` 以无头模式启动能力核（不开窗口也能干活）；GUI 运行时同一能力核在进程内共享
-- **本地 HTTP**：`http://127.0.0.1:<port>/api/*`，端口与 token 写入 `settings\bridge.json` 供本机工具发现
+- **本地 HTTP**：`http://127.0.0.1:随机端口` 的 `GET /health` / `GET /tools` / `POST /tool`（体为 `{name, arguments}`），端口、token、pid、版本写入 `settings\bridge.json` 供本机发现；鉴权 `Authorization: Bearer token`
 - **「一键接入」卡片**：设置页生成 Codex（`config.toml`）/ Qoder / Claude Code 的 MCP 配置片段，一键复制
 
-### 10.2 MCP 工具面（当前 27 个）
+### 10.2 MCP 工具面（当前 45 个）
 
-> **chat-tools v1（2026-09-29，滚动补记）**：内部对话副驾驶已接入工具调用——排除 5 个 `*_prompt` 后的 **22 个工具**以 function calling 暴露给对话模型（`agent:listTools` / `agent:callTool`），三层确认（读类静默 / 写类结果卡 / 推送确认卡），供应商不支持 tools 参数时自动降级回围栏协议。规格见 `docs/superpowers/specs/2026-09-29-chat-tools-design.md`。
+> **chat-tools v1（2026-09-29，滚动补记）**：内部对话副驾驶已接入工具调用——排除 5 个 `*_prompt` 与 1 个 `headlessOnly`（`render_preview`，结果是图片 base64，对话里没有看图通道，作者本来就能看编辑器）后的 **39 个工具**以 function calling 暴露给对话模型（`agent:listTools` / `agent:callTool`），三层确认（读类静默 / 写类结果卡 / 推送确认卡），供应商不支持 tools 参数时自动降级回围栏协议。规格见 `docs/superpowers/specs/2026-09-29-chat-tools-design.md`。
+
+> **读侧对称与视觉自证（2026-10-17，滚动补记）**：补齐「IPC 已有而注册表缺」（与 `export_pdf` 同一类）与「只写不读」两类缺口，并把长口径改成按需手册。要点：
+>
+> - **每个写入口都有读出口**：贴图卡组 `read_cards`/`write_cards`/`render_card`、主题库 `list_themes`/`set_active_theme`/`delete_theme`、Skill `list_skills`/`save_skill`/`set_project_skill`、选题库 `list_ideas`/`schedule_idea`（选题可直接立项排期）、工程治理 `rename_project`/`delete_project`/`list_project_assets`/`find_duplicate_projects`。目录改名/删除复用 IPC 同一套 watcher 收尾（`pauseProjectWatcher` / `resumeProjectWatcher`），不再另写一份。
+> - **Agent 能自查成品**：`render_preview` 把正文/封面/单张贴图卡离屏截图回传，代理把结果里的 `image_base64` 拆成 MCP `image` 内容块（此前代理只发 text，宿主拿到的是几百 KB 字符串而不是图）。写类工具同时返回工程内相对路径与 `*_abs` 绝对路径。
+> - **清单瘦身 = 手册化**：新增 `get_guide(topic)`，把排版字段表（由 `themeFields` 元数据单源生成，不另抄一份）、正文 markdown 语法、卡组字段、流程编排、推送前置挪进去；`set_theme` 单条从 4,572 字符降到 3,200，同时把此前「说明里提到、schema 里没声明」的 `imgStyle`/`imgFrame`/`imgGap`/`captionAlign` 补进 schema（未声明对外部 Agent 等于不存在）。实测 45 个工具一次 `tools/list` 下发 23,723 字符（27 个时 18,404），单工具均值 681→527。
+> - **破坏性操作门槛**：`delete_project` / `delete_theme` 必须显式 `confirm:true`，否则只报影响不执行（外部通路没有应用内确认框）；名字不存在、目录没删掉等情况一律如实返回 `deleted:false`，不装成功。
+> - **协议收口**：`initialize` 的 `serverInfo.version` 改读 `bridge.json` 里的 `app.getVersion()`（此前硬编码 0.3.0）；HTTP 调用给 300s 上限（`LIG_MCP_TIMEOUT_MS` 可调）而不是永不超时；支持 JSON-RPC 批量数组请求；发现 `bridge.json` 指向已退出进程时清掉残留 token 文件。
 
 **关键设计变更**：v1.0 设想的 `brainstorm_topics / generate_article / review_article / generate_titles` 由应用代跑 LLM，实际改为 **`*_prompt` 返回提示词消息组、本应用不代跑 LLM**——外部 Agent 用它自己的模型跑，再调落盘工具写入。理由：Agent 侧模型更强且已有配额，避免把 API Key 与计费绑到编辑器上；同时提示词里已注入当前正文与风格 Skill，Agent 无需自行拼装上下文。
 
 ```
+手册       get_guide（pipeline / markdown / theme / cards / publish）
 工程管理   list_projects / create_project / set_project_category / get_project
+           rename_project / delete_project / list_project_assets / find_duplicate_projects
 正文读写   read_article / write_article / patch_article（搜索替换式局部改）
 提示词     brainstorm_prompt / outline_prompt / article_prompt / review_prompt / titles_prompt
 落盘       save_ideas / save_review / set_titles / set_theme / save_theme_preset
-配图       render_figure / generate_image / import_image / set_cover
+选题库     list_ideas / schedule_idea（选题→立项→排期）
+主题库     list_themes / set_active_theme / delete_theme
+Skill      list_skills / save_skill / set_project_skill
+配图       render_figure / generate_image / import_image / set_cover / render_preview
+贴图卡组   read_cards / write_cards / render_card / render_cover_template
 排期       schedule_set
 导出发布   export_html / export_docx / export_pdf / push_draft / push_cards
 ```
 
-每个写操作后触发 `notifyChange()`，GUI 侧热载。
+每个写操作后触发 `notifyChange()`，GUI 侧热载；目录级变动（改名/删除/迁移分类）额外广播 `workspace:changed`，出图类额外广播 `workspace:assets-changed`。
 
 ### 10.3 文件直改通道
 
