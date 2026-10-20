@@ -3,7 +3,7 @@
  *
  * 钉死的是「读—改—写往返不吞字段」：B 期排版视觉覆盖 20 字段曾必须逐个登记进 readMeta 白名单，
  * 漏一个的表现是——作者在编辑器里改 A 字段，writeMeta 把盘上的 B 字段静默清空（界面看着两个字段互相牵连）。
- * 这里用真实临时目录走 readMeta→writeMeta→readMeta，把 30 个覆盖键逐一过一遍。
+ * 这里用真实临时目录走 readMeta→writeMeta→readMeta，把 40 个覆盖键逐一过一遍。
  *
  * 同 categoryPresetStore.test.ts：只 mock 掉会牵进 electron 的 paths 与 safeStorage。
  */
@@ -34,7 +34,7 @@ import { THEME_OVERRIDE_KEYS } from '@shared/categoryThemes'
 const PROJECT = '排版覆盖工程'
 const metaFile = (): string => join(getAppPaths().workspace, PROJECT, 'project.json')
 
-/** 视觉覆盖 30 键各给一个合法且互不相同的值 */
+/** 视觉覆盖 40 键各给一个合法且互不相同的值 */
 const ALL_OVERRIDES: Record<string, unknown> = {
   accent: '#0f766e',
   bodyFontSize: 17,
@@ -42,10 +42,12 @@ const ALL_OVERRIDES: Record<string, unknown> = {
   bodyAlign: 'indent',
   headingAlign: 'left',
   h1Style: 'pill',
+  h1Bg: '#bbbbbb',
   h2Style: 'block',
   h2Num: '1.',
   h3Mark: 'dot',
   bodyBg: 'none',
+  pageBg: '#cccccc',
   fontFamily: 'Serif, serif',
   lineHeight: 2.4,
   letterSpacing: '0.03em',
@@ -63,6 +65,10 @@ const ALL_OVERRIDES: Record<string, unknown> = {
   strongBg: '#555555',
   strongColor: '#666666',
   imgRadius: 0,
+  imgStyle: 'fullwidth',
+  imgFrame: 'shadow',
+  imgGap: 18,
+  captionAlign: 'left',
   bodyRadius: 14,
   bodyPadding: '20px 22px',
   tableStyle: 'striped',
@@ -78,7 +84,7 @@ function seed(raw: Record<string, unknown>): void {
 }
 
 describe('readMeta 排版覆盖透传', () => {
-  it('盘上 30 个覆盖键逐个读出不丢（含 imgRadius=0 这种真值会踩的坑）', () => {
+  it('盘上 40 个覆盖键逐个读出不丢（含 imgRadius=0 这种真值会踩的坑）', () => {
     seed(ALL_OVERRIDES)
     const m = readMeta(PROJECT) as unknown as Record<string, unknown>
     for (const k of THEME_OVERRIDE_KEYS) expect(m[k], `字段 ${k} 未在 readMeta 白名单里`).toBe(ALL_OVERRIDES[k])
