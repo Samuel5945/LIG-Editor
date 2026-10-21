@@ -8,16 +8,17 @@ import {
   type ReactElement
 } from 'react'
 import { Icon } from '../ui/Icon'
-import { Button, Card, CardTitle, Chip, CollapseBar } from '../ui/primitives'
+import { Button, Card, CardTitle, Chip, CollapseBar, Segmented, Switch } from '../ui/primitives'
 import type { ArticleTheme } from '@shared/categoryThemes'
 import type { ProjectMeta, TitleCandidate } from '@shared/types'
 import { cardsPlainText, hexToRgba } from '@shared/cards'
-import { COVER_SQUARE, COVER_TEMPLATES, COVER_WIDE } from '@shared/coverTemplates'
+import { COVER_SQUARE, COVER_TEMPLATES, COVER_WIDE, NO_BG_TEMPLATES } from '@shared/coverTemplates'
+import { shouldSubmitOnEnter } from '@shared/imeEnter'
 import { extractTitle } from '@shared/exportHtml'
 import { UNCATEGORIZED } from '@shared/categories'
 import { mdToDoc } from '@shared/markdown'
-import { chatOnce, extractJsonArray } from '../copilot/llm'
-import { coverPromptMessages, titleMessages } from '../copilot/prompts'
+import { chatOnce, extractJsonArray, stripHtmlFence } from '../copilot/llm'
+import { coverHtmlBriefMessages, coverHtmlMessages, coverPromptMessages, titleMessages } from '../copilot/prompts'
 
 interface TitleCoverPanelProps {
   project: string
@@ -75,12 +76,36 @@ export default function TitleCoverPanel({
   const promptAbortRef = useRef<(() => void) | null>(null)
   // ---- 裁剪位置：预览上直接拖动（内容跟手） ----
   const dragRef = useRef<{ key: 'wide' | 'square'; x: number; y: number; start: number; axis: 'x' | 'y'; per: number } | null>(null)
-  // ---- 模板封面：选版式 → 填标题 → 双比例直出（与拖动裁剪出口相同） ----
+  // ---- 封面三条路：一张卡里分段切换（照正文配图弹窗的管线选择来做，不用来回翻卡）----
+  const [coverMode, setCoverMode] = useState<'template' | 'photo' | 'html'>('template')
+  // ---- 模板封面：选版式 → 填标题 → 一步直出（与拖动裁剪出口相同） ----
   const [template, setTemplate] = useState(() => meta.cover?.template ?? COVER_TEMPLATES[0].id)
   const [coverTitle, setCoverTitle] = useState('')
   const [coverSubtitle, setCoverSubtitle] = useState('')
-  const [useBg, setUseBg] = useState(false)
+  /** 底图从哪来：不用 / AI 现场生（一次点击内完成生图+合成）/ 选工程里已有的图 */
+  const [bgSource, setBgSource] = useState<'none' | 'ai' | 'file'>('none')
+  const [bgFile, setBgFile] = useState('')
+  const [projectImages, setProjectImages] = useState<string[]>([])
+  const [projectCovers, setProjectCovers] = useState<string[]>([])
+  const [coverError, setCoverError] = useState<string | null>(null)
   const [rendering, setRendering] = useState(false)
+  // ---- 封面口径三件套：磨砂面板 / 装饰元素 / 方图取景（模板直出与自定义 HTML 共用一套）----
+  const [panel, setPanel] = useState<'auto' | 'frosted' | 'none'>('auto')
+  const [decor, setDecor] = useState(true)
+  const [focalPick, setFocalPick] = useState<'auto' | 'right' | 'center' | 'left'>('auto')
+  // ---- HTML 直渲：只截图，不重生成作者/AI 写的源文件 ----
+  const [customHtml, setCustomHtml] = useState('')
+  const [customW, setCustomW] = useState<number>(COVER_WIDE.w)
+  const [customH, setCustomH] = useState<number>(COVER_WIDE.h)
+  /** 画布比例：预设两档，手改数字即转自定义（免得让人一上来填两个数） */
+  const [canvasPreset, setCanvasPreset] = useState<'wide' | 'square' | 'custom'>('wide')
+  const [customOut, setCustomOut] = useState<{ main: string; square?: string } | null>(null)
+  const [customizing, setCustomizing] = useState(false)
+  // AI 写 HTML：指令 + 上一版源码（改一版时带回给模型，不用重写全文）
+  const [customDesc, setCustomDesc] = useState('')
+  const [writing, setWriting] = useState(false)
+  const customSrcRef = useRef<string | null>(null)
+  const customAbortRef = useRef<(() => void) | null>(null)
   // 渲染完成后自增，给 asset:// 预览加参破缓存（同贴图面板）
   const [pv, setPv] = useState(0)
 
@@ -102,6 +127,35 @@ export default function TitleCoverPanel({
   )
 
   useEffect(() => () => promptAbortRef.current?.(), [])
+
+  // 底图与封面 HTML 的候选：工程里现成的文件（打开面板与每次出图后刷新，Agent 刚生成的也要能选到）
+  const refreshProjectFiles = useCallback(() => {
+    window.api
+      .invoke('project:listAssets', project)
+      .then((a) => {
+        // 封面成品不进底图候选（拿成品再套一层版式是套娃）；cover-bg*.png 是底图本身，要留着
+        const isCoverOutput = (x: string): boolean =>
+          /^assets\/cover-(235|11)\.png$/.test(x) || /^assets\/cover-custom.*\.png$/.test(x)
+        // 刚生成的排最前：文件名里的毫秒时间戳就是顺序，当前底图 cover-bg.png 钉在第一
+        const stamp = (x: string): number => Number(/(\d{10,})/.exec(x)?.[1] ?? 0)
+        const rank = (x: string): number => (x === 'assets/cover-bg.png' ? Number.MAX_SAFE_INTEGER : stamp(x))
+        setProjectImages(a.assets.filter((x) => !isCoverOutput(x)).sort((l, r) => rank(r) - rank(l)))
+        setProjectCovers(a.covers)
+      })
+      .catch(() => {
+        setProjectImages([])
+        setProjectCovers([])
+      })
+  }, [project])
+
+  useEffect(() => {
+    refreshProjectFiles()
+  }, [refreshProjectFiles, pv])
+
+  // 下拉缺省选第一个 covers/*.html：作者不用记文件名也能直接出图
+  useEffect(() => {
+    if (!customHtml && projectCovers.length) setCustomHtml(projectCovers[0])
+  }, [projectCovers, customHtml])
 
   // ---- AI 起标题（独立一次性调用，不进对话） ----
 
@@ -141,13 +195,24 @@ export default function TitleCoverPanel({
     }
   }, [titling, article, skill, project, meta.format, onMetaUpdated, onToast])
 
+  /** 底图进 assets/：不落盘的图「模板直出」那条路看不见，等于白生成/白导入一次 */
+  const stashBg = useCallback(
+    async (image: HTMLImageElement): Promise<string> => {
+      const rel = await window.api.invoke('project:saveAsset', project, 'assets/cover-bg.png', renderFullPng(image))
+      setBgFile(rel)
+      refreshProjectFiles()
+      return rel
+    },
+    [project, refreshProjectFiles]
+  )
+
   const pickImage = useCallback(
     (file: File) => {
       const url = URL.createObjectURL(file)
       const image = new Image()
       image.onload = () => {
         setImg(image)
-        setUseBg(true)
+        void stashBg(image).catch(() => undefined)
       }
       image.onerror = () => {
         URL.revokeObjectURL(url)
@@ -155,23 +220,30 @@ export default function TitleCoverPanel({
       }
       image.src = url
     },
-    [onToast]
+    [onToast, stashBg]
   )
 
   // ---- 封面提示词：LLM 通读正文提取关键信息，流式写进输入框供用户二次编辑 ----
 
-  const extractCoverPrompt = useCallback(async () => {
-    if (prompting) return
-    // 与起标题同源：正文为空时贴图工程回退卡片文案
+  /** 提取用的正文：正文为空时贴图工程回退卡片文案（生图提示词与 HTML 设计指令共用这份取数逻辑） */
+  const briefSource = useCallback(async (): Promise<string | null> => {
     let source = article
     if (!source.trim() && meta.format === 'cards') {
       const deck = await window.api.invoke('cards:read', project)
       if (deck?.cards.length) source = cardsPlainText(deck.cards)
     }
     if (!source.trim()) {
-      onToast(meta.format === 'cards' ? '卡片为空，先加几张贴图再提取封面提示词' : '正文为空，先写点内容再提取封面提示词')
-      return
+      onToast(meta.format === 'cards' ? '卡片为空，先加几张贴图再提取' : '正文为空，先写点内容再提取')
+      return null
     }
+    return source
+  }, [article, meta.format, project, onToast])
+
+  /** 底图那条路：出的是「画面里不要文字、主体偏右」的生图提示词 */
+  const extractCoverPrompt = useCallback(async () => {
+    if (prompting) return
+    const source = await briefSource()
+    if (!source) return
     setPrompting(true)
     const { promise, abort } = chatOnce(coverPromptMessages(source, skill), (full) => setCoverPrompt(full))
     promptAbortRef.current = abort
@@ -179,12 +251,31 @@ export default function TitleCoverPanel({
       const full = await promise
       setCoverPrompt(full.trim())
     } catch (err) {
-      onToast(`封面提示词提取失败：${err instanceof Error ? err.message : err}`)
+      onToast(`封面提示词提取失败：${err instanceof Error ? err.message : String(err)}`)
     } finally {
       setPrompting(false)
       promptAbortRef.current = null
     }
-  }, [prompting, article, meta.format, project, skill, onToast])
+  }, [prompting, briefSource, skill, onToast])
+
+  /** HTML 直渲那条路：出的是「标题文案 + 版式气质 + 画面元素 + 配色」的设计指令，直接喂给 AI 写 HTML */
+  const extractHtmlBrief = useCallback(async () => {
+    if (prompting) return
+    const source = await briefSource()
+    if (!source) return
+    setPrompting(true)
+    const { promise, abort } = chatOnce(coverHtmlBriefMessages(source, skill, theme?.accent), (full) => setCustomDesc(full))
+    promptAbortRef.current = abort
+    try {
+      const full = await promise
+      setCustomDesc(full.trim())
+    } catch (err) {
+      onToast(`设计指令提取失败：${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setPrompting(false)
+      promptAbortRef.current = null
+    }
+  }, [prompting, briefSource, skill, theme?.accent, onToast])
 
   // ---- 裁剪位置：预览画布上直接拖动（内容跟手），滑杆保留作微调 ----
 
@@ -219,13 +310,13 @@ export default function TitleCoverPanel({
     dragRef.current = null
   }, [])
 
-  // ---- AI 生成封面：按用户确认的提示词出 21:9 横图，生成后进同一套裁切保存流程 ----
+  // ---- 照片裁剪那条路：按描述出 21:9 横图作底图，生成即落 assets/（裁剪与「模板直出」共用这一张）----
 
   const genCover = useCallback(async () => {
     if (genning || prompting) return
     const prompt = coverPrompt.trim()
     if (!prompt) {
-      onToast('请先输入封面提示词，或点「从正文提取提示词」')
+      onToast('先写一句底图描述，或点「从正文提取」')
       return
     }
     setGenning(true)
@@ -235,8 +326,8 @@ export default function TitleCoverPanel({
       const image = new Image()
       image.onload = () => {
         setImg(image)
-        setUseBg(true)
-        onToast('封面已生成，可拖动裁剪，也可直接用上方版式模板出图')
+        onToast('底图已生成并存进 assets/：可在这张卡上拖选裁剪，也可切到「模板直出」直接套版式')
+        void stashBg(image).catch(() => undefined)
       }
       image.onerror = () => onToast('封面图片解码失败，请重试')
       image.src = `data:image/png;base64,${b64}`
@@ -245,7 +336,7 @@ export default function TitleCoverPanel({
     } finally {
       setGenning(false)
     }
-  }, [genning, prompting, coverPrompt, onToast])
+  }, [genning, prompting, coverPrompt, onToast, stashBg])
 
   // 预览重绘
   useEffect(() => {
@@ -273,37 +364,55 @@ export default function TitleCoverPanel({
     }
   }, [img, saving, project, wideOffset, squareOffset, onMetaUpdated, onToast])
 
-  // ---- 模板封面：纯版式直出，或把当前图片存成 assets/cover-bg.png 当底图 ----
+  // ---- 模板封面：一次点击出成品（底图 = 不用 / AI 现场生 / 工程里已有的图，不再要求先去哪张卡生成）----
+
+  /** 方图取景：auto 交给主进程按底图左右半区细节量判，手动三档给死值 */
+  const focalValue = focalPick === 'auto' ? undefined : focalPick === 'left' ? 0 : focalPick === 'center' ? 0.5 : 1
 
   const renderTemplateCover = useCallback(async () => {
     if (rendering) return
     const title = coverTitle.trim()
     if (!title) {
-      onToast('先填封面标题')
+      setCoverError('先填封面标题')
+      return
+    }
+    const prompt = coverPrompt.trim()
+    if (bgSource === 'ai' && !prompt) {
+      setCoverError('选了「AI 生成底图」，写一句画面描述（或点「从正文提取」）')
+      return
+    }
+    if (bgSource === 'file' && !bgFile) {
+      setCoverError('选一张工程里已有的图作底图')
       return
     }
     setRendering(true)
+    setCoverError(null)
     try {
-      let bg: string | undefined
-      // 杂志留白是纯文字底，不吃底图（见 shared/coverTemplates 的 editorial 分支）
-      if (useBg && img && template !== 'editorial') {
-        bg = await window.api.invoke('project:saveAsset', project, 'assets/cover-bg.png', renderFullPng(img))
-      }
-      await window.api.invoke('cover:renderTemplate', {
+      // 纯排印版式（杂志留白 / 大字版式）不吃底图，名单单源在 shared/coverTemplates
+      const bgArgs =
+        NO_BG_TEMPLATES.includes(template) || bgSource === 'none'
+          ? {}
+          : bgSource === 'ai'
+            ? { prompt }
+            : { bg: bgFile }
+      const r = await window.api.invoke('cover:renderTemplate', {
         project,
         template,
         title,
         subtitle: coverSubtitle.trim() || undefined,
         accent: theme?.accent ?? '#0d9488',
-        bg,
+        ...bgArgs,
         // 账号 = 分类：右下角标注账号名；「未分类」没有账号含义，不标
-        brand: meta.category && meta.category !== UNCATEGORIZED ? meta.category : undefined
+        brand: meta.category && meta.category !== UNCATEGORIZED ? meta.category : undefined,
+        panel,
+        decor,
+        focal: focalValue
       })
       setPv((v) => v + 1)
       onMetaUpdated()
-      onToast('封面已按模板生成（2.35:1 + 1:1）')
+      onToast(`封面已生成：方图取自主图 ${Math.round(r.focal * 100)}% 处`)
     } catch (err) {
-      onToast(`封面渲染失败：${err instanceof Error ? err.message : err}`)
+      setCoverError(err instanceof Error ? err.message : String(err))
     } finally {
       setRendering(false)
     }
@@ -311,15 +420,99 @@ export default function TitleCoverPanel({
     rendering,
     coverTitle,
     coverSubtitle,
-    useBg,
-    img,
+    coverPrompt,
+    bgSource,
+    bgFile,
     project,
     template,
     theme,
     meta.category,
+    panel,
+    decor,
+    focalValue,
     onMetaUpdated,
     onToast
   ])
+
+  // ---- 路径三：covers/*.html 直接截图（不重生成，手改不会被覆盖）；HTML 可以作者手写，也可以让 AI 写 ----
+
+  const renderCustomCover = useCallback(
+    async (htmlArg?: string) => {
+      if (customizing) return
+      const html = (htmlArg ?? customHtml).trim()
+      if (!html) {
+        onToast('先选一份 covers/*.html（工程里还没有就先让 AI 写一版）')
+        return
+      }
+      setCustomizing(true)
+      try {
+        const r = await window.api.invoke('cover:renderHtml', {
+          project,
+          html,
+          // 固定产物名：HTML 才是源文件，每点一次出图就在 assets/ 堆一张时间戳图纯属脏
+          out: 'assets/cover-custom.png',
+          width: customW,
+          height: customH,
+          focal: focalValue
+        })
+        setCustomOut({ main: r.path, square: r.square })
+        setPv((v) => v + 1)
+        onToast(r.square ? '已按 HTML 出图，方图从横图裁出' : '已按 HTML 出图（画布不是横图，未裁方图）')
+      } catch (err) {
+        onToast(`渲染失败：${err instanceof Error ? err.message : err}`)
+      } finally {
+        setCustomizing(false)
+      }
+    },
+    [customizing, customHtml, customW, customH, focalValue, project, onToast]
+  )
+
+  /** AI 写一版封面 HTML → 落 covers/cover-custom.html → 顺手渲出来；改一版时把上一版源码带回给模型 */
+  const writeCustomHtml = useCallback(async () => {
+    const desc = customDesc.trim()
+    if (!desc || writing) return
+    setWriting(true)
+    const { promise, abort } = chatOnce(
+      coverHtmlMessages(desc, customSrcRef.current, skill, { w: customW, h: customH }),
+      (full) => {
+        customSrcRef.current = stripHtmlFence(full)
+      }
+    )
+    customAbortRef.current = abort
+    try {
+      const src = stripHtmlFence(await promise).trim()
+      if (!/<html/i.test(src)) throw new Error('模型没吐出 HTML 源码，换个描述再试一次')
+      customSrcRef.current = src
+      const bytes = new TextEncoder().encode(src)
+      let bin = ''
+      for (const b of bytes) bin += String.fromCharCode(b)
+      const rel = await window.api.invoke('project:saveAsset', project, 'covers/cover-custom.html', btoa(bin))
+      setCustomHtml(rel)
+      refreshProjectFiles()
+      await renderCustomCover(rel)
+      onToast('AI 已写好封面 HTML，源码在 covers/cover-custom.html')
+    } catch (err) {
+      onToast(`AI 写封面失败：${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setWriting(false)
+      customAbortRef.current = null
+    }
+  }, [customDesc, writing, skill, customW, customH, project, renderCustomCover, refreshProjectFiles, onToast])
+
+  /** 把手写 HTML 渲出的图设为工程封面（方图缺省时同横图） */
+  const applyCustomCover = useCallback(async () => {
+    if (!customOut) return
+    try {
+      const fresh = await window.api.invoke('project:readMeta', project)
+      fresh.cover = { main: customOut.main, square: customOut.square ?? customOut.main }
+      await window.api.invoke('project:writeMeta', project, fresh)
+      setPv((v) => v + 1)
+      onMetaUpdated()
+      onToast('已设为封面')
+    } catch (err) {
+      onToast(`设置封面失败：${err instanceof Error ? err.message : err}`)
+    }
+  }, [customOut, project, onMetaUpdated, onToast])
 
   const titles = [...(meta.titles ?? [])].sort((a, b) => b.score - a.score)
   // 已采用的候选 = 正文首行 H1（「采用」写的就是它），用于给对应行挂「已采用」态
@@ -408,248 +601,433 @@ export default function TitleCoverPanel({
 
         {/* 贴图工程只要标题不要封面：两张封面卡整块隐藏 */}
         {meta.format !== 'cards' && (
-          <>
-            {/* ============ 卡 2 · 封面（路径一：版式模板直出，不依赖模型） ============ */}
-            <Card>
-              <CardTitle tag="路径一 · 模板直出">封面</CardTitle>
-              <div className="mt-3 grid grid-cols-[164px_minmax(0,1fr)] gap-4">
-                {/* 左：四版式缩略卡（诊断 9：选版式不再靠脑补） */}
-                <div className="grid grid-cols-2 gap-2 self-start" role="radiogroup" aria-label="封面版式">
-                  {COVER_TEMPLATES.map((t) => (
-                    <LayoutPick
-                      key={t.id}
-                      name={t.name}
-                      hint={t.hint}
-                      layoutId={t.id}
-                      accent={accent}
-                      on={template === t.id}
-                      onPick={() => setTemplate(t.id)}
-                    />
-                  ))}
-                </div>
-                {/* 右：标题 / 副标题 / 底图 / 主按钮 */}
-                <div className="flex min-w-0 flex-col gap-2">
-                  <input
-                    value={coverTitle}
-                    onChange={(e) => setCoverTitle(e.target.value)}
-                    placeholder="封面标题（缺省取最高分候选）"
-                    aria-label="封面标题"
-                    className="h-8 w-full rounded-lg border border-panel-3 bg-panel px-2.5 text-xs text-ink outline-none focus:border-accent"
-                  />
-                  <input
-                    value={coverSubtitle}
-                    onChange={(e) => setCoverSubtitle(e.target.value)}
-                    placeholder="副标题（选填）"
-                    aria-label="封面副标题"
-                    className="h-8 w-full rounded-lg border border-panel-3 bg-panel px-2.5 text-xs text-ink outline-none focus:border-accent"
-                  />
-                  <label
-                    className={`inline-flex items-center gap-1.5 text-[11.5px] ${
-                      img && template !== 'editorial' ? 'cursor-pointer text-ink-dim' : 'cursor-default text-ink-dim opacity-60'
-                    }`}
-                  >
+          <Card>
+            <CardTitle>封面</CardTitle>
+            <div className="mt-3">
+              <Segmented
+                size="sm"
+                ariaLabel="封面怎么来"
+                value={coverMode}
+                onChange={setCoverMode}
+                items={[
+                  { value: 'template', label: '模板直出', icon: 'palette', title: '选版式填标题，一步出图（底图可让 AI 现场生）' },
+                  { value: 'photo', label: '照片裁剪', icon: 'image', title: '只要照片不要文字：AI 生图或导入后拖选裁剪位置' },
+                  { value: 'html', label: 'HTML 直渲', icon: 'sliders', title: 'AI 或手写一份封面 HTML，直接截图' }
+                ]}
+              />
+            </div>
+            {coverMode === 'template' && (
+              <>
+                <div className="mt-3 grid grid-cols-[164px_minmax(0,1fr)] gap-4">
+                  {/* 左：四版式缩略卡（诊断 9：选版式不再靠脑补） */}
+                  <div className="grid grid-cols-2 gap-2 self-start" role="radiogroup" aria-label="封面版式">
+                    {COVER_TEMPLATES.map((t) => (
+                      <LayoutPick
+                        key={t.id}
+                        name={t.name}
+                        hint={t.hint}
+                        layoutId={t.id}
+                        accent={accent}
+                        on={template === t.id}
+                        onPick={() => setTemplate(t.id)}
+                      />
+                    ))}
+                  </div>
+                  {/* 右：标题 / 副标题 / 底图 / 主按钮 */}
+                  <div className="flex min-w-0 flex-col gap-2">
                     <input
-                      type="checkbox"
-                      checked={useBg && template !== 'editorial'}
-                      disabled={!img || template === 'editorial'}
-                      onChange={(e) => setUseBg(e.target.checked)}
-                      className="accent-accent"
+                      value={coverTitle}
+                      onChange={(e) => setCoverTitle(e.target.value)}
+                      placeholder="封面大字（用 | 分行，行越短字越大；缺省取最高分候选）"
+                      aria-label="封面标题"
+                      className="h-8 w-full rounded-lg border border-panel-3 bg-panel px-2.5 text-xs text-ink outline-none focus:border-accent"
                     />
-                    {template === 'editorial'
-                      ? '此版式为纯文字底，不使用底图'
-                      : img
-                        ? '用当前图片作底图（存为 assets/cover-bg.png）'
-                        : '用当前图片作底图（先在下方生成或导入一张图）'}
-                  </label>
-                  <div className="mt-1 flex flex-nowrap items-center gap-2">
-                    <Chip icon="palette" title="封面强调色与文章排版调性同源">
-                      强调色 {accent}
-                    </Chip>
-                    <Button
-                      className="ml-auto shrink-0"
-                      variant="pri"
-                      icon="image"
-                      disabled={rendering || !coverTitle.trim()}
-                      onClick={renderTemplateCover}
-                    >
-                      {rendering ? '渲染中…' : '生成封面'}
-                    </Button>
+                    <input
+                      value={coverSubtitle}
+                      onChange={(e) => setCoverSubtitle(e.target.value)}
+                      placeholder="副标题（选填）"
+                      aria-label="封面副标题"
+                      className="h-8 w-full rounded-lg border border-panel-3 bg-panel px-2.5 text-xs text-ink outline-none focus:border-accent"
+                    />
+                    {/* 底图从哪来一步选定，不用先去别的卡生成再回来勾选 */}
+                    {NO_BG_TEMPLATES.includes(template) ? (
+                      <p className="text-[11.5px] text-ink-dim">此版式为纯排印，不使用底图（要给照片压字请选「左文右图」）</p>
+                    ) : (
+                      <>
+                        <Segmented
+                          size="sm"
+                          ariaLabel="底图来源"
+                          value={bgSource}
+                          onChange={setBgSource}
+                          items={[
+                            { value: 'none', label: '不用底图' },
+                            { value: 'ai', label: 'AI 生成底图' },
+                            { value: 'file', label: '用工程里的图' }
+                          ]}
+                        />
+                        {bgSource === 'ai' && (
+                          <div className="flex items-start gap-2">
+                            <textarea
+                              value={coverPrompt}
+                              onChange={(e) => setCoverPrompt(e.target.value)}
+                              rows={2}
+                              readOnly={prompting}
+                              aria-label="底图画面描述"
+                              placeholder="想要一张什么样的底图…主体放右侧约三分之一，左侧留给文字"
+                              className="min-w-0 flex-1 rounded-lg border border-panel-3 bg-panel px-2.5 py-2 text-xs text-ink outline-none placeholder:text-ink-dim focus:border-accent"
+                            />
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              icon="file"
+                              disabled={prompting || rendering}
+                              onClick={extractCoverPrompt}
+                            >
+                              {prompting ? '提取中…' : '从正文提取'}
+                            </Button>
+                          </div>
+                        )}
+                        {bgSource === 'file' && (
+                          <BgPicker images={projectImages} url={assetUrl} value={bgFile} onPick={setBgFile} />
+                        )}
+                      </>
+                    )}
+                    {coverError && <p className="text-[11.5px] text-st-bad">{coverError}</p>}
+                    <CollapseBar className="self-start" label="更多：磨砂面板 / 装饰 / 方图取景">
+                      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
+                        <Segmented
+                          size="sm"
+                          ariaLabel="文字区磨砂面板"
+                          title="文字压在杂底上时，磨砂面板保底可读性；自动=按文字区亮度灰区决定"
+                          value={panel}
+                          onChange={setPanel}
+                          items={[
+                            { value: 'auto', label: '面板自动' },
+                            { value: 'frosted', label: '磨砂' },
+                            { value: 'none', label: '不铺' }
+                          ]}
+                        />
+                        <Segmented
+                          size="sm"
+                          ariaLabel="方图取景"
+                          title="1:1 只能从主图裁出满高的一段：自动=主体在哪侧就往哪侧裁"
+                          value={focalPick}
+                          onChange={setFocalPick}
+                          items={[
+                            { value: 'auto', label: '取景自动' },
+                            { value: 'right', label: '取右' },
+                            { value: 'center', label: '居中' },
+                            { value: 'left', label: '取左' }
+                          ]}
+                        />
+                        <Switch checked={decor} onChange={setDecor} label="装饰" title="光晕 / 圆环 / 细线等装饰元素" />
+                      </div>
+                    </CollapseBar>
+                    <div className="mt-1 flex flex-nowrap items-center gap-2">
+                      <Chip icon="palette" title="封面强调色与文章排版调性同源">
+                        强调色 {accent}
+                      </Chip>
+                      <Button
+                        className="ml-auto shrink-0"
+                        variant="pri"
+                        icon="image"
+                        disabled={rendering || !coverTitle.trim()}
+                        onClick={renderTemplateCover}
+                      >
+                        {rendering ? (bgSource === 'ai' ? '生底图 + 排版中…' : '渲染中…') : '生成封面'}
+                      </Button>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {meta.cover && (
-                <p className="mt-3 text-[11.5px] text-st-done">
-                  <Icon name="checkCircle" size={12} className="mr-1.5" />
-                  已保存：{meta.cover.main} / {meta.cover.square}
-                  {meta.cover.template
-                    ? `（模板：${COVER_TEMPLATES.find((t) => t.id === meta.cover?.template)?.name ?? meta.cover.template}）`
-                    : ''}
-                </p>
-              )}
-
-              {/* 成品预览：读盘上的封面文件（带版本号破缓存），比例角标常驻 */}
-              {meta.cover && projectDir && (
-                <div className="mt-2.5 flex flex-wrap items-start gap-2.5">
-                  <RatioFrame
-                    label="2.35:1 头图"
-                    src={assetUrl(meta.cover.main)}
-                    alt="头图预览"
-                    className="w-[min(100%,420px)] aspect-[2.35]"
-                  />
-                  <RatioFrame label="1:1 方图" src={assetUrl(meta.cover.square)} alt="方图预览" className="w-[132px] aspect-square" />
-                </div>
-              )}
-
-              <CollapseBar
-                className="mt-3"
-                label="版式与裁剪规则（文字锁左区 / 底图同化 / 字色自适应 / 双比例输出）"
-              >
-                <p>
-                  左文右图版式把文字锁在左侧，右侧留一个方形画面区：在公众号后台设封面时把 1:1 裁剪框拖到右侧那块，
-                  头条大图看文字、信息流缩略图看画面，两边都不牺牲。
-                </p>
-                <p>
-                  字号受列宽硬约束（字号 ≤ 可用列宽 ÷ 最长一行字数），所以永远不会溢出画布；标题里用竖线 |
-                  手动分行可以把字号撑得更大——行越短字越大，这是「1 秒可读」的唯一出路。顶部约 20% 让给标题遮罩，
-                  文字块不进入。
-                </p>
-                <p>
-                  压照片的文字用浅色还是深色由主进程取样照片文字区亮度算出（底图同化），不靠盖一层暗底——
-                  那会在照片上凭空造出一块与照片对不上色的面板。
-                </p>
-                <p>
-                  成品一次输出两张：{WIDE.w}×{WIDE.h}（2.35:1 头图）与 {SQUARE.w}×{SQUARE.h}
-                  （1:1 朋友圈分享图），落在工程 assets/ 目录；右下角标注账号名（= 工程分类，未分类不标）。
-                </p>
-              </CollapseBar>
-            </Card>
-
-            {/* ============ 卡 3 · 封面（路径二：AI 生图 / 导入图片后裁剪） ============ */}
-            <Card>
-              <CardTitle tag="路径二 · AI 生图后裁剪">封面底图</CardTitle>
-              <input
-                ref={fileRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => {
-                  const f = e.target.files?.[0]
-                  if (f) pickImage(f)
-                  e.target.value = ''
-                }}
-              />
-              <label className="mt-3 block text-[11.5px] text-ink-dim">封面生成提示词（可从正文提取，也可手写）</label>
-              <textarea
-                value={coverPrompt}
-                onChange={(e) => setCoverPrompt(e.target.value)}
-                rows={coverPrompt.length > 60 ? 4 : 3}
-                readOnly={prompting}
-                placeholder="想要一张什么样的封面…可手写，也可点「从正文提取提示词」让 AI 通读正文提取关键信息生成"
-                className="mt-1 w-full rounded-lg border border-panel-3 bg-panel px-2.5 py-2 text-xs text-ink outline-none placeholder:text-ink-dim focus:border-accent"
-              />
-              <div className="mt-2 flex flex-nowrap items-center gap-2">
-                {prompting ? (
-                  <Button size="sm" variant="ghost" icon="x" onClick={() => promptAbortRef.current?.()}>
-                    停止
-                  </Button>
-                ) : (
-                  <Button size="sm" variant="sec" icon="file" disabled={genning} onClick={extractCoverPrompt}>
-                    从正文提取提示词
-                  </Button>
+                {meta.cover && (
+                  <p className="mt-3 text-[11.5px] text-st-done">
+                    <Icon name="checkCircle" size={12} className="mr-1.5" />
+                    已保存：{meta.cover.main} / {meta.cover.square}
+                    {meta.cover.template
+                      ? `（模板：${COVER_TEMPLATES.find((t) => t.id === meta.cover?.template)?.name ?? meta.cover.template}）`
+                      : ''}
+                  </p>
                 )}
-                <Button size="sm" variant="sec" icon="upload" onClick={() => fileRef.current?.click()}>
-                  {img ? '换一张图片' : '导入图片'}
-                </Button>
-                <Button
-                  className="ml-auto shrink-0"
-                  variant="pri"
-                  icon="sparkles"
-                  disabled={genning || prompting || !coverPrompt.trim()}
-                  onClick={genCover}
-                >
-                  {genning ? '生成中…' : '生成封面底图'}
-                </Button>
-              </div>
-              {prompting && <p className="mt-1.5 text-[11px] text-ink-dim">正在通读正文提取关键信息…</p>}
-              {genning && <p className="mt-1.5 text-[11px] text-ink-dim">按提示词生成 21:9 横图，约一分钟</p>}
 
-              {img ? (
-                <div className="mt-3 flex flex-col gap-2">
-                  <p className="text-[11.5px] text-ink-dim">
-                    头图 2.35:1（{WIDE.w}×{WIDE.h}）· 图上拖动选裁剪位置
-                  </p>
-                  <canvas
-                    ref={wideRef}
-                    width={WIDE.w}
-                    height={WIDE.h}
-                    onPointerDown={startCropDrag('wide', WIDE.w / WIDE.h)}
-                    onPointerMove={moveCropDrag}
-                    onPointerUp={endCropDrag}
-                    onPointerCancel={endCropDrag}
-                    style={{ touchAction: 'none' }}
-                    className="w-full max-w-[520px] cursor-grab touch-none rounded-lg border border-panel-3 active:cursor-grabbing"
-                  />
-                  <input
-                    type="range"
-                    min={0}
-                    max={100}
-                    aria-label="头图裁剪位置"
-                    value={wideOffset * 100}
-                    onChange={(e) => setWideOffset(Number(e.target.value) / 100)}
-                    className="w-full max-w-[520px]"
-                  />
-                  <p className="mt-1 text-[11.5px] text-ink-dim">
-                    方图 1:1（{SQUARE.w}×{SQUARE.h}）· 图上拖动选裁剪位置
-                  </p>
-                  <canvas
-                    ref={squareRef}
-                    width={SQUARE.w}
-                    height={SQUARE.h}
-                    onPointerDown={startCropDrag('square', 1)}
-                    onPointerMove={moveCropDrag}
-                    onPointerUp={endCropDrag}
-                    onPointerCancel={endCropDrag}
-                    style={{ touchAction: 'none' }}
-                    className="w-44 cursor-grab touch-none rounded-lg border border-panel-3 active:cursor-grabbing"
-                  />
-                  <input
-                    type="range"
-                    min={0}
-                    max={100}
-                    aria-label="方图裁剪位置"
-                    value={squareOffset * 100}
-                    onChange={(e) => setSquareOffset(Number(e.target.value) / 100)}
-                    className="w-full max-w-[520px]"
-                  />
-                  <div className="mt-1">
-                    <Button variant="pri" icon="save" disabled={saving} onClick={saveCovers}>
-                      {saving ? '保存中…' : '保存两种封面'}
-                    </Button>
+                {/* 成品预览：读盘上的封面文件（带版本号破缓存），比例角标常驻 */}
+                {meta.cover && projectDir && (
+                  <div className="mt-2.5 flex flex-wrap items-start gap-2.5">
+                    <RatioFrame
+                      label="2.35:1 头图"
+                      src={assetUrl(meta.cover.main)}
+                      alt="头图预览"
+                      className="w-[min(100%,420px)] aspect-[2.35]"
+                    />
+                    <RatioFrame
+                      label="1:1 主图裁剪预览"
+                      src={assetUrl(meta.cover.square)}
+                      alt="方图预览"
+                      className="w-[132px] aspect-square"
+                    />
                   </div>
-                </div>
-              ) : (
-                <p className="mt-3 rounded-lg border border-dashed border-panel-3 px-3 py-2.5 text-[11.5px] leading-relaxed text-ink-dim">
-                  还没有底图。生成或导入一张后，在预览上直接拖动选裁剪位置（也可用滑杆微调），一次保存 2.35:1 头图与 1:1 方图。
-                </p>
-              )}
+                )}
 
-              <CollapseBar className="mt-3" label="裁剪与保存（图上拖动 / 滑杆微调 / 双比例同时落盘）">
-                <p>
-                  裁剪按「短边吃满、长边滑动」计算：横图水平拖、竖图垂直拖，两个比例各有一套独立位置，
-                  互不影响——头图取中段时，方图可以另取主体。
-                </p>
-                <p>
-                  保存会一次写两张（{WIDE.rel} 与 {SQUARE.rel}）并把它们记进 meta.cover，
-                  封面墙的卡片、导出 Word/PDF 的首页、推送草稿的封面都读这一份。
-                </p>
-                <p>
-                  想用照片当封面又不想让文字压糊：先出底图，再回上方「封面」卡选「左文右图」版式并勾上底图，
-                  文字锁在左区，照片只占右侧方形画面。
-                </p>
-              </CollapseBar>
-            </Card>
-          </>
+                {/* 版式怎么排、方图为什么只能裁——这些设计依据在 docs/PRD.md 封面一节；界面只留可操作项 */}
+              </>
+            )}
+            {coverMode === 'photo' && (
+              <>
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0]
+                    if (f) pickImage(f)
+                    e.target.value = ''
+                  }}
+                />
+                <label className="mt-3 block text-[11.5px] text-ink-dim">底图描述（可手写，也可从正文提取）</label>
+                <textarea
+                  value={coverPrompt}
+                  onChange={(e) => setCoverPrompt(e.target.value)}
+                  rows={coverPrompt.length > 60 ? 4 : 3}
+                  readOnly={prompting}
+                  placeholder="想要一张什么样的底图…主体放右侧约三分之一，左侧留给文字"
+                  className="mt-1 w-full rounded-lg border border-panel-3 bg-panel px-2.5 py-2 text-xs text-ink outline-none placeholder:text-ink-dim focus:border-accent"
+                />
+                <div className="mt-2 flex flex-nowrap items-center gap-2">
+                  {prompting ? (
+                    <Button size="sm" variant="ghost" icon="x" onClick={() => promptAbortRef.current?.()}>
+                      停止
+                    </Button>
+                  ) : (
+                    <Button size="sm" variant="sec" icon="file" disabled={genning} onClick={extractCoverPrompt}>
+                      从正文提取
+                    </Button>
+                  )}
+                  <Button size="sm" variant="sec" icon="upload" onClick={() => fileRef.current?.click()}>
+                    {img ? '换一张图片' : '导入图片'}
+                  </Button>
+                  <Button
+                    className="ml-auto shrink-0"
+                    variant="pri"
+                    icon="sparkles"
+                    disabled={genning || prompting || !coverPrompt.trim()}
+                    onClick={genCover}
+                  >
+                    {genning ? '生成中…' : '生成底图'}
+                  </Button>
+                </div>
+                {prompting && <p className="mt-1.5 text-[11px] text-ink-dim">正在通读正文提取关键信息…</p>}
+                {genning && <p className="mt-1.5 text-[11px] text-ink-dim">按提示词生成 21:9 横图，约一分钟</p>}
+
+                {img ? (
+                  <div className="mt-3 flex flex-col gap-2">
+                    <p className="text-[11.5px] text-ink-dim">
+                      头图 2.35:1（{WIDE.w}×{WIDE.h}）· 图上拖动选裁剪位置
+                    </p>
+                    <canvas
+                      ref={wideRef}
+                      width={WIDE.w}
+                      height={WIDE.h}
+                      onPointerDown={startCropDrag('wide', WIDE.w / WIDE.h)}
+                      onPointerMove={moveCropDrag}
+                      onPointerUp={endCropDrag}
+                      onPointerCancel={endCropDrag}
+                      style={{ touchAction: 'none' }}
+                      className="w-full max-w-[520px] cursor-grab touch-none rounded-lg border border-panel-3 active:cursor-grabbing"
+                    />
+                    <input
+                      type="range"
+                      min={0}
+                      max={100}
+                      aria-label="头图裁剪位置"
+                      value={wideOffset * 100}
+                      onChange={(e) => setWideOffset(Number(e.target.value) / 100)}
+                      className="w-full max-w-[520px]"
+                    />
+                    <p className="mt-1 text-[11.5px] text-ink-dim">
+                      方图 1:1（{SQUARE.w}×{SQUARE.h}）· 图上拖动选裁剪位置
+                    </p>
+                    <canvas
+                      ref={squareRef}
+                      width={SQUARE.w}
+                      height={SQUARE.h}
+                      onPointerDown={startCropDrag('square', 1)}
+                      onPointerMove={moveCropDrag}
+                      onPointerUp={endCropDrag}
+                      onPointerCancel={endCropDrag}
+                      style={{ touchAction: 'none' }}
+                      className="w-44 cursor-grab touch-none rounded-lg border border-panel-3 active:cursor-grabbing"
+                    />
+                    <input
+                      type="range"
+                      min={0}
+                      max={100}
+                      aria-label="方图裁剪位置"
+                      value={squareOffset * 100}
+                      onChange={(e) => setSquareOffset(Number(e.target.value) / 100)}
+                      className="w-full max-w-[520px]"
+                    />
+                    <div className="mt-1">
+                      <Button variant="pri" icon="save" disabled={saving} onClick={saveCovers}>
+                        {saving ? '保存中…' : '保存两种封面'}
+                      </Button>
+                      <p className="mt-1.5 text-[11px] text-ink-dim">
+                        想让文字压得干净些：切到「模板直出」，底图选「用工程里的图」挑这张，文字会锁在左区、照片只占右侧画面。
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="mt-3 rounded-lg border border-dashed border-panel-3 px-3 py-2.5 text-[11.5px] leading-relaxed text-ink-dim">
+                    还没有底图。生成或导入一张后，在预览上直接拖动选裁剪位置（也可用滑杆微调），一次保存 2.35:1 头图与 1:1 方图。
+                  </p>
+                )}
+              </>
+            )}
+            {coverMode === 'html' && (
+              <>
+                <div className="mt-3 flex flex-nowrap items-center gap-2">
+                  <input
+                    value={customDesc}
+                    onChange={(e) => setCustomDesc(e.target.value)}
+                    onKeyDown={(e) => shouldSubmitOnEnter(e) && writeCustomHtml()}
+                    placeholder="描述想要的封面，让 AI 写一份 HTML（改一版会带着上一版源码）"
+                    aria-label="封面 HTML 生成指令"
+                    className="h-8 min-w-0 flex-1 rounded-lg border border-panel-3 bg-panel px-2.5 text-xs text-ink outline-none placeholder:text-ink-dim focus:border-accent"
+                  />
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    icon="file"
+                    disabled={prompting || writing}
+                    onClick={extractHtmlBrief}
+                  >
+                    {prompting ? '提取中…' : '从正文提取'}
+                  </Button>
+                  {writing ? (
+                    <Button size="sm" variant="ghost" icon="x" onClick={() => customAbortRef.current?.()}>
+                      停止
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="sec"
+                      icon="sparkles"
+                      disabled={!customDesc.trim() || customizing}
+                      onClick={() => writeCustomHtml()}
+                    >
+                      AI 写 HTML
+                    </Button>
+                  )}
+                </div>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <select
+                    value={customHtml}
+                    onChange={(e) => setCustomHtml(e.target.value)}
+                    aria-label="封面 HTML 源文件"
+                    title="工程 covers/ 下的 HTML；这里只截图，不会重写这个文件"
+                    className="h-8 min-w-0 flex-1 rounded-lg border border-panel-3 bg-panel px-2 text-xs text-ink outline-none focus:border-accent"
+                  >
+                    {customHtml && !projectCovers.includes(customHtml) && (
+                      <option value={customHtml}>{customHtml}</option>
+                    )}
+                    {projectCovers.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                    {!projectCovers.length && !customHtml && <option value="">工程里还没有 covers/*.html</option>}
+                  </select>
+                  <Segmented
+                    size="sm"
+                    ariaLabel="画布比例"
+                    value={canvasPreset}
+                    onChange={(p) => {
+                      setCanvasPreset(p)
+                      if (p === 'wide') {
+                        setCustomW(COVER_WIDE.w)
+                        setCustomH(COVER_WIDE.h)
+                      } else if (p === 'square') {
+                        setCustomW(COVER_SQUARE.w)
+                        setCustomH(COVER_SQUARE.h)
+                      }
+                    }}
+                    items={[
+                      { value: 'wide', label: '2.35:1', title: '1175×500 头图，顺带裁 1:1' },
+                      { value: 'square', label: '1:1', title: '800×800 方图画布' },
+                      { value: 'custom', label: '自定义' }
+                    ]}
+                  />
+                  {canvasPreset === 'custom' && (
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      <input
+                        type="number"
+                        value={customW}
+                        min={100}
+                        max={2400}
+                        aria-label="画布宽度"
+                        onChange={(e) => {
+                          setCustomW(Number(e.target.value))
+                          setCanvasPreset('custom')
+                        }}
+                        className="h-8 w-16 rounded-lg border border-panel-3 bg-panel px-2 text-xs tabular-nums text-ink outline-none focus:border-accent"
+                      />
+                      <span className="text-[11.5px] text-ink-dim">×</span>
+                      <input
+                        type="number"
+                        value={customH}
+                        min={100}
+                        max={2400}
+                        aria-label="画布高度"
+                        onChange={(e) => {
+                          setCustomH(Number(e.target.value))
+                          setCanvasPreset('custom')
+                        }}
+                        className="h-8 w-16 rounded-lg border border-panel-3 bg-panel px-2 text-xs tabular-nums text-ink outline-none focus:border-accent"
+                      />
+                    </div>
+                  )}
+                  <Button
+                    className="ml-auto shrink-0"
+                    variant="pri"
+                    icon="image"
+                    disabled={customizing || writing || !customHtml.trim()}
+                    onClick={() => renderCustomCover()}
+                  >
+                    {customizing ? '渲染中…' : '出图'}
+                  </Button>
+                </div>
+                {customOut ? (
+                  <div className="mt-2.5 flex flex-wrap items-start gap-2.5">
+                    <img
+                      src={assetUrl(customOut.main)}
+                      alt="自定义封面预览"
+                      className="w-[min(100%,420px)] rounded-lg border border-panel-3"
+                    />
+                    {customOut.square && (
+                      <img
+                        src={assetUrl(customOut.square)}
+                        alt="自定义封面方图裁剪"
+                        className="w-[132px] rounded-lg border border-panel-3"
+                      />
+                    )}
+                    <div className="w-full">
+                      <Button variant="sec" icon="check" onClick={applyCustomCover}>
+                        设为封面
+                      </Button>
+                      <p className="mt-1.5 text-[11px] text-ink-dim">
+                        {customOut.main}
+                        {customOut.square ? ` 与 ${customOut.square}` : '（画布不是横图，未裁方图）'}
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="mt-1.5 text-[11px] text-ink-dim">
+                    2.35:1 画布会自动裁出 1:1（取主图最右一段）；出图不顶掉现有封面，点「设为封面」才写入。
+                  </p>
+                )}
+              </>
+            )}
+          </Card>
         )}
       </div>
     </div>
@@ -784,9 +1162,69 @@ function LayoutPick({
   )
 }
 
-/** 缩略卡底色：大字版式 / 左侧竖栏是强调色深底，其余走面板底（画面区自带颜色） */
+/**
+ * 底图选择器：缩略图横条，看到画面才能决定用哪张。
+ * 不用下拉列文件名——`assets/ai-1791028410270.png` 这种一串时间戳人眼读不出是哪张图。
+ */
+function BgPicker({
+  images,
+  url,
+  value,
+  onPick
+}: {
+  images: string[]
+  url: (rel: string) => string
+  value: string
+  onPick: (rel: string) => void
+}): ReactElement {
+  if (!images.length) {
+    return (
+      <p className="text-[11.5px] text-ink-dim">
+        工程 assets/ 里还没有图。切到「照片裁剪」生成或导入一张，或直接选「AI 生成底图」。
+      </p>
+    )
+  }
+  return (
+    <div className="flex min-w-0 flex-col gap-1">
+      <div
+        className="thin-scroll flex items-center gap-1.5 overflow-x-auto pb-1"
+        role="radiogroup"
+        aria-label="底图候选"
+      >
+        {images.map((p) => {
+          const on = p === value
+          return (
+            <button
+              key={p}
+              type="button"
+              role="radio"
+              aria-checked={on}
+              title={p}
+              onClick={() => onPick(p)}
+              className={`relative h-11 w-[76px] shrink-0 overflow-hidden rounded-md border-2 transition-colors ${
+                on ? 'border-accent' : 'border-panel-3 hover:border-accent'
+              }`}
+            >
+              <img src={url(p)} alt={p} loading="lazy" className="h-full w-full object-cover" />
+              {on && (
+                <span className="absolute right-0.5 top-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-accent text-white">
+                  <Icon name="check" size={9} />
+                </span>
+              )}
+            </button>
+          )
+        })}
+      </div>
+      <p className="truncate text-[11px] text-ink-dim">{value ? `底图：${value}` : '点一张图作底图'}</p>
+    </div>
+  )
+}
+
+/** 缩略卡底色：大字版式 / 左侧竖栏是强调色深底，杂志大字用纸白底，氛围渐变用夜空底，其余走面板底 */
 function pickBackdrop(layoutId: string, accent: string): string {
   if (layoutId === 'plain' || layoutId === 'left') return hexToRgba(accent, 0.82) ?? accent
+  if (layoutId === 'magazine') return '#faf8f4'
+  if (layoutId === 'aurora') return '#0a0e17'
   return 'transparent'
 }
 
@@ -798,6 +1236,14 @@ function pickShapes(layoutId: string, accent: string): CSSProperties[] {
     width,
     height,
     background: strong ? 'rgb(var(--ink)/.85)' : 'rgb(var(--ink)/.3)'
+  })
+  // 深底版式（大字版式 / 左侧竖栏 / 氛围渐变）的字条走浅色，否则黑压黑看不出排版
+  const lite = (left: string, top: string, width: string, height: string, strong = true): CSSProperties => ({
+    left,
+    top,
+    width,
+    height,
+    background: strong ? 'rgba(244,246,251,.92)' : 'rgba(244,246,251,.5)'
   })
   if (layoutId === 'split') {
     return [
@@ -812,14 +1258,61 @@ function pickShapes(layoutId: string, accent: string): CSSProperties[] {
       }
     ]
   }
+  // plain（大字版式）：通栏超大字压底 + 右上首字水印，刻意与左文右图的左列居中拉开
   if (layoutId === 'plain') {
-    return [bar('9%', '24%', '62%', '22%'), bar('9%', '54%', '44%', '12%', false)]
+    return [
+      { right: '3%', top: '8%', width: '30%', height: '64%', background: hexToRgba(accent, 0.3) ?? accent },
+      lite('8%', '54%', '84%', '18%'),
+      lite('8%', '76%', '58%', '9%', false)
+    ]
   }
   if (layoutId === 'left') {
     return [
-      { left: '0', top: '0', bottom: '0', width: '14%', background: accent },
-      bar('26%', '26%', '52%', '16%', false),
-      bar('26%', '50%', '36%', '10%', false)
+      { left: '0', top: '0', bottom: '0', width: '5%', background: accent },
+      // 标题等高的竖线勾边是「左侧竖栏」自己的排字语言，缩略卡必须画出来，否则预览在说谎
+      { left: '13%', top: '22%', bottom: '26%', width: '1.5%', background: accent },
+      bar('18%', '26%', '52%', '16%', false),
+      bar('18%', '50%', '36%', '10%', false)
+    ]
+  }
+  // magazine（杂志大字）：纸白底 + 顶部通栏细线 + 超大粗字 + 右侧细描边大圆
+  if (layoutId === 'magazine') {
+    return [
+      { left: '8%', right: '8%', top: '9%', height: '4%', background: accent },
+      bar('8%', '30%', '54%', '24%'),
+      bar('8%', '62%', '34%', '9%', false),
+      {
+        right: '7%',
+        top: '22%',
+        width: '40%',
+        height: '58%',
+        border: `1.5px solid ${hexToRgba(accent, 0.7) ?? accent}`,
+        borderRadius: '50%'
+      },
+      { right: '25%', top: '48%', width: '8%', height: '15%', background: accent }
+    ]
+  }
+  // aurora（氛围渐变）：夜空底 + 强调色弥散光斑 + 浅色大字（深底，字条走白）
+  if (layoutId === 'aurora') {
+    return [
+      {
+        right: '-8%',
+        top: '-30%',
+        width: '62%',
+        height: '110%',
+        background: `radial-gradient(circle at 50% 45%, ${hexToRgba(accent, 0.55) ?? accent} 0%, transparent 62%)`
+      },
+      {
+        left: '-10%',
+        bottom: '-36%',
+        width: '44%',
+        height: '86%',
+        background: `radial-gradient(circle at 50% 50%, ${hexToRgba(accent, 0.32) ?? accent} 0%, transparent 62%)`
+      },
+      // 标记与两行字都居中在文字列中轴（约 28.5% 处）——这就是它区别于左文右图的地方
+      { left: '24%', top: '24%', width: '10%', height: '4%', background: accent },
+      lite('9%', '34%', '40%', '18%'),
+      lite('13%', '58%', '31%', '9%', false)
     ]
   }
   // editorial（杂志留白）：浅底细线 + 深色字，无画面区

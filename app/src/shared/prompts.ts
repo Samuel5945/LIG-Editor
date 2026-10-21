@@ -235,8 +235,12 @@ score 为 1-10 分（可一位小数），按分数从高到低排列。围栏�
   ]
 }
 
-/** 封面：通读正文提取关键信息 → 横版封面生图提示词（纯文本，用户可在界面二次编辑后再生图） */
-export function coverPromptMessages(article: string, skill: string | null): ChatMessage[] {
+/** 封面：通读正文提取关键信息 → 横版封面生图提示词（纯文本，用户可在界面二次编辑后再生图）。
+ *  accent 传入时让底图调色板跟随封面强调色——底图与文字版式同一色相家族，合成后不打架 */
+export function coverPromptMessages(article: string, skill: string | null, accent?: string): ChatMessage[] {
+  const palette = accent
+    ? `色彩搭配：以 ${accent} 为视觉锚点展开同色系/互补色系，整体调色与封面版式的强调色协调`
+    : '色彩现代明快'
   return [
     { role: 'system', content: systemPrompt(skill) },
     {
@@ -247,11 +251,13 @@ export function coverPromptMessages(article: string, skill: string | null): Chat
 ${article.slice(0, 6000)}
 </文章>
 
-要求：
-- 提示词 80-150 字一段话：写清主体、场景、构图视角、艺术风格、色彩搭配，紧扣文章关键信息，不要只复述标题
-- 构图：主体与视觉重心放在画面**右侧约三分之一**处，左侧三分之二保持安静留白（渐变、虚化或同色系低对比细节）——封面文字压在左侧，主体居中会与文字打架
-- 上下各留出少量余量（会裁成 2.35:1 头图与 1:1 方图两种规格，方图取右侧主体）；色彩现代明快，画面中不出现任何文字、字母、字幕或水印
-- 只输出提示词本身一段话，不要解释、不要引号、不要围栏`
+提示词 80-150 字一段话，按以下四个字段的自然顺序组织（不要写字段名，融成连贯的一段话）：
+1. 主体与场景：紧扣文章关键信息的核心画面，不要只复述标题
+2. 构图：主体与视觉重心放在画面**右侧约三分之一**处，左侧三分之二保持安静留白（渐变、虚化或同色系低对比细节）——封面文字压在左侧，主体居中会与文字打架；上下各留少量余量（会裁成 2.35:1 头图与 1:1 方图两种规格，方图取右侧主体）
+3. 艺术风格与视角：插画/摄影/3D 等风格与镜头视角
+4. ${palette}
+硬性要求：画面中不出现任何文字、字母、字幕或水印。
+只输出提示词本身一段话，不要解释、不要引号、不要围栏`
     }
   ]
 }
@@ -402,6 +408,58 @@ export function figureHtmlMessages(desc: string, prevHtml: string | null, skill:
 - 严禁 height:100vh / min-height:100vh / 整页垂直居中；内容从顶部自然向下排，图形区域要填满根容器宽度，不留大片空白；图例放顶部或底部横排，不要挤在右侧窄列
 - 中文字体声明用系统字体栈（"Microsoft YaHei", sans-serif）；数据标注清晰可读，配色克制协调
 - 所有动画禁用（页面加载完即为最终画面，会被离屏截图）
+- 只输出 HTML 源码本身，不要任何解释或代码围栏`
+    }
+  ]
+}
+
+/** HTML 直渲那条路的「从正文提取」：通读正文 → 一段封面设计指令（喂给 coverHtmlMessages，不是生图提示词）。
+ *  与 coverPromptMessages 的区别：这条允许并鼓励写明标题文案、角标、装饰元素与配色，因为最终画面由 HTML 排出来。 */
+export function coverHtmlBriefMessages(article: string, skill: string | null, accent?: string): ChatMessage[] {
+  return [
+    { role: 'system', content: systemPrompt(skill) },
+    {
+      role: 'user',
+      content: `请通读下面的公众号文章，为它写一段**封面设计指令**（交给另一个模型直接写 HTML 封面，不是生图提示词）。
+
+<文章>
+${article.slice(0, 6000)}
+</文章>
+
+指令 60-140 字一段话，按顺序说清这几点（融成连贯一段，不要写字段名、不要分点）：
+1. 封面主标题文案（可直接用文章标题或它的更短更狠的版本）与可选副标题/角标文字
+2. 版式气质：左文右画面 / 大字居中 / 杂志留白 / 数据感等，选一种并说清文字与画面各占哪半边
+3. 画面元素：从文章里挑 1-3 个最有辨识度的具象事物或图形母题（可用 CSS/SVG 画的形状，如卡片、进度条、网格、光斑）
+4. 配色：${accent ? `以 ${accent} 为强调色，说明底色走深还是走浅` : '说明底色走深还是走浅、强调色用在哪'}
+只输出这段指令本身，不要解释、不要引号、不要围栏。`
+    }
+  ]
+}
+
+/** 封面自定义 HTML 直渲（路径三）：描述 → 单文件封面 HTML，交给 cover:renderHtml 截图。
+ *  与 figureHtmlMessages 的区别：封面是**锁死画布**的（离屏按 w×h 截图，量内容尺寸的逻辑不参与），
+ *  且要守公众号封面的两条硬事实——后台只采纳 2.35:1 横图，1:1 是它从横图裁的。 */
+export function coverHtmlMessages(
+  desc: string,
+  prevHtml: string | null,
+  skill: string | null,
+  size: { w: number; h: number } = { w: 1175, h: 500 }
+): ChatMessage[] {
+  const task = prevHtml
+    ? `请按以下要求修改现有封面 HTML：${desc}\n\n<现有源码>\n${prevHtml}\n</现有源码>`
+    : `请为公众号文章设计一张封面图，写成页面：${desc}`
+  return [
+    { role: 'system', content: systemPrompt(skill) },
+    {
+      role: 'user',
+      content: `${task}
+
+硬性要求：
+- 完整单文件 HTML（<!DOCTYPE html> 开头），样式全部内联；不引用任何外部资源（无 CDN、无网络字体、无外链图片），绘图用原生 CSS/SVG/Canvas 手写
+- 画布锁死 ${size.w}×${size.h}px：html 与 body 都写 width:${size.w}px;height:${size.h}px;margin:0;overflow:hidden，内容铺满整幅，禁止 height:100vh 与整页垂直居中
+- 这是 ${size.w / size.h >= 2 ? '2.35:1 横版头图' : '封面'}：公众号后台只采纳这一张横图，信息流与分享位的 1:1 由它从横图**右侧**裁走——所以主体与最抓眼的元素放右侧约三分之一，左侧给标题文字，别把关键信息压在左下边角
+- 标题中文用系统字体栈（"Microsoft YaHei", "PingFang SC", sans-serif），字号要大要粗（大字 ≤ 画布高 ÷ 3 行数为宜），文字与底色对比足够；文字直接写进 HTML，不要生成图片里的假字
+- 禁用一切动画与过渡（加载完成即最终画面，会被离屏截图）
 - 只输出 HTML 源码本身，不要任何解释或代码围栏`
     }
   ]

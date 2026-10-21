@@ -23,6 +23,7 @@ export const TOOL_LABELS: Record<string, string> = {
   write_cards: '写入贴图卡组',
   render_card: '渲染贴图卡片',
   render_cover_template: '套用封面模板',
+  render_cover_html: '渲染自定义封面',
   list_ideas: '查询选题库',
   schedule_idea: '选题立项排期',
   list_themes: '查询主题库',

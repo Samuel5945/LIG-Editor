@@ -127,7 +127,11 @@ export function captureHtmlPreview(
   })
 }
 
-/** 固定画布离屏渲染（贴图卡片用）：不量内容尺寸，直接按给定视口截图，返回 PNG base64 */
+/**
+ * 固定画布离屏渲染（贴图卡片、封面用）：不量内容尺寸，直接按给定视口截图，返回 PNG base64。
+ * 要出 2 倍图请在 HTML 里自己套 transform: scale(2)（见 shared/coverTemplates 的 scale）——
+ * 这里不设 zoomFactor：离屏窗口上实测它不生效，页面仍按 1× 画在画布左上角，其余是白底。
+ */
 export function renderHtmlFixed(absHtml: string, width: number, height: number): Promise<string> {
   return enqueue(async () => {
     const win = new BrowserWindow({

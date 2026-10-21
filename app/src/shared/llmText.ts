@@ -16,6 +16,12 @@ export function accumulateToolCalls(
   }
 }
 
+/** 去掉模型偶发套在 HTML 外面的 ```/```html 围栏（图表与封面直渲共用）；没围栏就原样返回 */
+export function stripHtmlFence(text: string): string {
+  const m = /```(?:html)?\s*\n([\s\S]*?)(?:```\s*)?$/.exec(text.trim())
+  return m ? m[1] : text
+}
+
 /** 从模型输出提取 JSON 数组：优先 ```json 围栏，退化找首个平衡的 [...] */
 export function extractJsonArray<T>(text: string): T[] | null {
   const fenced = text.match(/```(?:json)?\s*\n([\s\S]*?)```/)

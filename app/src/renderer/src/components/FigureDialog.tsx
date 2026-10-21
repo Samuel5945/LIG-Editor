@@ -15,7 +15,7 @@ import type { GalleryImage } from '@shared/markdown'
 import { splitFigDesc } from '@shared/markdown'
 import { imageFormatFor, type ImageFormatSpec } from '@shared/imageFormats'
 import type { FigPipeline, FigureInsert } from '../editor/FigSuggest'
-import { chatOnce } from '../copilot/llm'
+import { chatOnce, stripHtmlFence } from '../copilot/llm'
 import { figureHtmlMessages, imagePromptMessages } from '../copilot/prompts'
 
 /**
@@ -294,11 +294,11 @@ function CodePane({
     setStreaming(true)
     const { promise, abort } = chatOnce(
       figureHtmlMessages(inst, editMode && html && !rewrite ? html : null, skill),
-      (full) => setHtml(stripFence(full))
+      (full) => setHtml(stripHtmlFence(full))
     )
     abortRef.current = abort
     promise
-      .then((full) => setHtml(stripFence(full).trim()))
+      .then((full) => setHtml(stripHtmlFence(full).trim()))
       .catch((err) => setError(err instanceof Error ? err.message : String(err)))
       .finally(() => {
         setStreaming(false)
@@ -392,12 +392,6 @@ function CodePane({
       )}
     </div>
   )
-}
-
-/** 去掉模型偶发的 ```html 围栏 */
-function stripFence(text: string): string {
-  const m = /```(?:html)?\s*\n([\s\S]*?)(?:```\s*)?$/.exec(text.trim())
-  return m ? m[1] : text
 }
 
 // ---------- 管线三：导入 + 抠图（单图）/ 多图轮播 ----------

@@ -13,7 +13,7 @@ import { webResearch, webSearch } from './webSearch'
 import { generateImage } from './imageGen'
 import { saveFigureHtml, readFigureHtml, renderFigure } from './figureRender'
 import { readCards, writeCards, renderCard, readArchivedCards, writeArchivedCards } from './cardsStore'
-import { renderCoverTemplate } from './coverStore'
+import { renderCoverHtml, renderCoverTemplate } from './coverStore'
 import { exportArticleHtml, copyArticleRich, exportPlatformHtml } from './exporter'
 import { exportDocx, exportPdf } from './docExport'
 import type { PlatformId } from '@shared/types'
@@ -237,6 +237,8 @@ export function registerIpc(): void {
 
   handle('project:saveAsset', (project, relPath, base64) => store.saveAsset(project, relPath, base64))
   handle('cover:renderTemplate', (args) => renderCoverTemplate(args.project, args))
+  // 自定义 HTML 直渲：作者/Agent 手写的 covers/*.html 走这里出图，界面不重生成它的源文件
+  handle('cover:renderHtml', ({ project, ...args }) => renderCoverHtml(project, args))
   handle('inbox:append', (text) => store.appendIdeaInbox(text))
 
   // ---- 全局选题库 ----

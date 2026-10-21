@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { cardsCaptionMessages, chatContext, freeChatSystemPrompt } from '../prompts'
+import {
+  cardsCaptionMessages,
+  chatContext,
+  coverHtmlBriefMessages,
+  coverHtmlMessages,
+  coverPromptMessages,
+  freeChatSystemPrompt
+} from '../prompts'
 
 describe('chatContext', () => {
   it('空内容返回空串（不注入空块）', () => {
@@ -16,6 +23,43 @@ describe('chatContext', () => {
 
     const c = chatContext('cards', '格式：公众号贴图')
     expect(c).toContain('贴图卡片文案 cards.json')
+  })
+})
+
+describe('coverHtmlMessages（路径三：AI 写封面 HTML）', () => {
+  const text = coverHtmlMessages('深色科技风，一台老电脑开机', null, null).map((m) => m.content).join('\n')
+
+  it('画布按传入尺寸锁死，并禁掉整页高度写法', () => {
+    expect(text).toContain('width:1175px;height:500px;margin:0;overflow:hidden')
+    expect(text).toContain('禁止 height:100vh')
+  })
+
+  it('写清后台只采纳横图、1:1 从右侧裁走（否则模型会把关键信息放左下）', () => {
+    expect(text).toContain('只采纳这一张横图')
+    expect(text).toContain('从横图**右侧**裁走')
+  })
+
+  it('改一版时把上一版源码带进上下文', () => {
+    const edit = coverHtmlMessages('标题再大一点', '<html>旧版</html>', null).map((m) => m.content).join('\n')
+    expect(edit).toContain('<现有源码>')
+    expect(edit).toContain('<html>旧版</html>')
+  })
+})
+
+describe('coverHtmlBriefMessages（HTML 直渲那条路的「从正文提取」）', () => {
+  const text = coverHtmlBriefMessages('# 标题\n\n正文', null, '#0d9488').map((m) => m.content).join('\n')
+
+  it('出的是设计指令：要标题文案与配色，且明确不是生图提示词', () => {
+    expect(text).toContain('封面设计指令')
+    expect(text).toContain('不是生图提示词')
+    expect(text).toContain('主标题文案')
+    expect(text).toContain('#0d9488')
+  })
+
+  it('与生图那条分工不串：生图提示词禁止画面出现文字，设计指令反而要求写标题', () => {
+    const gen = coverPromptMessages('# 标题\n\n正文', null).map((m) => m.content).join('\n')
+    expect(gen).toContain('不出现任何文字')
+    expect(text).not.toContain('不出现任何文字')
   })
 })
 

@@ -761,9 +761,10 @@ export interface IpcApi {
   /** 保存二进制资产（base64）到工程相对路径，返回相对路径 */
   'project:saveAsset': (project: string, relPath: string, base64: string) => string
   /**
-   * 用模板渲染双比例封面（1175×500 与 800×800）并写入 project.json.cover，
+   * 用模板渲染封面：只渲一张 2.35:1 主图（1175×500），1:1 方图从主图裁剪（800×800），
    * 与拖动裁剪流程共用同一出口；模板见 shared/coverTemplates.ts。
-   * bg 为工程相对路径（如 assets/cover-bg.png），缺省 = 纯版式
+   * 公众号后台只采纳横图那一张，所以方图不另排版式——传 focal 决定从哪一段裁。
+   * bg 为工程相对路径（如 assets/cover-bg.png）；传 prompt 则先现场生一张 2.35:1 底图（与 bg 二选一）
    */
   'cover:renderTemplate': (args: {
     project: string
@@ -772,8 +773,24 @@ export interface IpcApi {
     subtitle?: string
     accent: string
     bg?: string
+    prompt?: string
     brand?: string
-  }) => { main: string; square: string }
+    panel?: 'auto' | 'frosted' | 'none'
+    decor?: boolean
+    focal?: number
+  }) => { main: string; square: string; focal: number; bg?: string }
+  /**
+   * 自定义 HTML 直渲封面（程序化入口，不落模板）：只截图、不重生成 HTML、不碰 project.json。
+   * 画布是横图时顺带裁一张 1:1 一起返回；是否设为封面由调用方再走 project:writeMeta
+   */
+  'cover:renderHtml': (args: {
+    project: string
+    html: string
+    out?: string
+    width?: number
+    height?: number
+    focal?: number
+  }) => { path: string; square?: string; focal: number; width: number; height: number }
   /** 无工程上下文时脑暴选题入库到全局 idea-inbox.md */
   'inbox:append': (text: string) => void
   // ---- 全局选题库（idea-inbox.md 结构化读写）----

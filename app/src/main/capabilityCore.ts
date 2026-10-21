@@ -26,7 +26,7 @@ import * as store from './projectStore'
 import { generateImage } from './imageGen'
 import { captureHtmlPreview, renderFigure, renderHtmlFixed, saveFigureHtml } from './figureRender'
 import { readArchivedCards, readCards, renderCard, writeArchivedCards, writeCards } from './cardsStore'
-import { renderCoverTemplate } from './coverStore'
+import { renderCoverHtml, renderCoverTemplate } from './coverStore'
 import { exportArticleHtml, exportPlatformHtml } from './exporter'
 import { exportDocx, exportPdf } from './docExport'
 import { pushCards, pushDraft } from './wechatPublish'
@@ -1119,17 +1119,35 @@ export const TOOLS: ToolDef[] = [
   {
     name: 'render_cover_template',
     description:
-      '用封面模板直出双比例封面（2.35:1 主图 + 1:1 方图，落 assets/cover-235.png / cover-11.png 并自动写进 project.json 的 cover）。template：split 左文右图 / plain 大字版式 / left 左侧竖栏 / editorial 杂志留白；比 generate_image 出的图字准、可复现',
+      '用封面模板直出封面：只渲染一张 2.35:1 主图（assets/cover-235.png），返回的 1:1 方图（assets/cover-11.png）是从这张主图裁出来的一段——公众号后台只采纳 2.35:1 那一张，另外排一版方图它不认，所以构图要为「右半单独裁出来也好看」服务。template：split 左文右图 / magazine 杂志大字 / aurora 氛围渐变 / plain 大字版式 / left 左侧竖栏 / editorial 杂志留白；比 generate_image 出的图字准、可复现。传 prompt 可一步完成「AI 生底图 + 模板合成」（自动按 2.35:1 生图、左侧留白构图、字色与磨砂面板自适应）。结果自动写进 project.json 的 cover',
     inputSchema: {
       type: 'object',
       properties: {
         project: P.project,
-        template: { type: 'string', enum: COVER_TEMPLATES.map((t) => t.id), description: '版式 id（见本工具第一句的四选一）' },
-        title: { type: 'string', description: '封面大字（按长度自动断行缩字）' },
+        template: { type: 'string', enum: COVER_TEMPLATES.map((t) => t.id), description: '版式 id（见本工具第一句）' },
+        title: { type: 'string', description: '封面大字（按长度自动断行缩字；用 | 手动分行字号更大）' },
         subtitle: { type: 'string', description: '副标题（可选）' },
         accent: { type: 'string', description: '强调色 #rrggbb' },
-        bg: { type: 'string', description: '底图工程内相对路径（可选，如 assets/cover-bg.png；plain/editorial 不吃底图）' },
-        brand: { type: 'string', description: '右下品牌行（可选，如 @LIG人生如戏）' }
+        bg: {
+          type: 'string',
+          description: '底图工程内相对路径（可选，如 assets/cover-bg.png）；editorial 与 plain 是纯排印版式，传了也会被忽略（连 prompt 生图那一步都跳过）'
+        },
+        prompt: {
+          type: 'string',
+          description: '底图生图提示词（可选）：内部按 2.35:1 生图存 assets/ 并作为 bg 合成，与 bg 参数二选一'
+        },
+        brand: { type: 'string', description: '右下品牌行（可选，如 @LIG人生如戏）' },
+        panel: {
+          type: 'string',
+          enum: ['auto', 'frosted', 'none'],
+          description: '文字区磨砂面板：auto 缺省=文字区亮度灰区自动开；frosted 强制开（构图翻车保底）；none 强制关'
+        },
+        decor: { type: 'boolean', description: '装饰元素开关（光晕/圆环/细线），缺省 true' },
+        focal: {
+          type: 'number',
+          description:
+            '1:1 方图从主图取哪一段：0=最左 / 0.5=居中 / 1=最右。缺省按版式定：照片类取到最右（方形画面区就在最右边），plain 大字版式取最左（通栏大字的开头才是主体）；有底图时还会按左右半区细节量自动改判'
+        }
       },
       required: ['project', 'template', 'title', 'accent']
     },
@@ -1141,19 +1159,76 @@ export const TOOLS: ToolDef[] = [
       const accent = str(a, 'accent')
       if (!isHexColor(accent)) throw new Error(`accent 需要 #rrggbb，收到：${accent}`)
       const bg = str(a, 'bg', false)
+      const prompt = str(a, 'prompt', false)
+      if (bg && prompt) throw new Error('bg 与 prompt 二选一：已有底图传 bg，要现场生图传 prompt')
       if (bg && !existsSync(absOf(project, bg)))
-        throw new Error(`底图不存在：${bg}（相对工程根的路径；先看 list_project_assets 有哪些图，或 generate_image 出一张）`)
+        throw new Error(`底图不存在：${bg}（相对工程根的路径；先看 list_project_assets 有哪些图，或改用 prompt 现场生一张）`)
+      const panelRaw = str(a, 'panel', false)
+      const panel = panelRaw === 'frosted' || panelRaw === 'none' ? panelRaw : panelRaw === 'auto' ? 'auto' : undefined
+      // 现场生底图的构图约束不在这里拼——统一由 coverStore.renderCoverTemplate 处理，界面走同一条路
       const r = await renderCoverTemplate(project, {
         template,
         title: str(a, 'title'),
         subtitle: str(a, 'subtitle', false) || undefined,
         accent,
         bg: bg || undefined,
-        brand: str(a, 'brand', false) || undefined
+        prompt: prompt || undefined,
+        brand: str(a, 'brand', false) || undefined,
+        panel,
+        decor: typeof a.decor === 'boolean' ? a.decor : undefined,
+        focal: typeof a.focal === 'number' ? a.focal : undefined
       })
       notifyChange(project, 'project.json')
       broadcast('workspace:assets-changed', { project })
-      return { ...r, main_abs: absOf(project, r.main), square_abs: absOf(project, r.square) }
+      return {
+        ...r,
+        main_abs: absOf(project, r.main),
+        square_abs: absOf(project, r.square),
+        ...(r.bg ? { bg_abs: absOf(project, r.bg) } : {})
+      }
+    }
+  },
+  {
+    name: 'render_cover_html',
+    description:
+      '把自定义 HTML 直接渲染成封面 PNG（程序化封面入口：HTML/CSS/Canvas 任意排版，不落模板）。html 传工程内相对路径（如 covers/my-cover.html；可以是手改的 covers/cover-wide.html，本工具只截图、不重生成、不会覆盖手改）。传横图画布（如 1175×500）时自动从同一张高清渲染里裁出 1:1 方图一起返回——后台只认横图那一张，方图只能是它的裁剪。产物落 assets/ 但不自动设为封面：确认满意后用 set_cover 写入 project.json',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project: P.project,
+        html: { type: 'string', description: '工程内相对路径的 HTML 文件（宽高需在 HTML 内联锁死）' },
+        out: { type: 'string', description: 'PNG 落盘相对路径（缺省 assets/cover-custom-<时间戳>.png）' },
+        width: { type: 'number', description: '画布宽度，缺省 1175（2.35:1 主图口径）' },
+        height: { type: 'number', description: '画布高度，缺省 500' },
+        focal: {
+          type: 'number',
+          description: '裁 1:1 时从横图取哪一段：0=最左 / 0.5=居中 / 1=最右，缺省取到最右'
+        }
+      },
+      required: ['project', 'html']
+    },
+    handler: async (a) => {
+      const project = projectArg(a)
+      const html = str(a, 'html')
+      const w = num(a, 'width') || COVER_WIDE.w
+      const h = num(a, 'height') || COVER_WIDE.h
+      if (w < 100 || w > 2400 || h < 100 || h > 2400) throw new Error(`尺寸超范围（100-2400）：${w}x${h}`)
+      const r = await renderCoverHtml(project, {
+        html,
+        out: str(a, 'out', false) || undefined,
+        width: Math.round(w),
+        height: Math.round(h),
+        focal: typeof a.focal === 'number' ? a.focal : undefined
+      })
+      broadcast('workspace:assets-changed', { project })
+      return {
+        ...r,
+        path_abs: absOf(project, r.path),
+        ...(r.square ? { square_abs: absOf(project, r.square) } : {}),
+        hint: r.square
+          ? '未设为封面：确认后用 set_cover（main=横图, square=裁出的方图）写入 project.json'
+          : '未设为封面：确认后用 set_cover 写入 project.json（画布不是横图，未裁方图）'
+      }
     }
   },
 

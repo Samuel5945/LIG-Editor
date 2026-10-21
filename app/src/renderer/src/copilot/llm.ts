@@ -1,7 +1,7 @@
 import type { ChatMessage, ChatStartOptions, ToolCallInfo } from '@shared/types'
 
 /** M8：JSON 提取移入 shared（主进程能力核复用），原路径转发 */
-export { extractJsonArray } from '@shared/llmText'
+export { extractJsonArray, stripHtmlFence } from '@shared/llmText'
 
 /** 把 llm:chatStart 的事件流包装成 Promise；onDelta 可拿到累计全文做流式 UI，
  * onReasoning 拿累计思考过程（模型思考字段 reasoning/reasoning_content/thinking_delta 已在主进程归一） */
