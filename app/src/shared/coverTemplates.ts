@@ -112,10 +112,10 @@ export interface CoverHtmlOptions {
   lightText?: boolean
   /**
    * 文字区磨砂面板：'none' 不铺（默认，靠自适应字色+投影兜底）；
-   * 'frosted' 在文字块后垫一层 backdrop-filter 磨砂半透明面板——构图翻车（文字区不安静）时的保底；
-   * 'auto' 由主进程按文字区亮度灰区自动决定（见 main/coverStore.ts）。
+   * 'frosted' 在文字块后垫一层 backdrop-filter 磨砂半透明面板——构图翻车（文字区不安静）时的保底。
+   * 曾有一个 'auto' 档（按文字区亮度灰区自动开），实测效果一般、还多一层不可预期的判断，已删。
    */
-  panel?: 'auto' | 'frosted' | 'none'
+  panel?: 'frosted' | 'none'
   /**
    * 1:1 方图裁横图时的取景位置（0=看最左，1=看最右），仅 size='square' 的手写 HTML 用到。
    * 默认流程不再渲染 square HTML：方图改为主图的实际裁剪，取景位置由 main/coverStore 的 focal 决定。
@@ -204,6 +204,15 @@ export function titleFontSize(
   return Math.max(34, Math.round(Math.min(cap, byWidth) * fit))
 }
 
+/**
+ * 副标题字号：主标题的 2/3（90 标题配 60 副标题），下限 30px、上限 64px。
+ * 早先各版式各写 0.22～0.3，主副标题差三倍多，副标题在信息流缩略图里糊成一条线；
+ * 0.4 也还不够——封面就两行字时，副标题要能当第二信息层读，1.5:1 是海报里常见的层级。
+ */
+function subtitleSize(titleSize: number): number {
+  return Math.max(30, Math.min(64, Math.round((titleSize * 2) / 3)))
+}
+
 /** HTML 文本转义：标题可能来自模型或用户输入，直接拼进 HTML 会破版式 */
 export function escapeHtml(text: string): string {
   return text
@@ -242,6 +251,80 @@ h1 .line { display: block; }
 `
 
 /**
+ * 磨砂玻璃的几何：它是"背景大小"的唯一来源——文字按它的内区排版，字号跟着它走。
+ * 宽高两侧共用一套，面板与文字块都从这里取坐标，改一处两边同步。
+ */
+const GLASS = { insetX: 34, padX: 30, padY: 26, topRatio: 0.72, bottomRatio: 0.72 }
+
+function textArea(size: CoverSize): { left: number; top: number; width: number; height: number } {
+  const canvas = SIZES[size]
+  const guard = size === 'wide' ? Math.round(canvas.h * TOP_GUARD) : Math.round(canvas.h * 0.16)
+  const foot = size === 'wide' ? 56 : 60
+  return { left: PAD, top: guard, width: textColumnWidth(size), height: canvas.h - guard - foot }
+}
+
+function glassRect(size: CoverSize): { left: number; top: number; width: number; height: number } {
+  const canvas = SIZES[size]
+  const guard = size === 'wide' ? Math.round(canvas.h * TOP_GUARD) : Math.round(canvas.h * 0.16)
+  const foot = size === 'wide' ? 56 : 60
+  const colBox = size === 'wide' ? canvas.w - squareSide(size) : canvas.w
+  const top = Math.round(guard * GLASS.topRatio)
+  const bottom = Math.round(foot * GLASS.bottomRatio)
+  return { left: GLASS.insetX, top, width: colBox - GLASS.insetX * 2, height: canvas.h - top - bottom }
+}
+
+/** 玻璃内区：字数一多，字号就该跟着缩——测量对象是玻璃，不是画布 */
+function glassInner(size: CoverSize): { left: number; top: number; width: number; height: number } {
+  const g = glassRect(size)
+  return { left: g.left + GLASS.padX, top: g.top + GLASS.padY, width: g.width - GLASS.padX * 2, height: g.height - GLASS.padY * 2 }
+}
+
+/**
+ * 把「标题 + 副标题」拟合进一个矩形：先按宽度定字号，再看总高度够不够，不够就连标题一起缩。
+ * 副标题按 2/3 走；缩到下限仍放不下就接受（极少见，长到那种程度该改文案了）。
+ */
+function fitText(
+  title: string,
+  sub: string,
+  boxW: number,
+  boxH: number,
+  cap: number
+): { lines: string[]; fs: number; subFs: number } {
+  const lines = splitTitleLines(title)
+  const maxLen = Math.max(...lines.map((l) => l.length))
+  const minFs = 26
+  // 给定标题字号时，整块需要多高（副标题按 2/3 折算成行数）
+  const needHeight = (f: number): number => {
+    const subFs = subtitleSize(f)
+    const perLine = Math.max(1, Math.floor(boxW / subFs))
+    const subLines = sub ? Math.ceil(sub.length / perLine) : 0
+    return lines.length * f * 1.18 + (sub ? subLines * subFs * 1.45 + 18 : 0)
+  }
+  const fits = (f: number): boolean => needHeight(f) <= boxH
+  let hi = Math.min(cap, Math.floor(boxW / Math.max(1, maxLen)))
+  const lo0 = minFs
+  // 先快速缩到能放下，再二分往上找最大能放下的字号（缩完不回收会显得字偏小）
+  let fs = hi
+  if (!fits(fs)) {
+    for (let i = 0; i < 12 && fs > lo0; i++) {
+      fs = Math.max(lo0, Math.floor(fs * (boxH / needHeight(fs))))
+      if (fits(fs)) break
+    }
+  }
+  if (fits(fs)) {
+    let lo = fs
+    let up = hi
+    for (let i = 0; i < 12 && up - lo > 1; i++) {
+      const mid = Math.floor((lo + up) / 2)
+      if (fits(mid)) lo = mid
+      else up = mid
+    }
+    fs = lo
+  }
+  return { lines, fs, subFs: subtitleSize(fs) }
+}
+
+/**
  * 文字块（左文右图 / 左侧竖栏 / 氛围渐变 共用这套净空与折行，但**排版各走各的**）：
  * - align 'left'（默认）：贴左排，配 bar 色条——左文右图的基准语言
  * - align 'center'：在文字盒内水平居中，配 mark 方块——氛围渐变的"夜空里一块光"
@@ -258,35 +341,40 @@ function textBlock(
 ): string {
   const { marker = 'bar', align = 'left', rule = false } = opts
   const size = o.size === 'square' ? 'square' : 'wide'
-  const boxW = size === 'wide' ? SIZES.wide.w - squareSide('wide') : SIZES.square.w
-  // 竖线勾边要占掉 3 + 26 的横向空间，列宽得跟着缩，否则字号算准了仍会溢出
+  const glassOn = !!(o.bgSrc && o.panel === 'frosted')
+  // 有无底图都用**同一套文字盒**（玻璃内区）——没底图时只是不画那块玻璃，
+  // 版式坐标、字号、分类名位置都不变；早先无底图走另一个更宽的盒子，切一下底图整块会跳
+  const box = glassInner(size)
   const ruleInset = rule ? 29 : 0
-  const colW = textColumnWidth(size) - ruleInset
-  const lines = splitTitleLines(o.title)
-  const fs = titleFontSize(Math.max(...lines.map((l) => l.length)), lines.length, size, { colW })
+  const boxW = box.width - ruleInset
   const sub = o.subtitle?.trim() ? escapeHtml(o.subtitle.trim()) : ''
+  const { lines, fs, subFs } = fitText(o.title, sub, boxW, box.height, size === 'wide' ? 90 : 152)
   const body = lines.map((l) => `<span class="line">${escapeHtml(l)}</span>`).join('')
-  // 顶部让给标题遮罩；底部只留一点呼吸——分类名改走文字块最上方的 kicker，不再占底部
-  const guard = size === 'wide' ? Math.round(COVER_WIDE.h * TOP_GUARD) : Math.round(COVER_SQUARE.h * 0.16)
-  const foot = size === 'wide' ? 56 : 60
   // 有底图时文字直接压在照片上，用一层极轻投影兜底可读性（不铺底色）；纯色版式不加，免得在平底上显脏
   const shadow = o.bgSrc ? 'text-shadow:0 2px 12px rgba(0,0,0,0.38);' : ''
   const centered = align === 'center'
   const mark = marker === 'none' ? '' : markerHtml(marker, accent, centered)
-  // 分类名走顶部 kicker（与杂志大字/杂志留白同一位置）：底部再放一遍就是同一句话画两遍
-  const brand = o.brand?.trim() ?? ''
-  const kicker = brand
-    ? `<div style="color:${accent};font-size:${size === 'wide' ? 15 : 18}px;font-weight:600;letter-spacing:4px;margin-bottom:16px;${shadow}${
-        centered ? 'text-align:center;' : ''
-      }">${escapeHtml(brand)}</div>`
-    : ''
   const h1 = `<h1 style="font-size:${fs}px;color:${color};${shadow}${
     centered ? 'text-align:center;' : ''
   }">${body}${
-    sub ? `<span class="sub" style="color:${subColor};font-size:${Math.round(fs * 0.3)}px">${sub}</span>` : ''
+    sub ? `<span class="sub" style="color:${subColor};font-size:${subFs}px">${sub}</span>` : ''
   }</h1>`
-  return `<div class="abs" style="left:0;top:0;bottom:0;width:${boxW}px;display:flex;flex-direction:column;justify-content:center;padding:${guard}px ${PAD}px ${foot}px;">
-    ${kicker}${mark}${rule ? `<div style="border-left:3px solid ${accent};padding-left:26px">${h1}</div>` : h1}
+  const content = rule
+    ? `<div style="border-left:3px solid ${accent};padding-left:26px;width:100%">${mark}${h1}</div>`
+    : `${mark}${h1}`
+  // 分类名留在玻璃外面：它不属于正文，落进玻璃里像没擦干净的水印
+  const brand = o.brand?.trim() ?? ''
+  const kickerLine = brand
+    ? `<div style="color:${accent};font-size:${size === 'wide' ? 15 : 18}px;font-weight:600;letter-spacing:4px;${
+        centered ? 'text-align:center;' : ''
+      }${shadow}">${escapeHtml(brand)}</div>`
+    : ''
+  // 分类名一律排在盒外上方：有没有玻璃都不占正文的高度，字号也就不会因此缩水
+  const kicker = !brand
+    ? ''
+    : `<div class="abs" style="left:0;top:${Math.max(8, glassRect(size).top - 30) - box.top}px;width:${box.width}px">${kickerLine}</div>`
+  return `<div class="abs" style="left:${box.left}px;top:${box.top}px;width:${box.width}px;height:${box.height}px;display:flex;flex-direction:column;justify-content:center;${centered ? 'align-items:center;' : ''}">
+    ${kicker}${content}
   </div>`
 }
 
@@ -382,27 +470,24 @@ function posterText(o: CoverHtmlOptions, color: string, subColor: string): strin
   return `<div class="abs" style="left:0;top:0;bottom:0;width:${boxW}px;display:flex;flex-direction:column;justify-content:center;padding:${padTop}px ${PAD}px ${padBottom}px;">
     ${kicker}<h1 style="font-size:${fs}px;color:${color};line-height:${POSTER_LINE_HEIGHT};letter-spacing:-1px">${body}${
     sub
-      ? `<span class="sub" style="color:${subColor};font-size:${Math.round(fs * 0.22)}px;font-weight:500;margin-top:18px;letter-spacing:0">${sub}</span>`
+      ? `<span class="sub" style="color:${subColor};font-size:${subtitleSize(fs)}px;font-weight:500;margin-top:18px;letter-spacing:0">${sub}</span>`
       : ''
   }</h1>
   </div>`
 }
 
 /**
- * 文字区磨砂面板：垫在文字块**后面**的一层 backdrop-filter 磨砂半透明底。
- * 只在有底图且 panel='frosted' 时出现——它是构图翻车（文字区不安静）时的保底，
- * 不是默认件：默认仍靠自适应字色 + 极轻投影（见 photoInk 的注释）。
- * 面板色随字色走：深字配半透白、白字配半透黑，圆角 24px、内缩一圈，不像补丁。
+ * 文字区磨砂面板：一块**定好的玻璃**，文字按它的内区排版（见 glassInner）。
+ * 尺寸只有 glassRect 一个来源——文字绝不越出玻璃，玻璃也不会被文字撑变形。
+ * 只在有底图且 panel='frosted' 时出现；magazine 有底图时按模板语言默认开。
  */
 function frostedPanel(o: CoverHtmlOptions): string {
   if (!o.bgSrc || o.panel !== 'frosted') return ''
   const size = o.size === 'square' ? 'square' : 'wide'
-  const colW = size === 'wide' ? SIZES.wide.w - squareSide('wide') : SIZES.square.w
-  const guard = size === 'wide' ? Math.round(COVER_WIDE.h * TOP_GUARD) : Math.round(COVER_SQUARE.h * 0.16)
-  const foot = size === 'wide' ? 108 : 112
+  const g = glassRect(size)
   const dark = o.lightText === false
   const bg = dark ? 'rgba(255,255,255,0.42)' : 'rgba(10,14,20,0.38)'
-  return `<div class="abs" style="left:${Math.round(PAD * 0.6)}px;top:${Math.round(guard * 0.72)}px;bottom:${Math.round(foot * 0.72)}px;width:${colW - Math.round(PAD * 1.2)}px;border-radius:24px;background:${bg};backdrop-filter:blur(18px) saturate(1.15);-webkit-backdrop-filter:blur(18px) saturate(1.15)"></div>`
+  return `<div class="abs" style="left:${g.left}px;top:${g.top}px;width:${g.width}px;height:${g.height}px;border-radius:24px;background:${bg};backdrop-filter:blur(18px) saturate(1.15);-webkit-backdrop-filter:blur(18px) saturate(1.15)"></div>`
 }
 
 /** hexToRgba 的兜底封装：本文件的色值都由 shade 派生，理论上不会失败，兜底只为类型收窄 */
@@ -462,20 +547,24 @@ function photoInk(o: CoverHtmlOptions): { fg: string; sub: string; brand: string
 /** 杂志大字的文字块：kicker 小标签行 + 900 字重大标题 + 副标题上方细线 */
 function magazineText(o: CoverHtmlOptions, accent: string, color: string, subColor: string): string {
   const size = o.size === 'square' ? 'square' : 'wide'
-  const lines = splitTitleLines(o.title)
-  const fs = titleFontSize(Math.max(...lines.map((l) => l.length)), lines.length, size)
+  const glassOn = !!(o.bgSrc && o.panel === 'frosted')
+  // 与左列同一套盒子：无底图时也不换排版
+  const box = glassInner(size)
   const sub = o.subtitle?.trim() ? escapeHtml(o.subtitle.trim()) : ''
+  const { lines, fs, subFs } = fitText(o.title, sub, box.width, box.height, 118)
   const body = lines.map((l) => `<span class="line">${escapeHtml(l)}</span>`).join('')
-  const guard = size === 'wide' ? Math.round(COVER_WIDE.h * TOP_GUARD) : Math.round(COVER_SQUARE.h * 0.16)
-  const foot = size === 'wide' ? 108 : 112
-  const colW = size === 'wide' ? SIZES.wide.w - squareSide('wide') : SIZES.square.w
   const shadow = o.bgSrc ? 'text-shadow:0 2px 12px rgba(0,0,0,0.30);' : ''
-  const kicker = size === 'wide' ? 17 : 20
-  return `<div class="abs" style="left:0;top:0;bottom:0;width:${colW}px;display:flex;flex-direction:column;justify-content:center;padding:${guard}px ${PAD}px ${foot}px;">
-    <div style="color:${accent};font-size:${kicker}px;font-weight:700;letter-spacing:6px;margin-bottom:18px">${escapeHtml(o.brand?.trim() || 'FEATURE')}</div>
+  const kickerSize = size === 'wide' ? 17 : 20
+  // 刊眉字（分类名/FEATURE）留在玻璃外面，与正文分开
+  const kickerLine = `<div style="color:${accent};font-size:${kickerSize}px;font-weight:700;letter-spacing:6px">${escapeHtml(
+    o.brand?.trim() || 'FEATURE'
+  )}</div>`
+  const kicker = `<div class="abs" style="left:0;top:${Math.max(8, glassRect(size).top - 32) - box.top}px;width:${box.width}px">${kickerLine}</div>`
+  return `<div class="abs" style="left:${box.left}px;top:${box.top}px;width:${box.width}px;height:${box.height}px;display:flex;flex-direction:column;justify-content:center;">
+    ${kicker}
     <h1 style="font-size:${fs}px;color:${color};font-weight:900;letter-spacing:0.5px;line-height:1.1;${shadow}">${body}${
       sub
-        ? `<span class="sub" style="color:${subColor};font-size:${Math.round(fs * 0.28)}px;margin-top:22px;padding-top:18px;border-top:2px solid ${rgba(accent, 0.85)};width:fit-content">${sub}</span>`
+        ? `<span class="sub" style="color:${subColor};font-size:${subFs}px;margin-top:22px;padding-top:18px;border-top:2px solid ${rgba(accent, 0.85)};width:fit-content">${sub}</span>`
         : ''
     }</h1>
   </div>`
@@ -615,7 +704,9 @@ function stage(o: CoverHtmlOptions, accent: string): string {
           <span style="color:#6b7280;font-size:13px;font-weight:600;letter-spacing:4px">${escapeHtml(o.brand?.trim() || 'ESSAY')}</span>
         </div>`
       const lines = splitTitleLines(o.title)
-      const fs = titleFontSize(Math.max(...lines.map((l) => l.length)), lines.length, o.size)
+      const fs = titleFontSize(Math.max(...lines.map((l) => l.length)), lines.length, o.size, {
+        cap: o.size === 'wide' ? 90 : 152
+      })
       const sub = o.subtitle?.trim() ? escapeHtml(o.subtitle.trim()) : ''
       const body = lines.map((l) => `<span class="line">${escapeHtml(l)}</span>`).join('')
       const guard = o.size === 'wide' ? Math.round(COVER_WIDE.h * TOP_GUARD) : Math.round(COVER_SQUARE.h * 0.16)
@@ -624,7 +715,7 @@ function stage(o: CoverHtmlOptions, accent: string): string {
       const text = `<div class="abs" style="left:0;top:0;bottom:0;width:${colW}px;display:flex;flex-direction:column;justify-content:center;padding:${guard}px ${PAD}px ${foot}px;">
         ${decorOn ? kicker : ''}
         <h1 style="font-size:${fs}px;color:#1f2937">${body}${
-          sub ? `<span class="sub" style="color:#4b5563;font-size:${Math.round(fs * 0.3)}px">${sub}</span>` : ''
+          sub ? `<span class="sub" style="color:#4b5563;font-size:${subtitleSize(fs)}px">${sub}</span>` : ''
         }</h1>
       </div>`
       return `<div class="abs" style="inset:0;background:#f5f3ef">
@@ -666,7 +757,7 @@ export function coverHtml(o: CoverHtmlOptions): string {
   const accent = safeAccent(o.accent)
   // magazine 有底图时磨砂面板是默认件（杂志封面的蒙版语言）；其余模板缺省不铺面板
   const resolved: CoverHtmlOptions =
-    o.template === 'magazine' && o.bgSrc && (!o.panel || o.panel === 'auto') ? { ...o, panel: 'frosted' } : o
+    o.template === 'magazine' && o.bgSrc && !o.panel ? { ...o, panel: 'frosted' } : o
   // 超采样只在最外层套一次 transform: scale(s)——版式里的留白、字号、面板位置一律按 1× 写，不用各自乘系数。
   // 为什么不用 Electron 的 setZoomFactor：离屏窗口里它实测不生效（成品只占画布左上角，其余是白底），
   // 而 CSS transform 是确定性的，还能在单测里断言。

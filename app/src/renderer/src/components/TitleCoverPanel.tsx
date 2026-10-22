@@ -8,7 +8,7 @@ import {
   type ReactElement
 } from 'react'
 import { Icon } from '../ui/Icon'
-import { Button, Card, CardTitle, Chip, CollapseBar, Segmented, Switch } from '../ui/primitives'
+import { Button, Card, CardTitle, Segmented, Switch } from '../ui/primitives'
 import type { ArticleTheme } from '@shared/categoryThemes'
 import type { ProjectMeta, TitleCandidate } from '@shared/types'
 import { cardsPlainText, hexToRgba } from '@shared/cards'
@@ -18,7 +18,14 @@ import { extractTitle } from '@shared/exportHtml'
 import { UNCATEGORIZED } from '@shared/categories'
 import { mdToDoc } from '@shared/markdown'
 import { chatOnce, extractJsonArray, stripHtmlFence } from '../copilot/llm'
-import { coverHtmlBriefMessages, coverHtmlMessages, coverPromptMessages, titleMessages } from '../copilot/prompts'
+import {
+  coverHtmlBriefMessages,
+  coverHtmlMessages,
+  coverImageTextRule,
+  coverPhotoMessages,
+  coverPromptMessages,
+  titleMessages
+} from '../copilot/prompts'
 
 interface TitleCoverPanelProps {
   project: string
@@ -69,9 +76,16 @@ export default function TitleCoverPanel({
   const wideRef = useRef<HTMLCanvasElement>(null)
   const squareRef = useRef<HTMLCanvasElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+  const bgFileRef = useRef<HTMLInputElement>(null)
   const abortRef = useRef<(() => void) | null>(null)
   // ---- 封面提示词：从正文提取关键信息（流式进输入框），也可手动输入/编辑 ----
+  // 模板那条路的「插画」提示词（要求给左侧文字让位）与纯图那条路的「成图」提示词必须分开，
+  // 共用一份就会互相污染：给纯图封面写留白，画面左边就是废片
   const [coverPrompt, setCoverPrompt] = useState('')
+  const [photoPrompt, setPhotoPrompt] = useState('')
+  const [useReference, setUseReference] = useState(false)
+  /** 方图取景：纯图那条路的裁剪位置三档（拖动滑杆会转成自定义） */
+  const [squarePick, setSquarePick] = useState<'left' | 'center' | 'right' | 'custom'>('center')
   const [prompting, setPrompting] = useState(false)
   const promptAbortRef = useRef<(() => void) | null>(null)
   // ---- 裁剪位置：预览上直接拖动（内容跟手） ----
@@ -90,7 +104,9 @@ export default function TitleCoverPanel({
   const [coverError, setCoverError] = useState<string | null>(null)
   const [rendering, setRendering] = useState(false)
   // ---- 封面口径三件套：磨砂面板 / 装饰元素 / 方图取景（模板直出与自定义 HTML 共用一套）----
-  const [panel, setPanel] = useState<'auto' | 'frosted' | 'none'>('auto')
+  const [panel, setPanel] = useState<'frosted' | 'none'>('none')
+  /** 手动动过面板开关后就不再跟版式联动（杂志大字有底图时自带磨砂，这是模板语言，不是"自动判断"） */
+  const [panelTouched, setPanelTouched] = useState(false)
   const [decor, setDecor] = useState(true)
   const [focalPick, setFocalPick] = useState<'auto' | 'right' | 'center' | 'left'>('auto')
   // ---- HTML 直渲：只截图，不重生成作者/AI 写的源文件 ----
@@ -99,6 +115,9 @@ export default function TitleCoverPanel({
   const [customH, setCustomH] = useState<number>(COVER_WIDE.h)
   /** 画布比例：预设两档，手改数字即转自定义（免得让人一上来填两个数） */
   const [canvasPreset, setCanvasPreset] = useState<'wide' | 'square' | 'custom'>('wide')
+  /** HTML 直渲出的主图（方图预览在界面里就地裁，不再落一张 -11.png） */
+  const [customImg, setCustomImg] = useState<HTMLImageElement | null>(null)
+  const customSquareRef = useRef<HTMLCanvasElement>(null)
   const [customOut, setCustomOut] = useState<{ main: string; square?: string } | null>(null)
   const [customizing, setCustomizing] = useState(false)
   // AI 写 HTML：指令 + 上一版源码（改一版时带回给模型，不用重写全文）
@@ -152,6 +171,11 @@ export default function TitleCoverPanel({
     refreshProjectFiles()
   }, [refreshProjectFiles, pv])
 
+  // 版式自带的面板默认：杂志大字有底图时铺磨砂，其余不铺；用户手动改过就不再覆盖
+  useEffect(() => {
+    if (!panelTouched) setPanel(template === 'magazine' ? 'frosted' : 'none')
+  }, [template, panelTouched])
+
   // 下拉缺省选第一个 covers/*.html：作者不用记文件名也能直接出图
   useEffect(() => {
     if (!customHtml && projectCovers.length) setCustomHtml(projectCovers[0])
@@ -202,6 +226,28 @@ export default function TitleCoverPanel({
       setBgFile(rel)
       refreshProjectFiles()
       return rel
+    },
+    [project, refreshProjectFiles]
+  )
+
+  /** 模板那条的底图导入：与纯图一样能拿本机图片，落地后进候选条并选中 */
+  const importBg = useCallback(
+    (file: File) => {
+      const reader = new FileReader()
+      reader.onload = async () => {
+        const dataUrl = String(reader.result ?? '')
+        const base64 = dataUrl.replace(/^data:[^;]+;base64,/, '')
+        if (!base64) return
+        try {
+          const rel = await window.api.invoke('project:saveAsset', project, 'assets/cover-bg.png', base64)
+          setBgSource('file')
+          setBgFile(rel)
+          refreshProjectFiles()
+        } catch (err) {
+          setCoverError(err instanceof Error ? err.message : String(err))
+        }
+      }
+      reader.readAsDataURL(file)
     },
     [project, refreshProjectFiles]
   )
@@ -258,6 +304,28 @@ export default function TitleCoverPanel({
     }
   }, [prompting, briefSource, skill, onToast])
 
+  /** 纯图成图那条路：出的是「完整封面画面」的提示词——主体可居中铺满，不为文字留白 */
+  const extractPhotoPrompt = useCallback(async () => {
+    if (prompting) return
+    const source = await briefSource()
+    if (!source) return
+    setPrompting(true)
+    const { promise, abort } = chatOnce(
+      coverPhotoMessages(source, skill, theme?.accent),
+      (full) => setPhotoPrompt(full)
+    )
+    promptAbortRef.current = abort
+    try {
+      const full = await promise
+      setPhotoPrompt(full.trim())
+    } catch (err) {
+      onToast(`封面画面描述提取失败：${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setPrompting(false)
+      promptAbortRef.current = null
+    }
+  }, [prompting, briefSource, skill, theme?.accent, onToast])
+
   /** HTML 直渲那条路：出的是「标题文案 + 版式气质 + 画面元素 + 配色」的设计指令，直接喂给 AI 写 HTML */
   const extractHtmlBrief = useCallback(async () => {
     if (prompting) return
@@ -282,6 +350,8 @@ export default function TitleCoverPanel({
   const startCropDrag = useCallback(
     (key: 'wide' | 'square', ratio: number) => (e: ReactPointerEvent<HTMLCanvasElement>) => {
       if (!img) return
+      // 手动拖过就不再声称是三档之一
+      if (key === 'square') setSquarePick('custom')
       const m = dragFactor(e.currentTarget, img, ratio)
       if (!m) return
       dragRef.current = {
@@ -314,29 +384,43 @@ export default function TitleCoverPanel({
 
   const genCover = useCallback(async () => {
     if (genning || prompting) return
-    const prompt = coverPrompt.trim()
+    const prompt = photoPrompt.trim()
     if (!prompt) {
-      onToast('先写一句底图描述，或点「从正文提取」')
+      onToast('先写一句画面描述，或点「从正文提取」')
       return
     }
     setGenning(true)
+    setCoverError(null)
     try {
-      // 1K + 21:9 实际出 1568×672，已够 1175×500 头图；2K 图床下载慢易超时
-      const b64 = await window.api.invoke('image:generate', prompt, { size: '1K', ratio: '21:9' })
+      // 2.35:1 + 长边 2432：商汤换算成 2432×1024（以前 '2.35:1' 解析不了，实际拿到 1024 方图再被裁一半）
+      // 勾了「用当前图作参考」就走商汤 /images/edits：参考图以 data URI 传，原构图与风格保留
+      // 标题逐字追加：让模型自己"安排标题"会改写文案或写错字，这里只把字钉死
+      const fullPrompt = `${prompt}。${coverImageTextRule(coverTitle, coverSubtitle)}`
+      const b64 = await window.api.invoke('image:generate', fullPrompt, {
+        ratio: '2.35:1',
+        longEdge: 2432,
+        ...(useReference && img ? { reference: renderFullPng(img) } : {})
+      })
       const image = new Image()
       image.onload = () => {
         setImg(image)
-        onToast('底图已生成并存进 assets/：可在这张卡上拖选裁剪，也可切到「模板直出」直接套版式')
+        // 这张图本身就是封面，1:1 只是派生：默认取主体侧，别把主体从中间切开
+        // 字写进画面里时，方图默认取左才裁得到标题（提示词已要求字收在左 35%）；纯图则取主体侧。
+        // 三档在下面都能改，这只是缺省。
+        const hasText = !!coverTitle.trim()
+        setSquarePick(hasText ? 'left' : 'right')
+        setSquareOffset(hasText ? 0 : 1)
+        onToast(useReference ? '已按参考图重画：方图默认取主体侧，可拖' : '封面图已生成：方图默认取主体侧，可拖')
         void stashBg(image).catch(() => undefined)
       }
       image.onerror = () => onToast('封面图片解码失败，请重试')
       image.src = `data:image/png;base64,${b64}`
     } catch (err) {
-      onToast(`封面生成失败：${err instanceof Error ? err.message : err}`)
+      setCoverError(err instanceof Error ? err.message : String(err))
     } finally {
       setGenning(false)
     }
-  }, [genning, prompting, coverPrompt, onToast, stashBg])
+  }, [genning, prompting, photoPrompt, coverTitle, coverSubtitle, useReference, img, onToast, stashBg])
 
   // 预览重绘
   useEffect(() => {
@@ -345,6 +429,10 @@ export default function TitleCoverPanel({
   useEffect(() => {
     if (img && squareRef.current) drawCrop(squareRef.current, img, 1, squareOffset)
   }, [img, squareOffset])
+  // HTML 直渲那条路的方图预览：同一套裁剪函数，只是源换成刚出图的主图
+  useEffect(() => {
+    if (customImg && customSquareRef.current) drawCrop(customSquareRef.current, customImg, 1, squareOffset)
+  }, [customImg, squareOffset])
 
   const saveCovers = useCallback(async () => {
     if (!img || saving) return
@@ -445,6 +533,7 @@ export default function TitleCoverPanel({
         return
       }
       setCustomizing(true)
+      setCoverError(null)
       try {
         const r = await window.api.invoke('cover:renderHtml', {
           project,
@@ -455,11 +544,15 @@ export default function TitleCoverPanel({
           height: customH,
           focal: focalValue
         })
-        setCustomOut({ main: r.path, square: r.square })
+        setCustomOut({ main: r.path })
         setPv((v) => v + 1)
-        onToast(r.square ? '已按 HTML 出图，方图从横图裁出' : '已按 HTML 出图（画布不是横图，未裁方图）')
+        // 方图只在界面里裁着看：主图读进内存，滑杆一动就重画，不再落一张 -11.png
+        const im = new Image()
+        im.onload = () => setCustomImg(im)
+        im.src = assetUrl(r.path)
+        onToast('已按 HTML 出图；方图是这张主图的裁剪，只预览不落盘')
       } catch (err) {
-        onToast(`渲染失败：${err instanceof Error ? err.message : err}`)
+        setCoverError(err instanceof Error ? err.message : String(err))
       } finally {
         setCustomizing(false)
       }
@@ -504,11 +597,12 @@ export default function TitleCoverPanel({
     if (!customOut) return
     try {
       const fresh = await window.api.invoke('project:readMeta', project)
-      fresh.cover = { main: customOut.main, square: customOut.square ?? customOut.main }
+      // 方图不落盘：它是这张主图的裁剪，后台自己会裁；其它平台要 1:1 也从 main 现裁
+      fresh.cover = { main: customOut.main, square: customOut.main }
       await window.api.invoke('project:writeMeta', project, fresh)
       setPv((v) => v + 1)
       onMetaUpdated()
-      onToast('已设为封面')
+      onToast('已设为封面（方图由主图裁，不另存）')
     } catch (err) {
       onToast(`设置封面失败：${err instanceof Error ? err.message : err}`)
     }
@@ -611,7 +705,7 @@ export default function TitleCoverPanel({
                 onChange={setCoverMode}
                 items={[
                   { value: 'template', label: '模板直出', icon: 'palette', title: '选版式填标题，一步出图（底图可让 AI 现场生）' },
-                  { value: 'photo', label: '照片裁剪', icon: 'image', title: '只要照片不要文字：AI 生图或导入后拖选裁剪位置' },
+                  { value: 'photo', label: '纯图成图', icon: 'image', title: '只要画面不要文字：AI 生图或导入后拖选裁剪，整张就是封面' },
                   { value: 'html', label: 'HTML 直渲', icon: 'sliders', title: 'AI 或手写一份封面 HTML，直接截图' }
                 ]}
               />
@@ -661,7 +755,7 @@ export default function TitleCoverPanel({
                           onChange={setBgSource}
                           items={[
                             { value: 'none', label: '不用底图' },
-                            { value: 'ai', label: 'AI 生成底图' },
+                            { value: 'ai', label: 'AI 生插画' },
                             { value: 'file', label: '用工程里的图' }
                           ]}
                         />
@@ -688,25 +782,46 @@ export default function TitleCoverPanel({
                           </div>
                         )}
                         {bgSource === 'file' && (
-                          <BgPicker images={projectImages} url={assetUrl} value={bgFile} onPick={setBgFile} />
+                          <>
+                            <BgPicker images={projectImages} url={assetUrl} value={bgFile} onPick={setBgFile} />
+                            <Button size="sm" variant="ghost" icon="upload" onClick={() => bgFileRef.current?.click()}>
+                              导入本地图片
+                            </Button>
+                            <input
+                              ref={bgFileRef}
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={(e) => {
+                                const f = e.target.files?.[0]
+                                if (f) importBg(f)
+                                e.target.value = ''
+                              }}
+                            />
+                          </>
                         )}
                       </>
                     )}
                     {coverError && <p className="text-[11.5px] text-st-bad">{coverError}</p>}
-                    <CollapseBar className="self-start" label="更多：磨砂面板 / 装饰 / 方图取景">
-                      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
-                        <Segmented
-                          size="sm"
-                          ariaLabel="文字区磨砂面板"
-                          title="文字压在杂底上时，磨砂面板保底可读性；自动=按文字区亮度灰区决定"
-                          value={panel}
-                          onChange={setPanel}
-                          items={[
-                            { value: 'auto', label: '面板自动' },
-                            { value: 'frosted', label: '磨砂' },
-                            { value: 'none', label: '不铺' }
-                          ]}
-                        />
+                    {/* 口径三件套直接摊开：折叠一层只多一次点击 */}
+                    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
+                        {/* 面板只能垫在照片上：没图（或纯排印版式）时不摆这个开关，免得"选了没反应" */}
+                        {!NO_BG_TEMPLATES.includes(template) && bgSource !== 'none' && (
+                          <Segmented
+                            size="sm"
+                            ariaLabel="文字区磨砂面板"
+                            title="文字压在杂底上、看不清时的保底：垫一层磨砂；默认不铺"
+                            value={panel}
+                            onChange={(v) => {
+                              setPanel(v)
+                              setPanelTouched(true)
+                            }}
+                            items={[
+                              { value: 'none', label: '不铺' },
+                              { value: 'frosted', label: '磨砂' }
+                            ]}
+                          />
+                        )}
                         <Segmented
                           size="sm"
                           ariaLabel="方图取景"
@@ -714,19 +829,15 @@ export default function TitleCoverPanel({
                           value={focalPick}
                           onChange={setFocalPick}
                           items={[
-                            { value: 'auto', label: '取景自动' },
-                            { value: 'right', label: '取右' },
+                            { value: 'auto', label: '自动' },
+                            { value: 'right', label: '居右' },
                             { value: 'center', label: '居中' },
-                            { value: 'left', label: '取左' }
+                            { value: 'left', label: '居左' }
                           ]}
                         />
-                        <Switch checked={decor} onChange={setDecor} label="装饰" title="光晕 / 圆环 / 细线等装饰元素" />
-                      </div>
-                    </CollapseBar>
+                      <Switch checked={decor} onChange={setDecor} label="装饰" title="光晕 / 圆环 / 细线等装饰元素" />
+                    </div>
                     <div className="mt-1 flex flex-nowrap items-center gap-2">
-                      <Chip icon="palette" title="封面强调色与文章排版调性同源">
-                        强调色 {accent}
-                      </Chip>
                       <Button
                         className="ml-auto shrink-0"
                         variant="pri"
@@ -740,35 +851,20 @@ export default function TitleCoverPanel({
                   </div>
                 </div>
 
-                {meta.cover && (
-                  <p className="mt-3 text-[11.5px] text-st-done">
-                    <Icon name="checkCircle" size={12} className="mr-1.5" />
-                    已保存：{meta.cover.main} / {meta.cover.square}
-                    {meta.cover.template
-                      ? `（模板：${COVER_TEMPLATES.find((t) => t.id === meta.cover?.template)?.name ?? meta.cover.template}）`
-                      : ''}
-                  </p>
-                )}
-
-                {/* 成品预览：读盘上的封面文件（带版本号破缓存），比例角标常驻 */}
+                {/* 成品预览：读盘上的封面文件（带版本号破缓存），与另两条同一个预览壳 */}
                 {meta.cover && projectDir && (
-                  <div className="mt-2.5 flex flex-wrap items-start gap-2.5">
-                    <RatioFrame
-                      label="2.35:1 头图"
-                      src={assetUrl(meta.cover.main)}
-                      alt="头图预览"
-                      className="w-[min(100%,420px)] aspect-[2.35]"
-                    />
-                    <RatioFrame
-                      label="1:1 主图裁剪预览"
-                      src={assetUrl(meta.cover.square)}
-                      alt="方图预览"
-                      className="w-[132px] aspect-square"
-                    />
+                  <div className="mt-3 flex flex-wrap items-start gap-2.5">
+                    <PreviewFrame badge="2.35:1 头图" wide>
+                      <img src={assetUrl(meta.cover.main)} alt="头图预览" className="block h-auto w-full" />
+                    </PreviewFrame>
+                    <PreviewFrame badge="1:1 方图">
+                      <img src={assetUrl(meta.cover.square)} alt="方图预览" className="block h-auto w-full" />
+                    </PreviewFrame>
                   </div>
                 )}
+                <CoverStateLine meta={meta} />
 
-                {/* 版式怎么排、方图为什么只能裁——这些设计依据在 docs/PRD.md 封面一节；界面只留可操作项 */}
+                              {/* 版式怎么排、方图为什么只能裁——这些设计依据在 docs/PRD.md 封面一节；界面只留可操作项 */}
               </>
             )}
             {coverMode === 'photo' && (
@@ -784,13 +880,31 @@ export default function TitleCoverPanel({
                     e.target.value = ''
                   }}
                 />
-                <label className="mt-3 block text-[11.5px] text-ink-dim">底图描述（可手写，也可从正文提取）</label>
+                <div className="mt-3 flex flex-col gap-2">
+                  <input
+                    value={coverTitle}
+                    onChange={(e) => setCoverTitle(e.target.value)}
+                    placeholder="画面里的标题（留空则画面无字）"
+                    aria-label="画面内标题"
+                    className="h-8 w-full rounded-lg border border-panel-3 bg-panel px-2.5 text-xs text-ink outline-none placeholder:text-ink-dim focus:border-accent"
+                  />
+                  <input
+                    value={coverSubtitle}
+                    onChange={(e) => setCoverSubtitle(e.target.value)}
+                    placeholder="副标题（选填；有标题时才会写进画面）"
+                    aria-label="画面内副标题"
+                    className="h-8 w-full rounded-lg border border-panel-3 bg-panel px-2.5 text-xs text-ink outline-none placeholder:text-ink-dim focus:border-accent"
+                  />
+                  <p className="text-[11px] text-ink-dim">
+                    这两行会被逐字写进画面（中文生图仍有出错率，出图后看一眼）；留空就是纯图封面。
+                  </p>
+                </div>
                 <textarea
-                  value={coverPrompt}
-                  onChange={(e) => setCoverPrompt(e.target.value)}
-                  rows={coverPrompt.length > 60 ? 4 : 3}
+                  value={photoPrompt}
+                  onChange={(e) => setPhotoPrompt(e.target.value)}
+                  rows={photoPrompt.length > 60 ? 4 : 3}
                   readOnly={prompting}
-                  placeholder="想要一张什么样的底图…主体放右侧约三分之一，左侧留给文字"
+                  placeholder="想要一张什么样的封面画面…主体可以居中铺满，这张图本身就是封面，不用给文字留白"
                   className="mt-1 w-full rounded-lg border border-panel-3 bg-panel px-2.5 py-2 text-xs text-ink outline-none placeholder:text-ink-dim focus:border-accent"
                 />
                 <div className="mt-2 flex flex-nowrap items-center gap-2">
@@ -799,7 +913,7 @@ export default function TitleCoverPanel({
                       停止
                     </Button>
                   ) : (
-                    <Button size="sm" variant="sec" icon="file" disabled={genning} onClick={extractCoverPrompt}>
+                    <Button size="sm" variant="sec" icon="file" disabled={genning} onClick={extractPhotoPrompt}>
                       从正文提取
                     </Button>
                   )}
@@ -808,65 +922,107 @@ export default function TitleCoverPanel({
                   </Button>
                   <Button
                     className="ml-auto shrink-0"
-                    variant="pri"
+                    variant="sec"
                     icon="sparkles"
-                    disabled={genning || prompting || !coverPrompt.trim()}
+                    disabled={genning || prompting || !photoPrompt.trim()}
                     onClick={genCover}
                   >
-                    {genning ? '生成中…' : '生成底图'}
+                    {genning ? '生成中…' : '生成封面图'}
                   </Button>
                 </div>
+                {coverError && <p className="text-[11.5px] text-st-bad">{coverError}</p>}
+                {img && (
+                  <label className="mt-2 inline-flex cursor-pointer items-center gap-1.5 text-[11.5px] text-ink-dim">
+                    <input
+                      type="checkbox"
+                      checked={useReference}
+                      onChange={(e) => setUseReference(e.target.checked)}
+                      className="accent-accent"
+                    />
+                    用当前图作参考（图生图，保留构图与风格；供应商不支持时会提示换模型）
+                  </label>
+                )}
                 {prompting && <p className="mt-1.5 text-[11px] text-ink-dim">正在通读正文提取关键信息…</p>}
                 {genning && <p className="mt-1.5 text-[11px] text-ink-dim">按提示词生成 21:9 横图，约一分钟</p>}
 
                 {img ? (
                   <div className="mt-3 flex flex-col gap-2">
-                    <p className="text-[11.5px] text-ink-dim">
-                      头图 2.35:1（{WIDE.w}×{WIDE.h}）· 图上拖动选裁剪位置
-                    </p>
-                    <canvas
-                      ref={wideRef}
-                      width={WIDE.w}
-                      height={WIDE.h}
-                      onPointerDown={startCropDrag('wide', WIDE.w / WIDE.h)}
-                      onPointerMove={moveCropDrag}
-                      onPointerUp={endCropDrag}
-                      onPointerCancel={endCropDrag}
-                      style={{ touchAction: 'none' }}
-                      className="w-full max-w-[520px] cursor-grab touch-none rounded-lg border border-panel-3 active:cursor-grabbing"
-                    />
-                    <input
-                      type="range"
-                      min={0}
-                      max={100}
-                      aria-label="头图裁剪位置"
-                      value={wideOffset * 100}
-                      onChange={(e) => setWideOffset(Number(e.target.value) / 100)}
-                      className="w-full max-w-[520px]"
-                    />
-                    <p className="mt-1 text-[11.5px] text-ink-dim">
-                      方图 1:1（{SQUARE.w}×{SQUARE.h}）· 图上拖动选裁剪位置
-                    </p>
-                    <canvas
-                      ref={squareRef}
-                      width={SQUARE.w}
-                      height={SQUARE.h}
-                      onPointerDown={startCropDrag('square', 1)}
-                      onPointerMove={moveCropDrag}
-                      onPointerUp={endCropDrag}
-                      onPointerCancel={endCropDrag}
-                      style={{ touchAction: 'none' }}
-                      className="w-44 cursor-grab touch-none rounded-lg border border-panel-3 active:cursor-grabbing"
-                    />
-                    <input
-                      type="range"
-                      min={0}
-                      max={100}
-                      aria-label="方图裁剪位置"
-                      value={squareOffset * 100}
-                      onChange={(e) => setSquareOffset(Number(e.target.value) / 100)}
-                      className="w-full max-w-[520px]"
-                    />
+                    {/* 两张成品并排看：2.35:1 头图 + 1:1 方图，都带比例角标、都能直接拖——
+                        与「模板直出」的成品预览同一套语言，只是这里拖的是裁剪位置而不是成品 */}
+                    <div className="flex flex-wrap items-start gap-2.5">
+                      <PreviewFrame badge="2.35:1 头图" wide title="可直接拖动选裁剪位置">
+                        <canvas
+                          ref={wideRef}
+                          width={WIDE.w}
+                          height={WIDE.h}
+                          onPointerDown={startCropDrag('wide', WIDE.w / WIDE.h)}
+                          onPointerMove={moveCropDrag}
+                          onPointerUp={endCropDrag}
+                          onPointerCancel={endCropDrag}
+                          style={{ touchAction: 'none' }}
+                          className="block h-auto w-full cursor-grab touch-none active:cursor-grabbing"
+                        />
+                      </PreviewFrame>
+                      <PreviewFrame badge="1:1 方图" title="可直接拖动选裁剪位置">
+                        <canvas
+                          ref={squareRef}
+                          width={SQUARE.w}
+                          height={SQUARE.h}
+                          onPointerDown={startCropDrag('square', 1)}
+                          onPointerMove={moveCropDrag}
+                          onPointerUp={endCropDrag}
+                          onPointerCancel={endCropDrag}
+                          style={{ touchAction: 'none' }}
+                          className="block h-auto w-full cursor-grab touch-none active:cursor-grabbing"
+                        />
+                      </PreviewFrame>
+                    </div>
+                    <CoverStateLine meta={meta} />
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Segmented
+                        size="sm"
+                        ariaLabel="方图取景"
+                        title="有标题时默认居左（裁得到字）；纯图封面默认居右（主体侧）"
+                        value={squarePick}
+                        onChange={(v) => {
+                          setSquarePick(v)
+                          setSquareOffset(v === 'left' ? 0 : v === 'center' ? 0.5 : 1)
+                        }}
+                        items={[
+                          { value: 'left', label: '居左' },
+                          { value: 'center', label: '居中' },
+                          { value: 'right', label: '居右' }
+                        ]}
+                      />
+                      <span className="text-[11px] text-ink-dim">方图取景，或直接在图上拖</span>
+                    </div>
+                    <label className="flex items-center gap-2 text-[11px] text-ink-dim">
+                      头图位置
+                      <input
+                        type="range"
+                        min={0}
+                        max={100}
+                        aria-label="头图裁剪位置"
+                        value={wideOffset * 100}
+                        onChange={(e) => setWideOffset(Number(e.target.value) / 100)}
+                        className="w-full max-w-[320px]"
+                      />
+                    </label>
+                    <label className="flex items-center gap-2 text-[11px] text-ink-dim">
+                      方图位置
+                      <input
+                        type="range"
+                        min={0}
+                        max={100}
+                        aria-label="方图裁剪位置"
+                        value={squareOffset * 100}
+                        onChange={(e) => {
+                          setSquareOffset(Number(e.target.value) / 100)
+                          setSquarePick('custom')
+                        }}
+                        className="w-full max-w-[320px]"
+                      />
+                    </label>
                     <div className="mt-1">
                       <Button variant="pri" icon="save" disabled={saving} onClick={saveCovers}>
                         {saving ? '保存中…' : '保存两种封面'}
@@ -877,8 +1033,8 @@ export default function TitleCoverPanel({
                     </div>
                   </div>
                 ) : (
-                  <p className="mt-3 rounded-lg border border-dashed border-panel-3 px-3 py-2.5 text-[11.5px] leading-relaxed text-ink-dim">
-                    还没有底图。生成或导入一张后，在预览上直接拖动选裁剪位置（也可用滑杆微调），一次保存 2.35:1 头图与 1:1 方图。
+                  <p className="mt-1.5 text-[11px] text-ink-dim">
+                    还没有画面：生成或导入一张后，两张成品并排预览、可直接拖动，保存时一次写 2.35:1 头图与 1:1 方图。
                   </p>
                 )}
               </>
@@ -886,13 +1042,17 @@ export default function TitleCoverPanel({
             {coverMode === 'html' && (
               <>
                 <div className="mt-3 flex flex-nowrap items-center gap-2">
-                  <input
+                  <textarea
                     value={customDesc}
                     onChange={(e) => setCustomDesc(e.target.value)}
-                    onKeyDown={(e) => shouldSubmitOnEnter(e) && writeCustomHtml()}
+                    onKeyDown={(e) => {
+                      // 多行框里回车是换行；Ctrl/Cmd+Enter 才提交
+                      if ((e.ctrlKey || e.metaKey) && shouldSubmitOnEnter(e)) writeCustomHtml()
+                    }}
+                    rows={customDesc.length > 60 ? 3 : 2}
                     placeholder="描述想要的封面，让 AI 写一份 HTML（改一版会带着上一版源码）"
                     aria-label="封面 HTML 生成指令"
-                    className="h-8 min-w-0 flex-1 rounded-lg border border-panel-3 bg-panel px-2.5 text-xs text-ink outline-none placeholder:text-ink-dim focus:border-accent"
+                    className="min-w-0 flex-1 resize-y rounded-lg border border-panel-3 bg-panel px-2.5 py-2 text-xs text-ink outline-none placeholder:text-ink-dim focus:border-accent"
                   />
                   <Button
                     size="sm"
@@ -933,6 +1093,7 @@ export default function TitleCoverPanel({
                     {projectCovers.map((c) => (
                       <option key={c} value={c}>
                         {c}
+                        {c.endsWith('covers/cover-wide.html') ? '（模板源）' : c.endsWith('covers/cover-custom.html') ? '（AI 写）' : '（手写）'}
                       </option>
                     ))}
                     {!projectCovers.length && !customHtml && <option value="">工程里还没有 covers/*.html</option>}
@@ -988,7 +1149,7 @@ export default function TitleCoverPanel({
                   )}
                   <Button
                     className="ml-auto shrink-0"
-                    variant="pri"
+                    variant="sec"
                     icon="image"
                     disabled={customizing || writing || !customHtml.trim()}
                     onClick={() => renderCustomCover()}
@@ -996,33 +1157,72 @@ export default function TitleCoverPanel({
                     {customizing ? '渲染中…' : '出图'}
                   </Button>
                 </div>
+                <p className="mt-1 text-[11px] text-ink-dim">
+                  covers/cover-wide.html 是模板直出的渲染源，每次「生成封面」都会重写；covers/cover-custom.html 是
+                  「AI 写 HTML」写的，改它不会被覆盖。
+                </p>
+                {coverError && <p className="mt-1.5 text-[11.5px] text-st-bad">{coverError}</p>}
                 {customOut ? (
-                  <div className="mt-2.5 flex flex-wrap items-start gap-2.5">
-                    <img
-                      src={assetUrl(customOut.main)}
-                      alt="自定义封面预览"
-                      className="w-[min(100%,420px)] rounded-lg border border-panel-3"
-                    />
-                    {customOut.square && (
-                      <img
-                        src={assetUrl(customOut.square)}
-                        alt="自定义封面方图裁剪"
-                        className="w-[132px] rounded-lg border border-panel-3"
-                      />
+                  <div className="mt-2.5 flex flex-col gap-2">
+                    <div className="flex flex-wrap items-start gap-2.5">
+                      <PreviewFrame badge="2.35:1 头图" wide title={`${customW}×${customH}`}>
+                        <img src={assetUrl(customOut.main)} alt="自定义封面预览" className="block h-auto w-full" />
+                      </PreviewFrame>
+                      {customW > customH && (
+                        <PreviewFrame badge="1:1 方图" title="裁剪预览，不落盘">
+                          <canvas ref={customSquareRef} width={SQUARE.w} height={SQUARE.h} className="block h-auto w-full" />
+                        </PreviewFrame>
+                      )}
+                    </div>
+                    <CoverStateLine meta={meta} />
+                    {customW > customH && (
+                      <>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Segmented
+                            size="sm"
+                            ariaLabel="方图取景"
+                            value={squarePick}
+                            onChange={(v) => {
+                              setSquarePick(v)
+                              setSquareOffset(v === 'left' ? 0 : v === 'center' ? 0.5 : 1)
+                            }}
+                            items={[
+                              { value: 'left', label: '居左' },
+                              { value: 'center', label: '居中' },
+                              { value: 'right', label: '居右' }
+                            ]}
+                          />
+                          <span className="text-[11px] text-ink-dim">方图取景（仅预览，不落盘）</span>
+                        </div>
+                        <label className="flex items-center gap-2 text-[11px] text-ink-dim">
+                          方图位置
+                          <input
+                            type="range"
+                            min={0}
+                            max={100}
+                            aria-label="方图预览位置"
+                            value={squareOffset * 100}
+                            onChange={(e) => {
+                              setSquareOffset(Number(e.target.value) / 100)
+                              setSquarePick('custom')
+                            }}
+                            className="w-full max-w-[320px]"
+                          />
+                        </label>
+                      </>
                     )}
-                    <div className="w-full">
-                      <Button variant="sec" icon="check" onClick={applyCustomCover}>
+                    <div>
+                      <Button variant="pri" icon="check" onClick={applyCustomCover}>
                         设为封面
                       </Button>
                       <p className="mt-1.5 text-[11px] text-ink-dim">
-                        {customOut.main}
-                        {customOut.square ? ` 与 ${customOut.square}` : '（画布不是横图，未裁方图）'}
+                        {customOut.main}（方图不落盘，由它裁）
                       </p>
                     </div>
                   </div>
                 ) : (
                   <p className="mt-1.5 text-[11px] text-ink-dim">
-                    2.35:1 画布会自动裁出 1:1（取主图最右一段）；出图不顶掉现有封面，点「设为封面」才写入。
+                    2.35:1 画布出图后，1:1 方图就在主图旁边并排预览（只预览、不落盘；画布选 1:1 时本身就是方图）。出图不顶掉现有封面，点「设为封面」才写入。
                   </p>
                 )}
               </>
@@ -1100,22 +1300,48 @@ function renderFullPng(img: HTMLImageElement): string {
 const DEFAULT_ACCENT = '#0d9488'
 
 /** 比例角标常驻的成品预览框（§5.3：封面预览标注 2.35:1 / 1:1） */
-function RatioFrame({
-  label,
-  src,
-  alt,
-  className = ''
+/**
+ * 封面预览框：三条路共用同一层壳——圆角、边框、角标位置、宽度档位都在这里。
+ * 里面可以是 <img>（读盘成品）也可以是 <canvas>（就地裁剪预览），外壳必须长得一样。
+ */
+function PreviewFrame({
+  badge,
+  wide = false,
+  title,
+  children
 }: {
-  label: string
-  src: string
-  alt: string
-  className?: string
+  badge: string
+  wide?: boolean
+  title?: string
+  children: ReactElement
 }): ReactElement {
   return (
-    <span className={`relative block shrink-0 overflow-hidden rounded-lg border border-panel-3 ${className}`}>
-      <img src={src} alt={alt} className="h-full w-full object-cover" />
-      <span className="absolute right-1.5 top-1.5 rounded-full bg-black/40 px-1.5 py-0.5 text-[10px] text-white">{label}</span>
+    <span
+      className={`relative block overflow-hidden rounded-lg border border-panel-3 ${
+        wide ? 'w-[min(100%,420px)]' : 'w-[132px] shrink-0'
+      }`}
+      title={title}
+    >
+      {children}
+      <span className="absolute right-1.5 top-1.5 rounded-full bg-black/40 px-1.5 py-0.5 text-[10px] text-white">
+        {badge}
+      </span>
     </span>
+  )
+}
+
+/** 「当前封面」一行：三条路同一句、同一位置（有封面才出现），别各写各的 */
+function CoverStateLine({ meta }: { meta: ProjectMeta }): ReactElement | null {
+  if (!meta.cover) return null
+  const tpl = meta.cover.template
+    ? `（模板：${COVER_TEMPLATES.find((t) => t.id === meta.cover?.template)?.name ?? meta.cover.template}）`
+    : ''
+  return (
+    <p className="mt-1.5 text-[11px] text-st-done">
+      <Icon name="checkCircle" size={12} className="mr-1.5" />
+      当前封面：{meta.cover.main} / {meta.cover.square}
+      {tpl}
+    </p>
   )
 }
 

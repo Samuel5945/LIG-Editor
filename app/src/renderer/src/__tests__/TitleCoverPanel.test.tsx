@@ -35,7 +35,7 @@ const html = renderToStaticMarkup(
 describe('封面面板与工具面口径对齐', () => {
   it('三条路收成分段选择，不再三张卡来回翻', () => {
     expect(html).toContain('aria-label="封面怎么来"')
-    for (const m of ['模板直出', '照片裁剪', 'HTML 直渲']) expect(html).toContain(m)
+    for (const m of ['模板直出', '纯图成图', 'HTML 直渲']) expect(html).toContain(m)
     // 三张旧卡标题不该还在（同一条事实不画三遍）
     for (const gone of ['路径一 · 模板直出', '路径二 · AI 生图后裁剪', '路径三 · HTML 直渲', '三条路选一条']) {
       expect(html).not.toContain(gone)
@@ -48,17 +48,32 @@ describe('封面面板与工具面口径对齐', () => {
     }
     expect(html).toContain('aria-label="封面版式"')
     expect(html).toContain('aria-label="底图来源"')
-    for (const b of ['不用底图', 'AI 生成底图', '用工程里的图']) expect(html).toContain(b)
+    for (const b of ['不用底图', 'AI 生插画', '用工程里的图']) expect(html).toContain(b)
     expect(html).toContain('生成封面')
     // 标题输入框自带「| 分行字更大」这条唯一有用的排印提示
     expect(html).toContain('用 | 分行，行越短字越大')
   })
 
-  it('面板/装饰/取景收进「更多」，不摊在主流程上', () => {
-    expect(html).toContain('更多：磨砂面板 / 装饰 / 方图取景')
-    // 折叠未展开时这些控件不在面上（收起的是输入控件，不是事实）
+  it('取景/装饰直接摊开；没底图时不摆面板开关（铺不了就别让人点）', () => {
+    expect(html).toContain('aria-label="方图取景"')
+    expect(html).toContain('role="switch"')
+    expect(html).not.toContain('更多：')
+    // 只有版式缩略卡的 hover 说明里还会出现「强调色」这个词，胶囊本身（强调色 #hex）必须没了
+    expect(html).not.toMatch(/强调色 #[0-9a-fA-F]{6}/)
+    // 默认「不用底图」：磨砂面板无处可垫，控件不该出现
     expect(html).not.toContain('aria-label="文字区磨砂面板"')
-    expect(html).not.toContain('aria-label="方图取景"')
+  })
+
+
+  it('三条路共用同一个预览壳与「当前封面」行（宽度/角标/圆角单一实现）', () => {
+    // 默认那条（模板直出）渲出的成品预览：同一个 420/132 宽度档 + 同一个角标壳
+    expect(html).toContain('w-[min(100%,420px)]')
+    expect(html).toContain('w-[132px] shrink-0')
+    expect((html.match(/bg-black\/40/g) ?? []).length).toBeGreaterThanOrEqual(2)
+    expect(html).toContain('2.35:1 头图')
+    expect(html).toContain('1:1 方图')
+    // 「当前封面」只该出现一次，别三条路各写一句
+    expect((html.match(/当前封面：/g) ?? []).length).toBe(1)
   })
 
   it('卡片里不再堆设计说明长文（依据归 docs/PRD.md，界面只留可操作项）', () => {

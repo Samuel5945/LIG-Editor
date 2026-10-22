@@ -108,11 +108,15 @@ describe('封面模板 HTML', () => {
     expect(coverHtml(base)).not.toContain('transform:scale')
   })
 
-  it('文字块锁左区：宽度不超过「画布宽 − 画布高」', () => {
+  it('文字块锁左区：右边缘不超过「画布宽 − 画布高」', () => {
     const html = coverHtml({ ...base, title: '八个字的标题测试' })
-    const m = /width:(\d+)px;display:flex;flex-direction:column/.exec(html)
+    const m = /left:(\d+)px;top:\d+px;width:(\d+)px;height:\d+px;display:flex;flex-direction:column/.exec(html)
     expect(m).not.toBeNull()
-    expect(Number(m?.[1])).toBe(COVER_WIDE.w - COVER_WIDE.h)
+    const left = Number(m?.[1])
+    const width = Number(m?.[2])
+    expect(left + width).toBeLessThanOrEqual(COVER_WIDE.w - COVER_WIDE.h)
+    // 有无底图共用同一个文字盒：玻璃内区 547（675 − 2×34 − 2×30）
+    expect(width).toBe(547)
   })
 })
 
@@ -191,6 +195,31 @@ describe('磨砂面板与装饰开关', () => {
     expect(coverHtml({ ...base, bgSrc: 'assets/cover-bg.png', panel: 'frosted' })).toContain('backdrop-filter')
     expect(coverHtml({ ...base, panel: 'frosted' })).not.toContain('backdrop-filter')
     expect(coverHtml({ ...base, bgSrc: 'assets/cover-bg.png', panel: 'none' })).not.toContain('backdrop-filter')
+  })
+
+  it('磨砂玻璃是定好的框：文字按它的内区拟合，长文案缩字而不是溢出，分类名留在玻璃外', () => {
+    const short = coverHtml({
+      ...base,
+      bgSrc: 'assets/x.png',
+      panel: 'frosted',
+      brand: '科技数码',
+      title: '短标题',
+      subtitle: '短副'
+    })
+    const long = coverHtml({
+      ...base,
+      bgSrc: 'assets/x.png',
+      panel: 'frosted',
+      brand: '科技数码',
+      title: '代码生成翻倍，验证地狱：',
+      subtitle: '为什么AI提效反而让测试成了系统性的瓶颈？'
+    })
+    const fs = (h: string): number => Number(/<h1 style="font-size:(\d+)px/.exec(h)?.[1] ?? 0)
+    expect(fs(long)).toBeLessThan(fs(short))
+    // 文字盒 = 玻璃内区：607 − 2×30 = 547 宽，388 − 2×26 = 336 高
+    expect(long).toContain('width:547px;height:336px')
+    // 分类名绝对定位在盒顶之上（负 top），不落进玻璃
+    expect(long).toMatch(/class="abs" style="left:0;top:-\d+px/)
   })
 
   it('magazine 有底图时磨砂面板是默认件（不传 panel 也铺）', () => {
@@ -285,6 +314,21 @@ describe('磨砂面板与装饰开关', () => {
     const off = coverHtml({ ...base, template: 'aurora', decor: false })
     expect(off).not.toContain('radial-gradient')
     expect(off).toContain('测试标题')
+  })
+})
+
+describe('副标题层级', () => {
+  it('副标题是主标题的 2/3（30–64px 上下限）：90 标题配 60 副标题', () => {
+    for (const tpl of COVER_TEMPLATES) {
+      const html = coverHtml({ ...base, template: tpl.id, subtitle: '副标题一行' })
+      const h1 = Number(/<h1 style="font-size:(\d+)px/.exec(html)?.[1] ?? 0)
+      const sub = Number(/class="sub"[^>]*font-size:(\d+)px/.exec(html)?.[1] ?? 0)
+      expect(h1, tpl.id + ' 主标题字号').toBeGreaterThan(0)
+      expect(sub, tpl.id + ' 副标题字号').toBeGreaterThanOrEqual(30)
+      expect(sub, tpl.id + ' 副标题字号').toBeLessThanOrEqual(64)
+      // 1.5:1 的主副层级；大标题（杂志/海报）撞到 64 上限时比例会更小，所以只卡下界
+      expect(sub / h1, tpl.id + ' 主副比').toBeGreaterThanOrEqual(0.4)
+    }
   })
 })
 

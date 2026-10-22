@@ -42,12 +42,6 @@ const TEXT_ZONE = { widthRatio: 0.55, topRatio: 0.2, heightRatio: 0.62 }
 /** 亮度高于此值算浅底，改用深色字 */
 const LIGHT_THRESHOLD = 0.62
 /**
- * 亮度灰区：文字区落在这个区间里，深字浅字都不稳（不深不浅的杂乱底最坑），
- * panel='auto' 时自动开磨砂面板保底可读性
- */
-const GRAY_ZONE = { lo: 0.4, hi: 0.68 }
-
-/**
  * 「现场生底图」的构图约束：封面版式把文字锁在左区，所以底图必须右侧出主体、左侧安静。
  * 写死在这里而不是各调用方自己拼——工具面与界面共用一条路径，避免两侧口径再次漂移。
  */
@@ -99,8 +93,8 @@ export interface RenderCoverArgs {
   prompt?: string
   /** 右下角品牌行（通常传账号名 = 分类名） */
   brand?: string
-  /** 文字区磨砂面板：auto（缺省，亮度灰区自动开）/ frosted / none；工程 cover.config.json 可给默认 */
-  panel?: 'auto' | 'frosted' | 'none'
+  /** 文字区磨砂面板：frosted / none（缺省不铺）；工程 cover.config.json 可给默认 */
+  panel?: 'frosted' | 'none'
   /** 装饰元素开关（缺省 true） */
   decor?: boolean
   /**
@@ -112,7 +106,7 @@ export interface RenderCoverArgs {
 
 /** 每工程封面默认配置：<工程>/covers/cover.config.json，字段被调用参数覆盖 */
 interface CoverConfig {
-  panel?: 'auto' | 'frosted' | 'none'
+  panel?: 'frosted' | 'none'
   decor?: boolean
   focal?: number
 }
@@ -123,7 +117,7 @@ function readCoverConfig(project: string): CoverConfig {
     if (!existsSync(abs)) return {}
     const raw = JSON.parse(readFileSync(abs, 'utf8')) as CoverConfig
     return {
-      panel: raw.panel === 'frosted' || raw.panel === 'none' ? raw.panel : raw.panel === 'auto' ? 'auto' : undefined,
+      panel: raw.panel === 'frosted' || raw.panel === 'none' ? raw.panel : undefined,
       decor: typeof raw.decor === 'boolean' ? raw.decor : undefined,
       focal: typeof raw.focal === 'number' && Number.isFinite(raw.focal) ? clamp01(raw.focal) : undefined
     }
@@ -194,7 +188,12 @@ export async function renderCoverTemplate(project: string, args: RenderCoverArgs
   // 每次生成留一份只会把 assets/ 堆脏
   let bg = noBg ? undefined : args.bg
   if (!noBg && args.prompt?.trim()) {
-    const base64 = await generateImage(`${args.prompt.trim()}${BG_COMPOSITION_HINT}`, { ratio: '2.35:1' })
+    // longEdge 2432：商汤的比例换算默认长边 1024（够贴图，不够 1175 宽的封面），
+    // 且 '2.35:1' 以前根本解析不了（正则只收整数），实际拿到的是 1024×1024 方图再被裁掉一半高度
+    const base64 = await generateImage(`${args.prompt.trim()}${BG_COMPOSITION_HINT}`, {
+      ratio: '2.35:1',
+      longEdge: 2432
+    })
     bg = saveAsset(project, 'assets/cover-bg.png', base64)
   }
   // 有底图时先取样定字色：浅底用深字，深底用白字——不压任何底色；
@@ -208,20 +207,10 @@ export async function renderCoverTemplate(project: string, args: RenderCoverArgs
     lightText = lum === null ? true : lum < LIGHT_THRESHOLD
     autoFocal = await pickFocalX(absBg)
   }
-  // 磨砂面板解析：参数 > cover.config.json > auto；auto = 亮度灰区自动开。
-  // aurora 例外：它自带左深右浅的暗部渐变（文字区恒近黑），再垫一块磨砂就是暗上加暗、还多一条边界；
-  // 而且这里的亮度是**原图**取样，对 aurora 没意义——字色由模板自己定死为浅色（见 coverTemplates 的 aurora 分支）
-  const panelPref = args.panel ?? cfg.panel ?? 'auto'
-  const panel: 'frosted' | 'none' =
-    panelPref === 'frosted'
-      ? 'frosted'
-      : panelPref === 'none'
-        ? 'none'
-        : args.template === 'aurora'
-          ? 'none'
-          : lum !== null && lum >= GRAY_ZONE.lo && lum <= GRAY_ZONE.hi
-            ? 'frosted'
-            : 'none'
+  // 磨砂面板：参数 > cover.config.json > **不传**（交给模板自己的默认）。
+  // 不能在这里直接填 'none'：magazine 有底图时按模板语言默认铺磨砂，填死的 none 会把它顶掉。
+  // 原来还有一档 auto（按文字区亮度灰区自动开）——判据拿的是原图亮度而不是合成后的底，实测效果一般，已删。
+  const panel: 'frosted' | 'none' | undefined = args.panel ?? cfg.panel
   const decor = args.decor ?? cfg.decor ?? true
   // 1:1 取景：参数 > cover.config.json > 底图自动判 > 取到最右（版式留出的方形画面区/大字版式的首字水印都在最右）
   const focal = clamp01(args.focal ?? cfg.focal ?? autoFocal ?? DEFAULT_FOCAL)
@@ -305,17 +294,7 @@ export async function renderCoverHtml(
   // capturePage 返回的是「DIP × 设备像素比」：请求 1175×500 在 2x 屏上实收 2350×1000。
   // 尺寸一律回报实测值，别把请求值当成品尺寸告诉调用方，否则 Agent 会按错的口径判断清不清楚
   const size = await sharp(hi).metadata()
-  const out = { path: saved, focal, width: size.width ?? w, height: size.height ?? h }
-  if (w <= h) return out
-  const crop = squareCropRect(out.width, out.height, focal)
-  const cut = sharp(hi).extract(crop)
-  // 裁剪区够 800 才降采样；不够就按原样落盘——放大只会糊，宁可给一张小一点的方图
-  const square = await (crop.height >= OUT.square.h
-    ? cut.resize(OUT.square.w, OUT.square.h, { kernel: sharp.kernel.lanczos3 })
-    : cut
-  )
-    .png()
-    .toBuffer()
-  const squareRel = saved.replace(/\.png$/i, '') + '-11.png'
-  return { ...out, square: saveAsset(project, squareRel, square.toString('base64')) }
+  // 方图**不落盘**：它是主图的裁剪，界面侧就地预览就够；后台本来就自己裁，
+  // 每点一次「出图」就在 assets/ 多一张 -11.png 纯属脏。
+  return { path: saved, focal, width: size.width ?? w, height: size.height ?? h }
 }

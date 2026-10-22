@@ -74,6 +74,12 @@
    Tailwind 原色（red/green/sky/amber-300~500）时的补丁，等于第二套配色机制。
    2026-10-01 语义色单源清扫后全部失效并删除；再写原色=日间对比度问题会重新出现，禁止。 */
 
+/* 原生 range 默认是浏览器蓝，跟主题强调色打架（封面取景、全量排版参数都用它）。
+   accent-color 在 Chromium 上同时给滑块与已填充段上色，一处规则覆盖全应用。 */
+input[type='range'] {
+  accent-color: rgb(var(--accent));
+}
+
 html,
 body,
 #root {
