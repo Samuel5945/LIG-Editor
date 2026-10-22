@@ -393,7 +393,7 @@ export default function TitleCoverPanel({
     setCoverError(null)
     try {
       // 2.35:1 + 长边 2432：商汤换算成 2432×1024（以前 '2.35:1' 解析不了，实际拿到 1024 方图再被裁一半）
-      // 勾了「用当前图作参考」就走商汤 /images/edits：参考图以 data URI 传，原构图与风格保留
+      // 勾了「用当前图作参考」就走当前供应商的图生图接口：参考图以 data URI 传，原构图与风格保留
       // 标题逐字追加：让模型自己"安排标题"会改写文案或写错字，这里只把字钉死
       const fullPrompt = `${prompt}。${coverImageTextRule(coverTitle, coverSubtitle)}`
       const b64 = await window.api.invoke('image:generate', fullPrompt, {

@@ -394,8 +394,8 @@ export interface ImageGenOptions {
   /** agnes / apimart 专用宽高比；apimart 作 size 比例字段下发；也用于商汤换算精确像素 */
   ratio?: string
   /**
-   * 参考图（图生图）：base64 或 data URI。目前只有商汤走 /images/edits，
-   * 其它供应商会明确报错而不是忽略——静默忽略会让人以为"参考了"其实没有。
+   * 参考图（图生图）：base64 或 data URI。商汤走 /images/edits，APIMart 走 image_urls，
+   * 其它供应商会明确报错并提示换模型而不是忽略——静默忽略会让人以为"参考了"其实没有。
    */
   reference?: string
   /** 商汤比例换算的长边像素（贴图默认 1024，封面要 2400 级） */

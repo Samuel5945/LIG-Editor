@@ -782,7 +782,7 @@ export const TOOLS: ToolDef[] = [
   {
     name: 'generate_image',
     description:
-      'AI 生图并保存到工程 assets/，返回相对路径（正文引用写 ![alt](该路径)）。传 reference 则走图生图：基于工程内一张参考图重画（目前仅商汤支持 /images/edits）。经 bridge 调用时客户端断开（取消工具调用/代理超时）即中止在途生图',
+      'AI 生图并保存到工程 assets/，返回相对路径（正文引用写 ![alt](该路径)）。传 reference 则走图生图：基于工程内一张参考图重画，供应商各走自己的图生图契约（商汤 /images/edits、APIMart image_urls）；不支持的会报错并提示换模型。经 bridge 调用时客户端断开（取消工具调用/代理超时）即中止在途生图',
     inputSchema: {
       type: 'object',
       properties: {
@@ -792,7 +792,7 @@ export const TOOLS: ToolDef[] = [
         ratio: { type: 'string', description: '宽高比（Agnes 支持 1:1/4:3/16:9/3:4/2.35:1 等，缺省 4:3）' },
         reference: {
           type: 'string',
-          description: '参考图（工程内相对路径，如 assets/cover-bg.png）：传入即走图生图；非商汤供应商会明确报错'
+          description: '参考图（工程内相对路径，如 assets/cover-bg.png）：传入即走图生图；当前供应商没有接图生图时会报错，换一个支持参考图的生图模型即可'
         },
         longEdge: { type: 'number', description: '商汤侧长边像素（缺省 1024；封面级画面传 2432）' }
       },
