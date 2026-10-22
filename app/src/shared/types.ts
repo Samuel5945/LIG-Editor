@@ -391,8 +391,15 @@ export interface ProviderModelsResult {
 export interface ImageGenOptions {
   /** openai：1024x1024 等；agnes：1K/2K/3K/4K；apimart：清晰度档位（映射 1k/2k/4k） */
   size?: string
-  /** agnes / apimart 专用宽高比；apimart 作 size 比例字段下发 */
+  /** agnes / apimart 专用宽高比；apimart 作 size 比例字段下发；也用于商汤换算精确像素 */
   ratio?: string
+  /**
+   * 参考图（图生图）：base64 或 data URI。目前只有商汤走 /images/edits，
+   * 其它供应商会明确报错而不是忽略——静默忽略会让人以为"参考了"其实没有。
+   */
+  reference?: string
+  /** 商汤比例换算的长边像素（贴图默认 1024，封面要 2400 级） */
+  longEdge?: number
 }
 
 export interface LlmSettings {
@@ -775,7 +782,7 @@ export interface IpcApi {
     bg?: string
     prompt?: string
     brand?: string
-    panel?: 'auto' | 'frosted' | 'none'
+    panel?: 'frosted' | 'none'
     decor?: boolean
     focal?: number
   }) => { main: string; square: string; focal: number; bg?: string }

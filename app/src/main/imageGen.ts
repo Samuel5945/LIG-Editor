@@ -28,6 +28,17 @@ export async function generateImage(
   const provider = getImageProvider()
   if (!provider) throw new Error('未配置图像供应商，请先在「模型接入」中设置')
   if (!provider.imageModel) throw new Error(`供应商「${provider.name}」未填图像模型`)
+  if (opts.reference?.trim()) {
+    // 图生图按供应商走各自契约：商汤走 /images/edits（images[].image_url），
+    // APIMart 走 /images/generations 的 image_urls（qwen-image / nano-banana 等）。
+    // 没接的供应商给出可执行的提示——静默忽略会让人以为「参考了」其实没参考。
+    if (isSenseNovaProvider(provider)) return generateViaSenseNovaEdits(provider, prompt, opts, external)
+    if (provider.imageApi === 'apimart-images') return generateViaApimartImages(provider, prompt, opts, external)
+    throw new Error(
+      `供应商「${provider.name}」没有接图生图；换一个支持参考图的生图模型再试` +
+        '（商汤 U1.5 Lite、APIMart 的 qwen-image / nano-banana 等）'
+    )
+  }
   if (provider.imageApi === 'agnes-images') return generateViaAgnesImages(provider, prompt, opts, external)
   if (provider.imageApi === 'apimart-images') return generateViaApimartImages(provider, prompt, opts, external)
   return generateViaImagesApi(provider, prompt, opts, external)
@@ -46,7 +57,9 @@ async function generateViaImagesApi(provider: ProviderConfig, prompt: string, op
   // 商汤例外：支持任意 32 倍数像素尺寸，把比例意图（3:4 等）换算成精确像素，
   // 否则贴图卡片的竖版意图会退化成方图再被裁切（见 imageRatio.ts）
   const exact = /^\d+x\d+$/.test(opts.size ?? '') ? opts.size : null
-  const senseNovaSize = isSenseNovaProvider(provider) ? ratioToSenseNovaSize(opts.ratio) : null
+  const senseNovaSize = isSenseNovaProvider(provider)
+    ? ratioToSenseNovaSize(opts.ratio, { longEdge: opts.longEdge })
+    : null
   const size = exact ?? senseNovaSize ?? '1024x1024'
   const resp = await net.fetch(url, {
     method: 'POST',
@@ -82,6 +95,77 @@ async function generateViaAgnesImages(provider: ProviderConfig, prompt: string, 
     signal: mergeAbortSignals(180_000, external)
   })
   if (!resp.ok) throw new Error(`生图失败 HTTP ${resp.status}：${(await resp.text()).slice(0, 200)}`)
+  return extractImagesResult((await resp.json()) as ImagesResponse, external)
+}
+
+/** 商汤图生图请求体（单源、可单测）：images[].image_url 只收公网 URL 或 data:image/...;base64, 前缀的 data URI */
+export function senseNovaEditsBody(
+  provider: ProviderConfig,
+  prompt: string,
+  reference: string
+): Record<string, unknown> {
+  const ref = /^data:image\//i.test(reference) ? reference : `data:image/png;base64,${reference}`
+  return {
+    model: provider.imageModel,
+    images: [{ image_url: ref }],
+    prompt,
+    n: 1,
+    // auto 跟着参考图走：比例换算会把「保留原构图」这件事再压一次，编辑场景不该如此
+    size: 'auto',
+    response_format: 'b64_json',
+    watermark: false,
+    prompt_extend: false
+  }
+}
+
+/**
+ * 把参考图规整成商汤 edits 能收的样子：PNG/JPEG/WebP、≤10MB、宽高 256–4096、比例 ≤2:1。
+ * 我们的封面底图是 2.35:1，直接发会被 400 打回（invalid images[0].image_url）——
+ * 所以先在本地居中裁到 2:1（多出来的宽度裁掉），再按上下限缩放。
+ */
+async function fitSenseNovaReference(reference: string): Promise<string> {
+  const { default: sharp } = await import('sharp')
+  const buf = Buffer.from(reference.replace(/^data:[^;]+;base64,/, ''), 'base64')
+  const meta = await sharp(buf).metadata()
+  const W = meta.width ?? 0
+  const H = meta.height ?? 0
+  if (!W || !H) throw new Error('参考图解码失败（只收 PNG/JPEG/WebP）')
+  const ratio = W / H
+  let cw = W
+  let ch = H
+  if (ratio > 2) cw = Math.round(H * 2)
+  else if (ratio < 0.5) ch = Math.round(W * 2)
+  const left = Math.max(0, Math.round((W - cw) / 2))
+  const top = Math.max(0, Math.round((H - ch) / 2))
+  let img = sharp(buf).extract({ left, top, width: cw, height: ch })
+  const long = Math.max(cw, ch)
+  if (long > 4096) img = img.resize(Math.round((cw * 4096) / long), Math.round((ch * 4096) / long))
+  const short = Math.min(cw, ch)
+  if (short < 256) {
+    const k = 256 / short
+    img = img.resize(Math.round(cw * k), Math.round(ch * k))
+  }
+  const out = await img.png().toBuffer()
+  if (out.length > 10 * 1024 * 1024) throw new Error(`参考图过大（${(out.length / 1048576).toFixed(1)}MB），商汤上限 10MB`)
+  return `data:image/png;base64,${out.toString('base64')}`
+}
+
+/** 商汤参考图编辑：图生图/风格迁移走这里，不传参考图时一律走 generations */
+async function generateViaSenseNovaEdits(
+  provider: ProviderConfig,
+  prompt: string,
+  opts: ImageGenOptions,
+  external?: AbortSignal
+): Promise<string> {
+  const url = provider.baseUrl.replace(/\/+$/, '') + '/images/edits'
+  const reference = await fitSenseNovaReference(opts.reference ?? '')
+  const resp = await net.fetch(url, {
+    method: 'POST',
+    headers: headers(provider.apiKey),
+    body: JSON.stringify(senseNovaEditsBody(provider, prompt, reference)),
+    signal: mergeAbortSignals(240_000, external)
+  })
+  if (!resp.ok) throw new Error(`图生图失败 HTTP ${resp.status}：${(await resp.text()).slice(0, 200)}`)
   return extractImagesResult((await resp.json()) as ImagesResponse, external)
 }
 
@@ -158,11 +242,13 @@ async function generateViaApimartImages(provider: ProviderConfig, prompt: string
   const base = apimartBase(provider.baseUrl)
   const model = provider.imageModel
   // 提交生图任务：size 传比例（16:9 等），resolution 传清晰度档位（仅支持的模型）；不支持 response_format
-  const body: Record<string, string> = {
+  const body: Record<string, unknown> = {
     model,
     prompt,
     size: opts.ratio ?? '1:1'
   }
+  // 参考图：APIMart 的 generations 端收 image_urls（数组，元素可为 URL 或 data URI）
+  if (opts.reference?.trim()) body.image_urls = [opts.reference]
   if (!apimartNoResolution(model)) body.resolution = apimartResolution(model, opts.size)
   const submitResp = await net.fetch(`${base}/images/generations`, {
     method: 'POST',

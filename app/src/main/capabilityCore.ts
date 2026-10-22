@@ -782,20 +782,44 @@ export const TOOLS: ToolDef[] = [
   {
     name: 'generate_image',
     description:
-      'AI 文生图并保存到工程 assets/，返回相对路径（正文引用写 ![alt](该路径)）。经 bridge 调用时客户端断开（取消工具调用/代理超时）即中止在途生图',
+      'AI 生图并保存到工程 assets/，返回相对路径（正文引用写 ![alt](该路径)）。传 reference 则走图生图：基于工程内一张参考图重画（目前仅商汤支持 /images/edits）。经 bridge 调用时客户端断开（取消工具调用/代理超时）即中止在途生图',
     inputSchema: {
       type: 'object',
       properties: {
         project: P.project,
-        prompt: { type: 'string', description: '画面描述提示词' },
+        prompt: { type: 'string', description: '画面描述提示词（图生图时写「改什么、保留什么」）' },
         path: { type: 'string', description: '保存相对路径（缺省 assets/gen-<时间戳>.png）' },
-        ratio: { type: 'string', description: '宽高比（Agnes 支持 1:1/4:3/16:9/3:4/2.35:1 等，缺省 4:3）' }
+        ratio: { type: 'string', description: '宽高比（Agnes 支持 1:1/4:3/16:9/3:4/2.35:1 等，缺省 4:3）' },
+        reference: {
+          type: 'string',
+          description: '参考图（工程内相对路径，如 assets/cover-bg.png）：传入即走图生图；非商汤供应商会明确报错'
+        },
+        longEdge: { type: 'number', description: '商汤侧长边像素（缺省 1024；封面级画面传 2432）' }
       },
       required: ['project', 'prompt']
     },
     handler: async (a, ctx) => {
       const project = projectArg(a)
-      const base64 = await generateImage(str(a, 'prompt'), { ratio: str(a, 'ratio', false) || undefined }, ctx?.signal)
+      // 参考图在主进程读成 data URI：商汤 edits 只收公网 URL 或带 data:image/...;base64, 前缀的串
+      const refRel = str(a, 'reference', false)
+      let reference: string | undefined
+      if (refRel) {
+        const abs = absOf(project, refRel)
+        if (!existsSync(abs)) throw new Error(`参考图不存在：${refRel}（先 list_project_assets 看有哪些图）`)
+        const ext = (abs.split('.').pop() ?? 'png').toLowerCase()
+        const mime =
+          ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : ext === 'webp' ? 'image/webp' : ext === 'gif' ? 'image/gif' : 'image/png'
+        reference = `data:${mime};base64,${readFileSync(abs).toString('base64')}`
+      }
+      const base64 = await generateImage(
+        str(a, 'prompt'),
+        {
+          ratio: str(a, 'ratio', false) || undefined,
+          longEdge: typeof a.longEdge === 'number' ? a.longEdge : undefined,
+          reference
+        },
+        ctx?.signal
+      )
       const rel = str(a, 'path', false) || `assets/gen-${Date.now()}.png`
       const saved = store.saveAsset(project, rel, base64)
       return { path: saved, path_abs: absOf(project, saved) }
@@ -1146,8 +1170,8 @@ export const TOOLS: ToolDef[] = [
         brand: { type: 'string', description: '右下品牌行（可选，如 @LIG人生如戏）' },
         panel: {
           type: 'string',
-          enum: ['auto', 'frosted', 'none'],
-          description: '文字区磨砂面板：auto 缺省=文字区亮度灰区自动开；frosted 强制开（构图翻车保底）；none 强制关'
+          enum: ['frosted', 'none'],
+          description: '文字区磨砂面板：缺省不铺；frosted 开一层磨砂（构图翻车、文字区不安静时的保底）；none 显式关'
         },
         decor: { type: 'boolean', description: '装饰元素开关（光晕/圆环/细线），缺省 true' },
         focal: {
@@ -1171,7 +1195,7 @@ export const TOOLS: ToolDef[] = [
       if (bg && !existsSync(absOf(project, bg)))
         throw new Error(`底图不存在：${bg}（相对工程根的路径；先看 list_project_assets 有哪些图，或改用 prompt 现场生一张）`)
       const panelRaw = str(a, 'panel', false)
-      const panel = panelRaw === 'frosted' || panelRaw === 'none' ? panelRaw : panelRaw === 'auto' ? 'auto' : undefined
+      const panel = panelRaw === 'frosted' || panelRaw === 'none' ? panelRaw : undefined
       // 现场生底图的构图约束不在这里拼——统一由 coverStore.renderCoverTemplate 处理，界面走同一条路
       const r = await renderCoverTemplate(project, {
         template,
@@ -1198,7 +1222,7 @@ export const TOOLS: ToolDef[] = [
   {
     name: 'render_cover_html',
     description:
-      '把自定义 HTML 直接渲染成封面 PNG（程序化封面入口：HTML/CSS/Canvas 任意排版，不落模板）。html 传工程内相对路径（如 covers/my-cover.html；可以是手改的 covers/cover-wide.html，本工具只截图、不重生成、不会覆盖手改）。传横图画布（如 1175×500）时自动从同一张高清渲染里裁出 1:1 方图一起返回——后台只认横图那一张，方图只能是它的裁剪。产物落 assets/ 但不自动设为封面：确认满意后用 set_cover 写入 project.json',
+      '把自定义 HTML 直接渲染成封面 PNG（程序化封面入口：HTML/CSS/Canvas 任意排版，不落模板）。html 传工程内相对路径（如 covers/my-cover.html；可以是手改的 covers/cover-wide.html，本工具只截图、不重生成、不会覆盖手改）。只产出一张横图（assets/），**不另写方图文件**——后台只认这一张，1:1 由它自己裁；需要方图就从这张裁。产物落 assets/ 但不自动设为封面：确认满意后用 set_cover 写入 project.json',
     inputSchema: {
       type: 'object',
       properties: {
@@ -1231,10 +1255,7 @@ export const TOOLS: ToolDef[] = [
       return {
         ...r,
         path_abs: absOf(project, r.path),
-        ...(r.square ? { square_abs: absOf(project, r.square) } : {}),
-        hint: r.square
-          ? '未设为封面：确认后用 set_cover（main=横图, square=裁出的方图）写入 project.json'
-          : '未设为封面：确认后用 set_cover 写入 project.json（画布不是横图，未裁方图）'
+        hint: '未设为封面：确认后用 set_cover 写入 project.json。方图不落盘——它是这张主图的裁剪，后台自己会裁'
       }
     }
   },

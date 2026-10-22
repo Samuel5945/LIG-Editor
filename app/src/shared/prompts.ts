@@ -413,6 +413,56 @@ export function figureHtmlMessages(desc: string, prevHtml: string | null, skill:
   ]
 }
 
+/**
+ * 纯图成图那条路：写一张**自足**的封面画面，不是给文字让位的素材。
+ * 与 coverPromptMessages 的关键区别：那条要求「左侧三分之二留白」，这条要求画面铺满、主体可居中。
+ * 画面里的字**不由这段提示词描述**——标题文案由 coverImageTextRule 单独、逐字追加，
+ * 让模型自己去"安排标题"必然写错字或改写文案。
+ */
+export function coverPhotoMessages(article: string, skill: string | null, accent?: string): ChatMessage[] {
+  return [
+    { role: 'system', content: systemPrompt(skill) },
+    {
+      role: 'user',
+      content: `请通读下面的公众号文章，为它写一段**完整的封面画面**生图提示词（这张图本身就是封面）。
+
+<文章>
+${article.slice(0, 6000)}
+</文章>
+
+提示词 80-150 字一段话，按顺序说清（不要写字段名，融成连贯一段）：
+1. 主体与场景：紧扣文章最有画面感的关键信息，主体可以居中或铺满画面，**不要为文字预留空白**
+2. 构图与视角：横版 2.35:1 的完整构图，上下留一点余量（会被裁成 2.35:1 与 1:1 两种规格）；
+   如果画面左上方有较空的区域，顺带说明"左侧适合压一组大字"即可，不要写具体标题文字
+3. 艺术风格：插画 / 摄影 / 3D 等风格与镜头视角，整体调性贴合文章
+4. 配色：${accent ? `以 ${accent} 为主色或点缀色展开` : '说明主色调'}
+硬性要求：这段只描述画面本身，**不要写任何标题文案、不要复述文章标题**（标题会由应用单独逐字追加）；
+不要描述水印、字幕条或拼贴式留白。
+只输出提示词本身一段话，不要解释、不要引号、不要围栏`
+    }
+  ]
+}
+
+/**
+ * 画面内文字规则（纯图成图那条路）：标题与副标题**逐字**给到模型，不让它自己发挥。
+ * 现在的中文生图模型写字已经能看，但它仍然会"改写"标题——所以这里只负责把字钉死，
+ * 并明确除这两行外不许再出现任何文字。
+ * 没有标题时退回"不许出现文字"，与旧行为一致。
+ */
+export function coverImageTextRule(title?: string, subtitle?: string): string {
+  const t = title?.trim()
+  const sub = subtitle?.trim()
+  if (!t) return '画面中不出现任何文字、字母、数字或水印。'
+  const lines = sub ? `标题「${t}」，其下方一行副标题「${sub}」` : `标题「${t}」`
+  return (
+    `画面中用粗壮的无衬线中文字体写上${lines}：逐字照抄、不许改字或漏字，字要大而清晰、与底色对比足够；` +
+    // 1:1 缩略图从这张横图里裁，宽度只有画布高度的 42%——字必须收在左 40% 内才裁得全，
+    // 实测让模型自由排，标题会铺到 58% 宽，方图必然切字
+    '标题与副标题排成上下一组、整组文字的最右端不超过画面宽度的 35%（约三分之一略多），起点离左边缘留一点边距，右侧大幅留给画面主体；字号按这个宽度自动收，不许压到主体上；' +
+    `除这${sub ? '两' : '一'}行外，不出现任何其他文字、字母、水印或装饰性字幕。`
+  )
+}
+
 /** HTML 直渲那条路的「从正文提取」：通读正文 → 一段封面设计指令（喂给 coverHtmlMessages，不是生图提示词）。
  *  与 coverPromptMessages 的区别：这条允许并鼓励写明标题文案、角标、装饰元素与配色，因为最终画面由 HTML 排出来。 */
 export function coverHtmlBriefMessages(article: string, skill: string | null, accent?: string): ChatMessage[] {

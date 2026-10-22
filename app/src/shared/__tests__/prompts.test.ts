@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   cardsCaptionMessages,
+  coverImageTextRule,
+  coverPhotoMessages,
   chatContext,
   coverHtmlBriefMessages,
   coverHtmlMessages,
@@ -43,6 +45,38 @@ describe('coverHtmlMessages（路径三：AI 写封面 HTML）', () => {
     const edit = coverHtmlMessages('标题再大一点', '<html>旧版</html>', null).map((m) => m.content).join('\n')
     expect(edit).toContain('<现有源码>')
     expect(edit).toContain('<html>旧版</html>')
+  })
+})
+
+describe('coverPhotoMessages（纯图成图那条路的「从正文提取」）', () => {
+  const text = coverPhotoMessages('# 标题\n\n正文', null, '#0d9488').map((m) => m.content).join('\n')
+
+  it('要一张自足的封面画面：不留白给字、横版 2.35:1、不自己编标题', () => {
+    expect(text).toContain('本身就是封面')
+    expect(text).toContain('不要为文字预留空白')
+    expect(text).toContain('2.35:1')
+    expect(text).toContain('不要写任何标题文案')
+  })
+
+  it('与模板那条分工不串：模板提示词要求左侧留白，这条明确不许留白', () => {
+    const forTemplate = coverPromptMessages('# 标题\n\n正文', null).map((m) => m.content).join('\n')
+    expect(forTemplate).toContain('左侧三分之二保持安静留白')
+    expect(text).toContain('不要为文字预留空白')
+  })
+})
+
+describe('coverImageTextRule（画面内文字逐字钉死）', () => {
+  it('有标题时逐字给到模型，并限定只许这两行', () => {
+    const rule = coverImageTextRule('28天科学早睡计划', '入睡每3天提前15分钟')
+    expect(rule).toContain('「28天科学早睡计划」')
+    expect(rule).toContain('「入睡每3天提前15分钟」')
+    expect(rule).toContain('逐字照抄')
+    expect(rule).toContain('不出现任何其他文字')
+  })
+
+  it('没有标题时退回纯图：画面里一个字母都不许有', () => {
+    expect(coverImageTextRule()).toContain('不出现任何文字')
+    expect(coverImageTextRule('   ')).toContain('不出现任何文字')
   })
 })
 
