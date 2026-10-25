@@ -145,6 +145,7 @@ export default function App(): JSX.Element {
   const [modifySel, setModifySel] = useState<EditorSelection | null>(null)
   const [reviewRequest, setReviewRequest] = useState(0)
   const [reviewSelection, setReviewSelection] = useState<string | null>(null)
+  const [teardownRequest, setTeardownRequest] = useState(0)
   const [brainstormSeed, setBrainstormSeed] = useState<BrainstormSeed | null>(null)
   // 全文优化弹窗：{} 排版优化，{ review } 按审阅报告修订
   const [polish, setPolish] = useState<{ review?: string } | null>(null)
@@ -685,6 +686,15 @@ export default function App(): JSX.Element {
     setCenterTab('create')
     setStepRequest({ id: 'review', ts: Date.now() })
     setReviewRequest((n) => n + 1)
+  }, [])
+
+  /** BubbleMenu「拆解这段」：选中正文一段，拆它的写法（审阅步的分析面板切爆款拆解模式） */
+  const handleAiTeardown = useCallback(() => {
+    const sel = editorRef.current?.getSelection()
+    setReviewSelection(sel?.text.trim() ? sel.text : null)
+    setCenterTab('create')
+    setStepRequest({ id: 'review', ts: Date.now() })
+    setTeardownRequest((n) => n + 1)
   }, [])
 
   /** 全文生成流式落编辑器（唯一事实源是 md 字符串，直接覆盖；向导自己停在成文步） */
@@ -1468,6 +1478,7 @@ export default function App(): JSX.Element {
                           onChange={setArticle}
                           onAiModify={handleAiModify}
                           onAiReview={handleAiReview}
+                          onAiTeardown={handleAiTeardown}
                           onFigAction={handleFigAction}
                           onEditFigureSource={handleEditFigureSource}
                           onAccentChange={handleApplyArticleAccent}
@@ -1535,6 +1546,7 @@ export default function App(): JSX.Element {
                       article={article}
                       skill={skillContent}
                       runRequest={reviewRequest}
+                      teardownRequest={teardownRequest}
                       selection={reviewSelection}
                       onLocate={handleLocate}
                       onOptimize={(review) => setPolish({ review })}

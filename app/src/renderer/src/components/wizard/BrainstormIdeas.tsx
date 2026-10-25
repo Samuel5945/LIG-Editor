@@ -2,6 +2,7 @@ import { useRef, type ReactElement } from 'react'
 import type { IdeaCard } from '@shared/types'
 import { Icon } from '../../ui/Icon'
 import { Button, Chip, ChipGroup } from '../../ui/primitives'
+import { ReasoningBlock } from '../ReasoningBlock'
 
 /**
  * 创作向导·步 1「选题」：素材投喂 + 要求 + 选题卡。
@@ -28,6 +29,15 @@ export interface BrainstormIdeasProps {
   webOn: boolean
   toggleWeb: () => void
   cards: IdeaCard[]
+  /** 「拆对标爆款」折叠卡（状态与拆解编排由向导壳层持有） */
+  benchOpen: boolean
+  onToggleBench: () => void
+  benchText: string
+  setBenchText: (v: string) => void
+  benchBusy: boolean
+  benchStream: string
+  benchReasoning: string
+  onRunBench: () => void
   onIdeasChanged: () => void
   onToast: (msg: string) => void
   onRunBrainstorm: () => void
@@ -48,6 +58,14 @@ export default function BrainstormIdeas({
   webOn,
   toggleWeb,
   cards,
+  benchOpen,
+  onToggleBench,
+  benchText,
+  setBenchText,
+  benchBusy,
+  benchStream,
+  benchReasoning,
+  onRunBench,
   onIdeasChanged,
   onToast,
   onRunBrainstorm,
@@ -99,6 +117,50 @@ export default function BrainstormIdeas({
             </button>
           </span>
         ))}
+      </div>
+      {/* 拆对标爆款：拆完把可复用套路/骨架注入素材，脑暴与大纲自动带上 */}
+      <div className="mb-2 overflow-hidden rounded-lg border border-panel-3 bg-panel-2">
+        <button
+          onClick={onToggleBench}
+          className="flex w-full items-center gap-1.5 px-2.5 py-1.5 text-left text-[11.5px] text-ink-dim hover:text-ink"
+        >
+          <Icon name="compass" size={12} className="shrink-0 text-accent" />
+          <span className="min-w-0 flex-1 truncate">拆对标爆款 → 套路与骨架自动进素材</span>
+          <Icon name={benchOpen ? 'chevronDown' : 'chevronRight'} size={11} className="shrink-0" />
+        </button>
+        {benchOpen && (
+          <div className="px-2.5 pb-2.5">
+            {benchBusy ? (
+              <>
+                {benchReasoning && <ReasoningBlock text={benchReasoning} streaming className="mb-2" />}
+                <div className="thin-scroll max-h-32 overflow-auto whitespace-pre-wrap rounded bg-panel p-2 text-[11px] leading-5 text-ink-dim">
+                  {benchStream || '拆解中…'}
+                  <span className="animate-pulse">▌</span>
+                </div>
+                <div className="mt-1.5 flex justify-end">
+                  <Button variant="sec" size="sm" icon="square" onClick={onAbort} className="text-st-bad">
+                    停止
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <>
+                <textarea
+                  rows={4}
+                  value={benchText}
+                  onChange={(e) => setBenchText(e.target.value)}
+                  placeholder="粘贴一篇对标爆款全文（标题 + 正文）：拆它的标题钩子/开头/骨架/节奏，产出可复用套路"
+                  className="w-full resize-none rounded bg-panel p-2 text-[11.5px] leading-5 text-ink outline-none placeholder:text-ink-dim"
+                />
+                <div className="mt-1.5 flex justify-end">
+                  <Button variant="pri" size="sm" icon="compass" disabled={!benchText.trim()} onClick={onRunBench}>
+                    拆解并注入素材
+                  </Button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </div>
       <textarea
         rows={3}

@@ -1,25 +1,29 @@
 import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react'
 import type { WebSearchResult } from '@shared/types'
 import { chatOnce } from '../copilot/llm'
-import { reviewMessages } from '../copilot/prompts'
+import { reviewMessages, teardownMessages } from '../copilot/prompts'
 import { ReasoningBlock } from './ReasoningBlock'
 import { Icon } from '../ui/Icon'
-import { Button, CardTitle, Switch } from '../ui/primitives'
+import { Button, Segmented, Switch } from '../ui/primitives'
+
+type PanelMode = 'review' | 'teardown'
 
 interface ReviewPanelProps {
   project: string
-  /** 当前正文（发起审阅用） */
+  /** 当前正文（发起审阅/拆解用） */
   article: string
   skill: string | null
   /** BubbleMenu「AI 审阅」触发：自增即自动发起审阅 */
   runRequest: number
-  /** 随 runRequest 带入的选区文字：非空则只审选段，空则全文 */
+  /** BubbleMenu「拆解这段」触发：自增即切到拆解模式并发起 */
+  teardownRequest: number
+  /** 随 runRequest/teardownRequest 带入的选区文字：非空则只处理选段 */
   selection: string | null
   /** 点击「> 原文：…」引用行 → 编辑器定位；返回是否找到 */
   onLocate: (snippet: string) => boolean
-  /** 「按报告优化正文」：把审阅报告全文交给 App 开修订弹窗 */
+  /** 「按报告优化正文」：把审阅报告全文交给 App 开修订弹窗（仅审阅模式） */
   onOptimize: (review: string) => void
-  /** 报告写入成功后通知（创作向导的审阅步完成判定靠它重算） */
+  /** 报告写入成功后通知（创作向导的审阅步完成判定靠它重算；拆解不是流程状态，不触发） */
   onReviewSaved?: () => void
   onToast: (msg: string) => void
 }
@@ -30,29 +34,33 @@ interface Section {
 }
 
 const QUOTE_RE = /^>\s*原文[:：]\s*(.+)$/
+const fileOf = (m: PanelMode): 'review.md' | 'teardown.md' => (m === 'review' ? 'review.md' : 'teardown.md')
 
 /**
- * 审阅面板：独立上下文发起全文审阅（流式）→ 写 review.md → 分区展示 + 引用行定位跳转
- * 不经过对话面板，与对话/脑暴互不影响
+ * 分析面板（向导审阅步）：审阅找自己文章的问题，爆款拆解找（自己或对标的）文章为什么能火。
+ * 两个模式各自落盘（review.md / teardown.md）、各自独立上下文一次性调用，分区展示同一套渲染；
+ * 「> 原文：」引用行定位两边通用——拆解报告引用了正文片段同样可跳。
  */
 export default function ReviewPanel({
   project,
   article,
   skill,
   runRequest,
+  teardownRequest,
   selection,
   onLocate,
   onOptimize,
   onReviewSaved,
   onToast
 }: ReviewPanelProps): ReactElement {
+  const [mode, setMode] = useState<PanelMode>('review')
   const [sections, setSections] = useState<Section[]>([])
-  const [reviewMd, setReviewMd] = useState('')
+  const [reportMd, setReportMd] = useState('')
   const [empty, setEmpty] = useState(true)
   const [missTip, setMissTip] = useState<string | null>(null)
   const [streaming, setStreaming] = useState(false)
   const [streamText, setStreamText] = useState('')
-  // 审阅流式的思考过程（思考模型先想后答）：生成期唯一进度，经共享 ReasoningBlock 展示
+  // 分析流式的思考过程（思考模型先想后答）：生成期唯一进度，经共享 ReasoningBlock 展示
   const [streamReasoning, setStreamReasoning] = useState('')
   const [error, setError] = useState<string | null>(null)
   const abortRef = useRef<(() => void) | null>(null)
@@ -64,7 +72,7 @@ export default function ReviewPanel({
   const selectionRef = useRef(selection)
   selectionRef.current = selection
   const [scopeTip, setScopeTip] = useState<string | null>(null)
-  // 联网审阅：先搜最新资料再审，事实核验不凭旧训练数据（默认开）
+  // 联网审阅：先搜最新资料再审，事实核验不凭旧训练数据（默认开）；拆机制不需要实时信息，拆解不开联网
   const [webOn, setWebOn] = useState(true)
   const webOnRef = useRef(webOn)
   webOnRef.current = webOn
@@ -72,25 +80,25 @@ export default function ReviewPanel({
 
   const load = useCallback(async () => {
     try {
-      const md = await window.api.invoke('project:readFile', project, 'review.md')
+      const md = await window.api.invoke('project:readFile', project, fileOf(mode))
       setSections(parseSections(md))
-      setReviewMd(md)
+      setReportMd(md)
       setEmpty(!md.trim())
     } catch {
       setSections([])
-      setReviewMd('')
+      setReportMd('')
       setEmpty(true)
     }
-  }, [project])
+  }, [project, mode])
 
   useEffect(() => {
     load()
-    // Agent/外部工具改 review.md 时热载
+    // Agent/外部工具改报告文件时热载（当前模式对应的文件）
     const off = window.api.on('file:external-change', ({ project: p, file }) => {
-      if (p === project && file === 'review.md') load()
+      if (p === project && file === fileOf(mode)) load()
     })
     return () => off()
-  }, [project, load])
+  }, [project, mode, load])
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight })
@@ -150,14 +158,59 @@ export default function ReviewPanel({
     [streaming, project, load, onToast]
   )
 
+  // ---- 发起爆款拆解（独立一次性调用；选段非空则只拆该段） ----
+
+  const runTeardown = useCallback(
+    async (sel?: string) => {
+      if (streaming) return
+      const target = sel?.trim() ? sel : articleRef.current
+      if (!target.trim()) {
+        onToast('正文为空，先写点内容再拆解')
+        return
+      }
+      setError(null)
+      setStreaming(true)
+      setStreamText('')
+      setStreamReasoning('')
+      setScopeTip(sel?.trim() ? `只拆选段（${sel.trim().length} 字）` : null)
+      const { promise, abort } = chatOnce(teardownMessages(target, skillRef.current), setStreamText, setStreamReasoning)
+      abortRef.current = abort
+      try {
+        const full = await promise
+        await window.api.invoke('project:writeFile', project, 'teardown.md', full.trim() + '\n')
+        await load()
+        onToast(sel?.trim() ? '选段拆解已写入 teardown.md' : '拆解报告已写入 teardown.md')
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err))
+      } finally {
+        setStreaming(false)
+        setStreamText('')
+        setStreamReasoning('')
+        abortRef.current = null
+      }
+    },
+    [streaming, project, load, onToast]
+  )
+
   // BubbleMenu「AI 审阅」触发（选区非空则只审选段）
   const ranRef = useRef(0)
   useEffect(() => {
     if (runRequest > 0 && runRequest !== ranRef.current) {
       ranRef.current = runRequest
+      setMode('review')
       runReview(selectionRef.current ?? undefined)
     }
   }, [runRequest, runReview])
+
+  // BubbleMenu「拆解这段」触发：切到拆解模式再发起（mode 变化后 load 效应自动对准 teardown.md）
+  const tornRef = useRef(0)
+  useEffect(() => {
+    if (teardownRequest > 0 && teardownRequest !== tornRef.current) {
+      tornRef.current = teardownRequest
+      setMode('teardown')
+      runTeardown(selectionRef.current ?? undefined)
+    }
+  }, [teardownRequest, runTeardown])
 
   const locate = (snippet: string): void => {
     setMissTip(onLocate(snippet) ? null : '未在正文中找到该片段（可能已被修改）')
@@ -170,8 +223,17 @@ export default function ReviewPanel({
       <div className="shrink-0 px-3 pt-3">
         <div className="rounded-xl border border-panel-3 bg-panel-2 p-3.5 shadow-[0_1px_6px_rgba(0,0,0,.18)]">
           <div className="flex flex-wrap items-center gap-2">
-            <CardTitle>审阅</CardTitle>
-            {!streaming && !searching && (
+            <Segmented
+              size="sm"
+              ariaLabel="分析模式"
+              value={mode}
+              onChange={(m) => setMode(m)}
+              items={[
+                { value: 'review', label: '审阅', icon: 'search', title: '找自己文章的问题：结构/事实/表达，报告落 review.md' },
+                { value: 'teardown', label: '爆款拆解', icon: 'compass', title: '拆为什么能火：标题钩子/开头/骨架/节奏/受众，报告落 teardown.md' }
+              ]}
+            />
+            {!streaming && !searching && mode === 'review' && (
               <span className="rounded-full bg-accent/15 px-2 py-0.5 text-[10.5px] font-semibold text-accent">当前步骤</span>
             )}
             <div className="ml-auto flex flex-wrap items-center gap-2">
@@ -179,29 +241,35 @@ export default function ReviewPanel({
                 <Button size="sm" variant="sec" icon="square" onClick={() => abortRef.current?.()} className="text-st-bad">
                   停止
                 </Button>
-              ) : (
+              ) : mode === 'review' ? (
                 <Button size="sm" variant="sec" icon="search" onClick={() => runReview()}>
                   {empty ? '全文审阅' : '重新审阅'}
                 </Button>
+              ) : (
+                <Button size="sm" variant="sec" icon="compass" onClick={() => runTeardown()}>
+                  {empty ? '拆解当前正文' : '重新拆解'}
+                </Button>
               )}
-              {!streaming && !empty && (
-                <Button size="sm" variant="pri" icon="sparkles" onClick={() => onOptimize(reviewMd)} title="按审阅报告逐条修订正文，diff 确认后覆盖">
+              {!streaming && !empty && mode === 'review' && (
+                <Button size="sm" variant="pri" icon="sparkles" onClick={() => onOptimize(reportMd)} title="按审阅报告逐条修订正文，diff 确认后覆盖">
                   优化正文
                 </Button>
               )}
-              <Switch
-                checked={webOn}
-                onChange={setWebOn}
-                label="联网审阅"
-                title="先搜索最新资料再审，事实核验以搜索结果为准"
-                disabled={streaming}
-              />
+              {mode === 'review' && (
+                <Switch
+                  checked={webOn}
+                  onChange={setWebOn}
+                  label="联网审阅"
+                  title="先搜索最新资料再审，事实核验以搜索结果为准"
+                  disabled={streaming}
+                />
+              )}
             </div>
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-2 text-[11.5px] text-ink-dim">
             <span className="inline-flex items-center gap-1.5">
               报告写入
-              <span className="rounded border border-panel-3 bg-panel px-1.5 py-0.5 font-mono text-[11px]">review.md</span>
+              <span className="rounded border border-panel-3 bg-panel px-1.5 py-0.5 font-mono text-[11px]">{fileOf(mode)}</span>
             </span>
             {searching ? (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-panel-3 px-2.5 py-0.5 text-ink">
@@ -211,12 +279,12 @@ export default function ReviewPanel({
             ) : streaming ? (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-panel-3 px-2.5 py-0.5 text-ink">
                 <Icon name="spinner" size={11} className="animate-spin" />
-                审阅中…{scopeTip ? `（${scopeTip}）` : ''}
+                {mode === 'review' ? '审阅中' : '拆解中'}…{scopeTip ? `（${scopeTip}）` : ''}
               </span>
             ) : empty ? (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-st-draft/15 px-2.5 py-0.5 font-semibold text-st-draft">
                 <Icon name="alert" size={11} />
-                尚未审阅 · 等待执行
+                {mode === 'review' ? '尚未审阅 · 等待执行' : '尚无拆解报告 · 拆一篇试试'}
               </span>
             ) : (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-st-done/15 px-2.5 py-0.5 font-semibold text-st-done">
@@ -249,11 +317,13 @@ export default function ReviewPanel({
         {!streaming && empty && (
           <div className="flex flex-col items-center gap-2 py-8 text-center">
             <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-panel-3 text-ink-dim">
-              <Icon name="search" size={20} />
+              <Icon name={mode === 'review' ? 'search' : 'compass'} size={20} />
             </span>
-            <p className="text-xs text-ink">还没有审阅报告</p>
+            <p className="text-xs text-ink">{mode === 'review' ? '还没有审阅报告' : '还没有拆解报告'}</p>
             <p className="max-w-[320px] text-[11.5px] leading-relaxed text-ink-dim">
-              点上方「全文审阅」发起一次独立上下文审阅（开联网会先检索最新资料），报告落 review.md 后可逐条跳转原文。
+              {mode === 'review'
+                ? '点上方「全文审阅」发起一次独立上下文审阅（开联网会先检索最新资料），报告落 review.md 后可逐条跳转原文。'
+                : '把当前正文当爆款复盘（或选中一段拆它的写法）：按标题钩子/开头三行/结构骨架/情绪节奏/选题受众六维拆为什么能火，套路与骨架直接可复用。'}
             </p>
           </div>
         )}

@@ -13,7 +13,7 @@ import {
   type WizardStepId
 } from '@shared/wizardProgress'
 import { chatOnce, extractJsonArray } from '../../copilot/llm'
-import { brainstormMessages, outlineMessages, fullArticleMessages, cardsMessages } from '../../copilot/prompts'
+import { brainstormMessages, outlineMessages, fullArticleMessages, cardsMessages, teardownMessages } from '../../copilot/prompts'
 import { ReasoningBlock } from '../ReasoningBlock'
 import { extractFileText } from '../../copilot/material'
 import type { FigPipeline } from '../../editor/FigSuggest'
@@ -109,6 +109,12 @@ export default function CreationWizard({
   const [streamText, setStreamText] = useState('')
   // 当前流式生成的思考过程：思考模型「先想后答」的等待期里这是唯一进度，经 ReasoningBlock 展示
   const [streamReasoning, setStreamReasoning] = useState('')
+  // 选题步「拆对标爆款」：粘贴对标 → 拆解 → 套路/骨架注入素材（素材会自动进脑暴与大纲的上下文）
+  const [benchOpen, setBenchOpen] = useState(false)
+  const [benchText, setBenchText] = useState('')
+  const [benchBusy, setBenchBusy] = useState(false)
+  const [benchStream, setBenchStream] = useState('')
+  const [benchReasoning, setBenchReasoning] = useState('')
   const [outline, setOutline] = useState('')
   const [projName, setProjName] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -127,6 +133,39 @@ export default function CreationWizard({
 
   const material = attachments.filter((a) => !a.dataUrl).map((a) => `【${a.name}】\n${a.text}`).join('\n\n---\n\n')
   const imageAttachments = attachments.filter((a) => a.dataUrl)
+
+  /** 拆对标爆款：可复用套路段（含「- 骨架：」行）注入素材；有工程时完整报告顺手落 teardown.md */
+  const runBenchmarkTeardown = useCallback(async () => {
+    if (benchBusy || !benchText.trim()) return
+    setBenchBusy(true)
+    setBenchStream('')
+    setBenchReasoning('')
+    const { promise, abort } = chatOnce(teardownMessages(benchText, skill), setBenchStream, setBenchReasoning)
+    abortRef.current = abort
+    try {
+      const full = await promise
+      // 只注入可复用部分（脑暴要的是套路不是整份报告）；拿不到该分区时给报告尾部，宁多勿漏
+      const m = /##\s*可复用套路[\s\S]*$/.exec(full)
+      const digest = (m ? m[0] : full.slice(-800)).trim()
+      setAttachments((prev) => [...prev, { name: '对标爆款拆解', text: digest }])
+      if (project) {
+        try {
+          await window.api.invoke('project:writeFile', project, 'teardown.md', full.trim() + '\n')
+        } catch {
+          // 注入素材是主目标，落盘失败不阻断
+        }
+      }
+      onToast('拆解完成：可复用套路与骨架已注入素材，脑暴/大纲自动带上')
+      setBenchOpen(false)
+    } catch (err) {
+      onToast(`拆解失败：${err instanceof Error ? err.message : err}`)
+    } finally {
+      setBenchBusy(false)
+      setBenchStream('')
+      setBenchReasoning('')
+      abortRef.current = null
+    }
+  }, [benchBusy, benchText, skill, project, onToast])
 
   // 流式预览自动滚底（两个会话步各自的滚动容器）
   useEffect(() => {
@@ -529,6 +568,14 @@ export default function CreationWizard({
               webOn={webOn}
               toggleWeb={() => setWebOn((v) => !v)}
               cards={cards}
+              benchOpen={benchOpen}
+              onToggleBench={() => setBenchOpen((v) => !v)}
+              benchText={benchText}
+              setBenchText={setBenchText}
+              benchBusy={benchBusy}
+              benchStream={benchStream}
+              benchReasoning={benchReasoning}
+              onRunBench={() => void runBenchmarkTeardown()}
               onIdeasChanged={onIdeasChanged}
               onToast={onToast}
               onRunBrainstorm={() => void runBrainstorm()}

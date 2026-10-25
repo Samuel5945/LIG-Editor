@@ -262,6 +262,8 @@ interface ArticleEditorProps {
   onAiModify?: () => void
   /** 选区浮动条「AI 审阅」：App 触发副驾驶审阅流 */
   onAiReview?: () => void
+  /** 选区浮动条「拆解这段」：App 触发爆款拆解（只拆选中段落） */
+  onAiTeardown?: () => void
   /** 配图占位卡管线按钮：App 打开配图弹窗（M6） */
   onFigAction?: FigSuggestStorage['onAction']
   /** 源码图「改源码重渲染」：App 打开代码绘图弹窗编辑 figures/*.html，desc 为原图提示词（M6） */
@@ -282,7 +284,7 @@ interface ArticleEditorProps {
  * - lastEmitted 防止 onChange → props.markdown 回流时循环 setContent
  */
 const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(function ArticleEditor(
-  { markdown, project, projectDir, accent, theme, uiDark, typography, onChange, onAiModify, onAiReview, onFigAction, onEditFigureSource, onAccentChange, onTypographyChange, onOpenTypography },
+  { markdown, project, projectDir, accent, theme, uiDark, typography, onChange, onAiModify, onAiReview, onAiTeardown, onFigAction, onEditFigureSource, onAccentChange, onTypographyChange, onOpenTypography },
   ref
 ): ReactElement {
   const lastEmitted = useRef(markdown)
@@ -999,6 +1001,15 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
             >
               <Icon name="search" size={12} />
               AI 审阅
+            </button>
+            <button
+              type="button"
+              onClick={() => onAiTeardown?.()}
+              title="拆这段为什么留人：钩子/节奏/写法机制，报告进分析面板的爆款拆解"
+              className="inline-flex h-[26px] shrink-0 items-center gap-1 rounded-md border border-panel-3 px-2 text-[11.5px] text-ink-dim hover:bg-panel-3 hover:text-ink"
+            >
+              <Icon name="compass" size={12} />
+              拆解这段
             </button>
           </div>
         </BubbleMenu>
