@@ -50,9 +50,14 @@ export function startBridge(): void {
       })
       req.on('end', () => {
         void (async () => {
+          // 客户端断开（Agent 取消工具调用 / mcp-proxy 超时销毁连接）时中止在途工具：
+          // 目前消费该信号的是 generate_image——不然 180s 的生图在调用方已放弃后照样烧完额度。
+          // 正常完成后 close 也会触发，abort 对已 settle 的 Promise 是空操作
+          const ac = new AbortController()
+          res.on('close', () => ac.abort())
           try {
             const { name, arguments: args } = JSON.parse(raw) as { name: string; arguments?: Record<string, unknown> }
-            reply(200, { ok: true, result: await callTool(name, args ?? {}) })
+            reply(200, { ok: true, result: await callTool(name, args ?? {}, { signal: ac.signal }) })
           } catch (err) {
             reply(200, { ok: false, error: err instanceof Error ? err.message : String(err) })
           }

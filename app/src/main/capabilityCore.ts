@@ -48,10 +48,16 @@ export interface ToolDef {
   name: string
   description: string
   inputSchema: { type: 'object'; properties: Record<string, unknown>; required?: string[] }
-  handler: (args: Record<string, unknown>) => unknown
+  /** ctx.signal：调用方随请求带来的取消信号（目前只有 bridge 在 HTTP 客户端断开时中止，
+   *  generate_image 用它中断在途生图——Agent 取消工具调用或代理超时不再白烧额度） */
+  handler: (args: Record<string, unknown>, ctx?: ToolCallCtx) => unknown
   /** 只给外部 Agent 用：结果体量大或形态不适合塞进对话文本（如 render_preview 的 PNG base64），
    *  内部对话副驾驶的工具面按此排除——编辑器的实时预览本来就在作者眼前，再灌几百 KB base64 只是烧 token */
   headlessOnly?: boolean
+}
+
+export interface ToolCallCtx {
+  signal?: AbortSignal
 }
 
 /** Agent 写完文件通知 GUI（若在运行）刷新 */
@@ -775,7 +781,8 @@ export const TOOLS: ToolDef[] = [
   },
   {
     name: 'generate_image',
-    description: 'AI 文生图并保存到工程 assets/，返回相对路径（正文引用写 ![alt](该路径)）',
+    description:
+      'AI 文生图并保存到工程 assets/，返回相对路径（正文引用写 ![alt](该路径)）。经 bridge 调用时客户端断开（取消工具调用/代理超时）即中止在途生图',
     inputSchema: {
       type: 'object',
       properties: {
@@ -786,9 +793,9 @@ export const TOOLS: ToolDef[] = [
       },
       required: ['project', 'prompt']
     },
-    handler: async (a) => {
+    handler: async (a, ctx) => {
       const project = projectArg(a)
-      const base64 = await generateImage(str(a, 'prompt'), { ratio: str(a, 'ratio', false) || undefined })
+      const base64 = await generateImage(str(a, 'prompt'), { ratio: str(a, 'ratio', false) || undefined }, ctx?.signal)
       const rel = str(a, 'path', false) || `assets/gen-${Date.now()}.png`
       const saved = store.saveAsset(project, rel, base64)
       return { path: saved, path_abs: absOf(project, saved) }
@@ -1552,10 +1559,14 @@ function relAsset(project: string, p: string): string {
 }
 
 /** 按名执行工具（MCP tools/call 与 HTTP bridge 共用入口） */
-export async function callTool(name: string, args: Record<string, unknown>): Promise<unknown> {
+export async function callTool(
+  name: string,
+  args: Record<string, unknown>,
+  ctx?: ToolCallCtx
+): Promise<unknown> {
   const tool = TOOLS.find((t) => t.name === name)
   if (!tool) throw new Error(`未知工具：${name}`)
-  return tool.handler(args ?? {})
+  return tool.handler(args ?? {}, ctx)
 }
 
 /** 对话副驾驶可执行工具清单（chat-tools v1）：排除提示词返回类与 headlessOnly 类——

@@ -75,7 +75,7 @@ function readBridge() {
   }
 }
 
-function httpJson(method, path, cfg, body, timeoutMs) {
+function httpJson(method, path, cfg, body, timeoutMs, register) {
   const timeout = timeoutMs === undefined ? CALL_TIMEOUT_MS : timeoutMs
   return new Promise((resolvePromise, reject) => {
     const req = http.request(
@@ -102,6 +102,8 @@ function httpJson(method, path, cfg, body, timeoutMs) {
         })
       }
     )
+    // 把请求对象交给调用方（tools/call 按 JSON-RPC id 记进在途表，取消通知来了销毁它）
+    if (register) register(req)
     req.on('timeout', () => {
       req.destroy(new Error(`bridge ${Math.round(timeout / 1000)} 秒内没返回（渲染或推送可能还在跑）：需要更久就设环境变量 LIG_MCP_TIMEOUT_MS`))
     })
@@ -177,17 +179,17 @@ function ensureBridge() {
 }
 
 /** 带重试的 bridge 调用：连接类错误（实例被重启/替换）时重新发现一次 */
-async function callBridge(method, path, body) {
+async function callBridge(method, path, body, register) {
   let cfg = await ensureBridge()
   try {
-    return await httpJson(method, path, cfg, body)
+    return await httpJson(method, path, cfg, body, undefined, register)
   } catch (err) {
     const code = err && err.code
     if (code === 'ECONNREFUSED' || code === 'ECONNRESET' || code === 'EPIPE') {
       log(`bridge 连接失效（${code}），重新发现…`)
       bridgePromise = null
       cfg = await ensureBridge()
-      return httpJson(method, path, cfg, body)
+      return httpJson(method, path, cfg, body, undefined, register)
     }
     throw err
   }
@@ -197,6 +199,10 @@ async function callBridge(method, path, body) {
 
 const send = (msg) => process.stdout.write(JSON.stringify({ jsonrpc: '2.0', ...msg }) + '\n')
 const sendErr = (id, code, message) => send({ id, error: { code, message } })
+
+// 在途 tools/call 的 bridge 请求（按 JSON-RPC id 记）：宿主发 notifications/cancelled 时
+// 销毁对应 HTTP 请求——bridge 侧 res close 即中止在途工具（如 180s 的生图），不再白烧额度
+const inflight = new Map()
 
 async function handle(req) {
   const id = req.id === undefined ? null : req.id
@@ -224,11 +230,26 @@ async function handle(req) {
       send({ id, result: { tools: r.tools } })
       return
     }
+    case 'notifications/cancelled': {
+      const cancelledId = req.params && req.params.requestId
+      const pending = inflight.get(cancelledId)
+      if (pending) pending.destroy(new Error('客户端已取消该工具调用'))
+      return
+    }
     case 'tools/call': {
-      const r = await callBridge('POST', '/tool', {
-        name: req.params && req.params.name,
-        arguments: (req.params && req.params.arguments) || {}
-      })
+      const r = await callBridge(
+        'POST',
+        '/tool',
+        {
+          name: req.params && req.params.name,
+          arguments: (req.params && req.params.arguments) || {}
+        },
+        (httpReq) => {
+          if (id === null || id === undefined) return
+          inflight.set(id, httpReq)
+          httpReq.on('close', () => inflight.delete(id))
+        }
+      )
       if (!r.ok) {
         send({ id, result: { content: [{ type: 'text', text: String(r.error) }], isError: true } })
         return
