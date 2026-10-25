@@ -1,6 +1,7 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App'
+import { ErrorBoundary } from './ui/ErrorBoundary'
 import './index.css'
 
 // 首帧前套用持久化的主题：跟随系统（默认，缺省键 = 旧版二值键迁移）按系统深浅，避免启动闪错色
@@ -11,8 +12,8 @@ import './index.css'
   if (preferLight) document.documentElement.classList.add('light')
 }
 
-// 渲染层崩溃可见化：应用没有 ErrorBoundary，任何渲染错误都会白屏——
-// 把未捕获错误转发主进程终端（dev 下直接可见），别让白屏无话可说
+// 渲染层崩溃可见化：渲染期错误由 ErrorBoundary 换成可操作错误页（不再白屏），
+// 边界外（事件回调/异步）的未捕获错误在这里转发主进程终端，dev 下直接可见
 const reportError = (label: string, err: unknown): void => {
   const detail = err instanceof Error ? (err.stack ?? err.message) : String(err)
   window.api?.invoke('app:reportError', label + ': ' + detail).catch(() => {})
@@ -22,6 +23,8 @@ window.addEventListener('unhandledrejection', (e) => reportError('unhandledrejec
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <App />
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   </React.StrictMode>
 )

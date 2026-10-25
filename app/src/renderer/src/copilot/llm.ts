@@ -3,6 +3,14 @@ import type { ChatMessage, ChatStartOptions, ToolCallInfo } from '@shared/types'
 /** M8：JSON 提取移入 shared（主进程能力核复用），原路径转发 */
 export { extractJsonArray, stripHtmlFence } from '@shared/llmText'
 
+/**
+ * 兜底看门狗：主进程各错误分支都会发 llm:done，请求本身也有 180s/300s 流级超时，
+ * 正常路径永远不会走到这里——兜的是事件丢失/主进程异常这类极端情况。
+ * 600s 取「压缩 180s + 首次 fetch 180s + 429 等 4s + 重试 180s」最坏合法链路之上，
+ * 再长就当请求已死：清监听、按超时拒绝，让调用方的输入框恢复可重试，不再无限「生成中」。
+ */
+const WATCHDOG_MS = 600_000
+
 /** 把 llm:chatStart 的事件流包装成 Promise；onDelta 可拿到累计全文做流式 UI，
  * onReasoning 拿累计思考过程（模型思考字段 reasoning/reasoning_content/thinking_delta 已在主进程归一） */
 export function chatOnce(
@@ -17,6 +25,15 @@ export function chatOnce(
   let offDone = (): void => {}
 
   const promise = new Promise<string>((resolve, reject) => {
+    const watchdog = setTimeout(() => {
+      offStream()
+      offDone()
+      reject(new Error('等待模型响应超时（内部事件未送达），可重试'))
+    }, WATCHDOG_MS)
+    const settle = (fn: () => void): void => {
+      clearTimeout(watchdog)
+      fn()
+    }
     offStream = window.api.on('llm:stream', ({ requestId: id, delta, reasoning }) => {
       if (id !== requestId) return
       full += delta
@@ -28,12 +45,21 @@ export function chatOnce(
     })
     offDone = window.api.on('llm:done', ({ requestId: id, error }) => {
       if (id !== requestId) return
-      offStream()
-      offDone()
-      if (error) reject(new Error(error))
-      else resolve(full)
+      settle(() => {
+        offStream()
+        offDone()
+        if (error) reject(new Error(error))
+        else resolve(full)
+      })
     })
-    void window.api.invoke('llm:chatStart', requestId, messages)
+    // invoke 本身失败（如桥接层异常）不会有 llm:done 来收场，直接当错误收掉
+    window.api.invoke('llm:chatStart', requestId, messages).catch((err) =>
+      settle(() => {
+        offStream()
+        offDone()
+        reject(err instanceof Error ? err : new Error(String(err)))
+      })
+    )
   })
 
   return { promise, abort: () => void window.api.invoke('llm:abort', requestId) }
@@ -60,6 +86,15 @@ export function chatOnceWithTools(
   let offDone = (): void => {}
 
   const promise = new Promise<ChatRoundResult>((resolve, reject) => {
+    const watchdog = setTimeout(() => {
+      offStream()
+      offDone()
+      reject(new Error('等待模型响应超时（内部事件未送达），可重试'))
+    }, WATCHDOG_MS)
+    const settle = (fn: () => void): void => {
+      clearTimeout(watchdog)
+      fn()
+    }
     offStream = window.api.on('llm:stream', ({ requestId: id, delta, reasoning }) => {
       if (id !== requestId) return
       full += delta
@@ -71,15 +106,24 @@ export function chatOnceWithTools(
     })
     offDone = window.api.on('llm:done', ({ requestId: id, error, toolCalls }) => {
       if (id !== requestId) return
-      offStream()
-      offDone()
-      if (error) reject(new Error(error))
-      else resolve({ text: full, reasoning: reasoningFull, toolCalls })
+      settle(() => {
+        offStream()
+        offDone()
+        if (error) reject(new Error(error))
+        else resolve({ text: full, reasoning: reasoningFull, toolCalls })
+      })
     })
-    void window.api.invoke('llm:chatStart', requestId, messages, {
+    // invoke 本身失败（如桥接层异常）不会有 llm:done 来收场，直接当错误收掉
+    window.api.invoke('llm:chatStart', requestId, messages, {
       tools: options?.tools?.length ? options.tools : undefined,
       thinking: options?.thinking
-    })
+    }).catch((err) =>
+      settle(() => {
+        offStream()
+        offDone()
+        reject(err instanceof Error ? err : new Error(String(err)))
+      })
+    )
   })
 
   return { promise, abort: () => void window.api.invoke('llm:abort', requestId) }
