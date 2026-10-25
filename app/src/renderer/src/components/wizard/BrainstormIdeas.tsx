@@ -140,7 +140,7 @@ export default function BrainstormIdeas({
                 {benchReasoning && (
                   <ReasoningBlock text={benchReasoning} streaming level={benchLevel ?? undefined} className="mb-2" />
                 )}
-                <div className="thin-scroll max-h-32 overflow-auto whitespace-pre-wrap rounded bg-panel p-2 text-[11px] leading-5 text-ink-dim">
+                <div className="thin-scroll max-h-56 overflow-auto whitespace-pre-wrap rounded bg-panel p-2 text-[11px] leading-5 text-ink-dim">
                   {benchStream || '拆解中…'}
                   <span className="animate-pulse">▌</span>
                 </div>

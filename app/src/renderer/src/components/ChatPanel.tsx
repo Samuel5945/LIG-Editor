@@ -1302,7 +1302,7 @@ export default function ChatPanel({
                 onClick={() =>
                   setThinkLevel((v) => (v === null ? 'high' : v === 'high' ? 'low' : v === 'low' ? false : null))
                 }
-                title={`模型思考档位：${thinkLevel === null ? '跟随模型默认' : thinkLevel === false ? '已关闭' : thinkLevel === 'high' ? '深度' : '快速'}——点击循环 跟随→深度→快速→关闭；档位仅对支持 effort 的模型生效`}
+                title={`模型思考档位：${thinkLevel === null ? `跟随模型默认（当前模型默认${cap.reasoning.defaultOn ? '开' : '关'}）` : thinkLevel === false ? '已关闭' : thinkLevel === 'high' ? '深度' : '快速'}——点击循环 跟随→深度→快速→关闭；档位仅对支持 effort 的模型生效`}
               >
                 思考·{thinkLevel === null ? '跟随' : thinkLevel === false ? '关' : thinkLevel === 'high' ? '深度' : '快速'}
               </ToolPill>

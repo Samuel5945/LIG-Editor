@@ -113,3 +113,17 @@ describe('拆解档位与外部文章', () => {
     expect(screen.getByText('标题与钩子')).toBeTruthy()
   })
 })
+
+describe('拆解报告可发现性（项4）', () => {
+  it('工程已有 teardown.md 时，审阅模式头部出「有拆解报告 · 查看」，点击切到拆解模式并展示报告', async () => {
+    files['teardown.md'] = '# 爆款拆解\n## 标题与钩子\n数字+悬念'
+    render(h(ReviewPanel, props()))
+    const pill = await screen.findByText('有拆解报告 · 查看')
+    fireEvent.click(pill)
+    // 切模式后读 teardown.md：分区展示 + 文件落点对准
+    expect(await screen.findByText('标题与钩子')).toBeTruthy()
+    expect(screen.queryByText('teardown.md（外部文章 · 未落盘）')).toBeNull()
+    // 项9：拆解模式的徽章如实标注
+    expect(screen.getByText('拆解 · 不计流程状态')).toBeTruthy()
+  })
+})

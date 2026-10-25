@@ -184,18 +184,23 @@ export default function CreationWizard({
   useEffect(() => () => abortRef.current?.(), [])
 
   // 大纲步预填 + 外部热载：工程已有 outline.md（AI 对话「从正文反推大纲」/外部 Agent 写入）时带进向导，
-  // 作者接着拖拽重排、重新成文。只在当前大纲为空时带——作者动过（生成中/手动编辑）就不打扰
+  // 作者接着拖拽重排、重新成文。当前大纲为空直接带；作者动过（生成中/手动编辑）则不打扰自动覆盖，
+  // 但记下磁盘版本——与向导内容不一致时大纲步出「有更新 · 点击载入」提示，同步权交还作者
+  const [outlineOnDisk, setOutlineOnDisk] = useState<string | null>(null)
   useEffect(() => {
     if (!project) return
-    const fillIfEmpty = (): void => {
+    const syncFromDisk = (): void => {
       void window.api
         .invoke('project:readFile', project, 'outline.md')
-        .then((md) => setOutline((prev) => (!prev.trim() && md.trim() ? md : prev)))
-        .catch(() => {})
+        .then((md) => {
+          setOutline((prev) => (!prev.trim() && md.trim() ? md : prev))
+          setOutlineOnDisk(md.trim() ? md : null)
+        })
+        .catch(() => setOutlineOnDisk(null))
     }
-    if (phase === 'outline') fillIfEmpty()
+    if (phase === 'outline') syncFromDisk()
     const off = window.api.on('file:external-change', ({ project: p, file }) => {
-      if (p === project && file === 'outline.md') fillIfEmpty()
+      if (p === project && file === 'outline.md') syncFromDisk()
     })
     return off
   }, [project, phase])
@@ -627,6 +632,8 @@ export default function CreationWizard({
         <div ref={scrollOutlineRef} className="selectable thin-scroll min-h-0 flex-1 overflow-auto p-4 text-xs">
           {phase === 'outlining' || phase === 'outline' ? (
             <OutlineStep
+            outlineStale={!!outlineOnDisk && outlineOnDisk !== outline}
+            onLoadOutline={() => outlineOnDisk && setOutline(outlineOnDisk)}
               phase={phase === 'outlining' ? 'outlining' : 'outline'}
               outline={outline}
               setOutline={setOutline}

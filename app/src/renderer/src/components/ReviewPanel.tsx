@@ -84,6 +84,17 @@ export default function ReviewPanel({
   const [pasteText, setPasteText] = useState('')
   const [externalView, setExternalView] = useState(false)
 
+  // 审阅模式下也要知道「工程已有拆解报告」（teardown.md 非空）：跨模式可发现的唯一提示位在头部 chip 行
+  const [hasTeardown, setHasTeardown] = useState(false)
+  const probeTeardown = useCallback(async () => {
+    try {
+      const md = await window.api.invoke('project:readFile', project, 'teardown.md')
+      setHasTeardown(!!md.trim())
+    } catch {
+      setHasTeardown(false)
+    }
+  }, [project])
+
   const load = useCallback(async () => {
     try {
       const md = await window.api.invoke('project:readFile', project, fileOf(mode))
@@ -100,12 +111,15 @@ export default function ReviewPanel({
 
   useEffect(() => {
     load()
-    // Agent/外部工具改报告文件时热载（当前模式对应的文件）
+    probeTeardown()
+    // Agent/外部工具改报告文件时热载：当前模式的文件重载；teardown.md 任何变化都刷新「有拆解」探测
     const off = window.api.on('file:external-change', ({ project: p, file }) => {
-      if (p === project && file === fileOf(mode)) load()
+      if (p !== project) return
+      if (file === fileOf(mode)) load()
+      if (file === 'teardown.md') void probeTeardown()
     })
     return () => off()
-  }, [project, mode, load])
+  }, [project, mode, load, probeTeardown])
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight })
@@ -259,6 +273,11 @@ export default function ReviewPanel({
             {!streaming && !searching && mode === 'review' && (
               <span className="rounded-full bg-accent/15 px-2 py-0.5 text-[10.5px] font-semibold text-accent">当前步骤</span>
             )}
+            {!streaming && !searching && mode === 'teardown' && (
+              <span className="rounded-full bg-panel-3 px-2 py-0.5 text-[10.5px] text-ink-dim" title="拆解报告不进选题看板状态机：留档与复盘用">
+                拆解 · 不计流程状态
+              </span>
+            )}
             <div className="ml-auto flex flex-wrap items-center gap-2">
               {streaming ? (
                 <Button size="sm" variant="sec" icon="square" onClick={() => abortRef.current?.()} className="text-st-bad">
@@ -341,6 +360,16 @@ export default function ReviewPanel({
                 {externalView && mode === 'teardown' ? '（外部文章 · 未落盘）' : ''}
               </span>
             </span>
+            {!streaming && !searching && mode === 'review' && hasTeardown && (
+              <button
+                onClick={() => setMode('teardown')}
+                className="inline-flex cursor-pointer items-center gap-1.5 rounded-full bg-st-done/15 px-2.5 py-0.5 font-semibold text-st-done hover:bg-st-done/25"
+                title="工程 teardown.md 已有拆解报告，点击切到爆款拆解模式查看"
+              >
+                <Icon name="compass" size={11} />
+                有拆解报告 · 查看
+              </button>
+            )}
             {searching ? (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-panel-3 px-2.5 py-0.5 text-ink">
                 <Icon name="globe" size={11} />

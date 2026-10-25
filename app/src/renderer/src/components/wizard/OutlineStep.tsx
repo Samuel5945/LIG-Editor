@@ -53,6 +53,9 @@ export interface OutlineStepProps {
   onWriteToCurrent: () => void
   onAbort: () => void
   onBack: () => void
+  /** 工程 outline.md 与当前编辑内容不一致（AI 对话/外部 Agent 又写盘）：出「点击载入」提示，同步权在作者 */
+  outlineStale?: boolean
+  onLoadOutline?: () => void
 }
 
 export default function OutlineStep({
@@ -66,7 +69,9 @@ export default function OutlineStep({
   onCreateCards,
   onWriteToCurrent,
   onAbort,
-  onBack
+  onBack,
+  outlineStale,
+  onLoadOutline
 }: OutlineStepProps): ReactElement {
   const [dragIdx, setDragIdx] = useState<number | null>(null)
   const [overIdx, setOverIdx] = useState<number | null>(null)
@@ -104,6 +109,17 @@ export default function OutlineStep({
       </div>
       {phase === 'outline' && (
         <>
+          {outlineStale && (
+            <button
+              onClick={onLoadOutline}
+              className="mb-2 flex w-full items-center gap-1.5 rounded-lg border border-accent/40 bg-accent/10 px-2.5 py-1.5 text-left text-[11px] text-accent hover:bg-accent/20"
+              title="AI 对话或外部 Agent 更新了工程 outline.md——点击载入替换当前内容（你正在编辑的版本会被覆盖）"
+            >
+              <Icon name="alert" size={12} className="shrink-0" />
+              工程 outline.md 有更新 · 点击载入
+              <Icon name="chevronRight" size={11} className="ml-auto shrink-0" />
+            </button>
+          )}
           <div className="thin-scroll mb-1 max-h-[340px] overflow-y-auto rounded bg-panel p-1.5">
             {entries.map((entry, i) => (
               <div
