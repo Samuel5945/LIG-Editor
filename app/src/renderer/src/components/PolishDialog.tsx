@@ -6,6 +6,7 @@ import { chatOnce } from '../copilot/llm'
 import { polishLayoutMessages, applyReviewMessages } from '../copilot/prompts'
 import { DialogShell } from '../ui/DialogShell'
 import { Button } from '../ui/primitives'
+import { ReasoningBlock } from './ReasoningBlock'
 import { Icon } from '../ui/Icon'
 
 interface PolishDialogProps {
@@ -35,6 +36,8 @@ export default function PolishDialog({
 }: PolishDialogProps): ReactElement {
   const isReview = !!review?.trim()
   const [result, setResult] = useState('')
+  // 排版优化/按审阅修订流式的思考过程：生成期唯一进度
+  const [streamReasoning, setStreamReasoning] = useState('')
   const [running, setRunning] = useState(false)
   const [done, setDone] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -53,6 +56,7 @@ export default function PolishDialog({
   const run = useCallback(() => {
     setError(null)
     setResult('')
+    setStreamReasoning('')
     setDone(false)
     setPatchInfo(null)
     setThemePatch(undefined)
@@ -64,7 +68,7 @@ export default function PolishDialog({
     const { promise, abort } = chatOnce(messages, (full) => {
       setStreamLen(full.length)
       if (!isReview) setResult(full)
-    })
+    }, setStreamReasoning)
     abortRef.current = abort
     promise
       .then((full) => {
@@ -232,6 +236,8 @@ export default function PolishDialog({
               </button>
             </>
           )}
+
+          {running && streamReasoning && <ReasoningBlock text={streamReasoning} streaming className="mb-2" />}
 
           {running && (
             <div className="selectable whitespace-pre-wrap rounded bg-panel p-2 leading-5 text-ink-dim">

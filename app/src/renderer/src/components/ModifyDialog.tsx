@@ -6,6 +6,7 @@ import { modifyMessages } from '../copilot/prompts'
 import { DialogShell } from '../ui/DialogShell'
 import { Button, Chip, FIELD_SHELL_CLS } from '../ui/primitives'
 import { Icon } from '../ui/Icon'
+import { ReasoningBlock } from './ReasoningBlock'
 
 interface ModifyDialogProps {
   /** 编辑器选中的原文片段 */
@@ -24,6 +25,8 @@ export default function ModifyDialog({ selection, skill, onConfirm, onClose }: M
   const [instruction, setInstruction] = useState('')
   const [result, setResult] = useState('')
   const [running, setRunning] = useState(false)
+  // 改稿流式的思考过程：生成期唯一进度
+  const [streamReasoning, setStreamReasoning] = useState('')
   const [done, setDone] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const abortRef = useRef<(() => void) | null>(null)
@@ -33,9 +36,10 @@ export default function ModifyDialog({ selection, skill, onConfirm, onClose }: M
     if (!inst || running) return
     setError(null)
     setResult('')
+    setStreamReasoning('')
     setDone(false)
     setRunning(true)
-    const { promise, abort } = chatOnce(modifyMessages(selection, inst, skill), (full) => setResult(full))
+    const { promise, abort } = chatOnce(modifyMessages(selection, inst, skill), (full) => setResult(full), setStreamReasoning)
     abortRef.current = abort
     promise
       .then((full) => {
@@ -114,6 +118,8 @@ export default function ModifyDialog({ selection, skill, onConfirm, onClose }: M
           {error}
         </p>
       )}
+
+      {running && streamReasoning && <ReasoningBlock text={streamReasoning} streaming className="mb-2" />}
 
       {running && result && (
         <div className="selectable mb-2 max-h-40 overflow-auto whitespace-pre-wrap rounded-lg border border-panel-3 bg-panel p-2.5 text-xs leading-5 text-ink">

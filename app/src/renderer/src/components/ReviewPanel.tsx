@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type ReactElement } from 'rea
 import type { WebSearchResult } from '@shared/types'
 import { chatOnce } from '../copilot/llm'
 import { reviewMessages } from '../copilot/prompts'
+import { ReasoningBlock } from './ReasoningBlock'
 import { Icon } from '../ui/Icon'
 import { Button, CardTitle, Switch } from '../ui/primitives'
 
@@ -51,6 +52,8 @@ export default function ReviewPanel({
   const [missTip, setMissTip] = useState<string | null>(null)
   const [streaming, setStreaming] = useState(false)
   const [streamText, setStreamText] = useState('')
+  // 审阅流式的思考过程（思考模型先想后答）：生成期唯一进度，经共享 ReasoningBlock 展示
+  const [streamReasoning, setStreamReasoning] = useState('')
   const [error, setError] = useState<string | null>(null)
   const abortRef = useRef<(() => void) | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -106,6 +109,7 @@ export default function ReviewPanel({
       setError(null)
       setStreaming(true)
       setStreamText('')
+      setStreamReasoning('')
       setScopeTip(sel?.trim() ? `只审选段（${sel.trim().length} 字）` : null)
       // 开了联网：主进程深度检索（多查询+新闻源+深抓正文；配了搜索 API 则走 API），失败降级离线审
       let web: WebSearchResult[] = []
@@ -126,7 +130,7 @@ export default function ReviewPanel({
         if (web.length === 0) onToast('联网搜索无结果或失败，已离线审阅')
         setSearching(false)
       }
-      const { promise, abort } = chatOnce(reviewMessages(current, skillRef.current, sel, web), setStreamText)
+      const { promise, abort } = chatOnce(reviewMessages(current, skillRef.current, sel, web), setStreamText, setStreamReasoning)
       abortRef.current = abort
       try {
         const full = await promise
@@ -139,6 +143,7 @@ export default function ReviewPanel({
       } finally {
         setStreaming(false)
         setStreamText('')
+        setStreamReasoning('')
         abortRef.current = null
       }
     },
@@ -229,6 +234,9 @@ export default function ReviewPanel({
             <Icon name="xCircle" size={12} className="mr-1.5" />{error}
           </p>
         )}
+
+        {/* 思考过程（思考模型的等待期进度） */}
+        {streaming && streamReasoning && <ReasoningBlock text={streamReasoning} streaming className="mb-2" />}
 
         {/* 流式过程预览 */}
         {streaming && (
