@@ -17,6 +17,7 @@
 
 1. **bump 版本**：改 `app/package.json` 的 `version`（应用内当前版本号即来自这里）。
 2. **构建**：`cd app && npm run dist`，产物在 `releases/`（`LIG-Editor-setup-<版本>.exe` + portable）。
+   - **产物冒烟（v0.9.1 起钉进流程）**：dist 完立刻 `node app/scripts/smoke.mjs`——对 `releases/win-unpacked/` 无头实打启动/工具面/离屏截图/封面/printToPDF/大纲六条链路，即建即删临时工程。Electron 大版本升级或渲染链路改动后尤其不能省；旧产物缺新工具会如实报 ✗（0.9.1 的 win-unpacked 就正确拦出过 save_outline 缺失）。
    - v0.9.1 实测（electron-builder 26）：中文用户名路径（`C:\Users\航\...`）下 NSIS 正常出包，无需再迁 ASCII 目录。
    - ⛔ electron-builder **24** 在无管理员权限的 Windows 上会卡死在 winCodeSign 解包（`Cannot create symbolic link : 客户端没有所需的特权`，darwin dylib 符号链接建不了），且 app-builder 每次重下不认缓存、手工预解包救不回来——升 26 即好，别降回去。
 3. **上传网盘**：夸克 + 百度网盘（分享链接若变动，记下新链接）。
