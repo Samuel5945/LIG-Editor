@@ -64,15 +64,21 @@ export function exportArticleHtml(project: string, variant: ExportVariant = 'aut
 }
 
 /** 富文本复制：图片全部 dataURL 内嵌，粘贴平台后台正文区即带图带排版；配色固定 day/night 二选一。
- *  platform 指定分发目标（缺省 wechat）——知乎/头条/百家按平台画像输出净化友好形态 */
-export function copyArticleRich(project: string, variant: 'day' | 'night' = 'day', platform: PlatformId = 'wechat'): void {
+ *  platform 指定分发目标（缺省 wechat）——知乎/头条/百家按平台画像输出净化友好形态。
+ *  Electron 44 起 clipboard.write 改异步 ClipboardItem 制（W3C 风格），html/text 按 MIME 一并写入 */
+export async function copyArticleRich(
+  project: string,
+  variant: 'day' | 'night' = 'day',
+  platform: PlatformId = 'wechat'
+): Promise<void> {
   const dir = projectDir(project)
   const md = readTextFile(project, 'article.md')
   const doc = mdToDoc(md)
   const theme = resolveThemeForExport(readMeta(project))
   const resolveImg = (src: string): string => toDataUrl(dir, src)
   const html = docToPlatformHtml(doc, resolveImg, theme, platform, variant === 'night')
-  clipboard.write({ html, text: md })
+  // 用 Electron 命名空间限定：裸 ClipboardItem 会解析到 DOM lib 的同名类（getType 签名不同）
+  await clipboard.write([new Electron.ClipboardItem({ 'text/html': html, 'text/plain': md })])
 }
 
 /** 平台适配 HTML 落盘（外部 Agent 分发用）：article-<platform>.html，图片相对路径，页壳桌面专栏宽 */

@@ -288,14 +288,13 @@ export function registerIpc(): void {
   })
   handle(
     'export:copyRich',
-    ({ project, variant, platform }: { project: string; variant?: string; platform?: string }) => {
-      const r = copyArticleRich(
+    async ({ project, variant, platform }: { project: string; variant?: string; platform?: string }) => {
+      await copyArticleRich(
         project,
         variant === 'night' ? 'night' : 'day',
         (platform as PlatformId | undefined) ?? 'wechat'
       )
       store.stampExported(project)
-      return r
     }
   )
   handle('export:openFile', async (absPath) => {
