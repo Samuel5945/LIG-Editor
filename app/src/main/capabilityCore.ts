@@ -18,6 +18,7 @@ import {
   fullArticleMessages,
   outlineMessages,
   reviewMessages,
+  teardownMessages,
   titleMessages
 } from '@shared/prompts'
 import { coerceArrayArg } from '@shared/llmText'
@@ -238,12 +239,17 @@ export const TOOLS: ToolDef[] = [
   },
   {
     name: 'read_article',
-    description: '读工程内文本文件原文（article.md 正文 / ideas.md 灵感 / review.md 审阅报告 / outline.md 大纲）',
+    description:
+      '读工程内文本文件原文（article.md 正文 / ideas.md 灵感 / review.md 审阅报告 / outline.md 大纲 / teardown.md 爆款拆解）',
     inputSchema: {
       type: 'object',
       properties: {
         project: P.project,
-        file: { type: 'string', enum: ['article.md', 'ideas.md', 'review.md', 'outline.md'], description: '缺省 article.md' }
+        file: {
+          type: 'string',
+          enum: ['article.md', 'ideas.md', 'review.md', 'outline.md', 'teardown.md'],
+          description: '缺省 article.md'
+        }
       },
       required: ['project']
     },
@@ -253,6 +259,7 @@ export const TOOLS: ToolDef[] = [
         | 'ideas.md'
         | 'review.md'
         | 'outline.md'
+        | 'teardown.md'
       return store.readTextFile(projectArg(a), file)
     }
   },
@@ -470,6 +477,44 @@ export const TOOLS: ToolDef[] = [
       notifyChange(project, 'outline.md')
       // 大纲不是流程状态：落盘不推动选题看板状态机（与 save_review 的 reviewing 戳刻意不同）
       return { ok: true, file: 'outline.md' }
+    }
+  },
+  {
+    name: 'teardown_prompt',
+    description:
+      '取爆款拆解的提示词消息组（五维：标题钩子/开头三行/结构骨架/情绪节奏/选题受众 + 可复用套路）。传 article 拆外部文章，不传拆当前工程正文。本应用不代跑 LLM——用你自己的模型跑出报告后调 save_teardown 写入 teardown.md',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project: P.project,
+        article: { type: 'string', description: '待拆解的整篇图文原文（拆外部爆款时传；缺省读当前工程 article.md）' }
+      },
+      required: ['project']
+    },
+    handler: (a) => {
+      const project = projectArg(a)
+      const article = str(a, 'article', false) || store.readTextFile(project, 'article.md')
+      if (!article.trim()) throw new Error('article.md 为空且未传 article：没有可拆解的内容')
+      return {
+        messages: teardownMessages(article, projectSkill(project)),
+        next: '跑出报告后调 save_teardown 写入 teardown.md；用户要借骨架写新文时，把「- 骨架：」行转成大纲调 save_outline'
+      }
+    }
+  },
+  {
+    name: 'save_teardown',
+    description:
+      '把爆款拆解报告写入工程 teardown.md（配合 teardown_prompt 使用）。只写 teardown.md，绝不改写 article.md；拆解不是流程状态，不推选题看板',
+    inputSchema: {
+      type: 'object',
+      properties: { project: P.project, report: { type: 'string', description: '拆解报告 markdown 全文' } },
+      required: ['project', 'report']
+    },
+    handler: (a) => {
+      const project = projectArg(a)
+      store.writeTextFile(project, 'teardown.md', str(a, 'report').trim() + '\n')
+      notifyChange(project, 'teardown.md')
+      return { ok: true, file: 'teardown.md' }
     }
   },
   {

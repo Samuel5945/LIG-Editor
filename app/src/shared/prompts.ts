@@ -216,6 +216,31 @@ ${factRule}
   ]
 }
 
+/** 爆款拆解：一篇图文（竞品或自己的成文）→ 五维拆解报告（入 teardown.md） */
+export function teardownMessages(article: string, skill: string | null): ChatMessage[] {
+  return [
+    { role: 'system', content: systemPrompt(skill) },
+    {
+      role: 'user',
+      content: `请拆解以下图文（判断它为什么能成爆款的机制，不做泛泛夸奖），输出结构化拆解报告。
+
+<文章>
+${article.slice(0, 12000)}
+</文章>
+
+输出 markdown 报告，第一行为「# 爆款拆解」，必须包含这些二级标题分区：
+## 标题与钩子（标题用了什么公式：数字/悬念/对比/身份点名，钩子词是哪个，字数节奏）
+## 开头三行（怎么留人：冲突/反常识/利益承诺/场景代入，逐行指出手法）
+## 结构骨架（小节序列一节一行：小节名 + 该节承担的功能——铺垫/给证据/转折/收束）
+## 情绪与节奏（情绪曲线怎么走、金句放在哪、转折点在第几节、段落长短的呼吸感）
+## 选题与受众（踩中什么情绪/热点/身份认同，写给谁、替谁说话）
+## 可复用套路（3 条以内，每条一行「套路：怎么用」；最后用 "- 骨架：" 开头给一行可迁移的小节序列，照它换题就能写新文）
+
+判断不了的维度如实写「看不出」，不要编造机制。`
+    }
+  ]
+}
+
 /** 标题：全文 → 候选打分 JSON（入 project.json） */
 export function titleMessages(article: string, skill: string | null): ChatMessage[] {
   return [

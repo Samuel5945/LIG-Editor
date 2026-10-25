@@ -72,6 +72,7 @@ const GUIDE_BODIES: Record<AgentGuideTopic, () => string> = {
 6 排版：set_theme 改单个工程；整套存成分类主题用 save_theme_preset；先 list_themes 读现状，切换用 set_active_theme（字段表见 get_guide theme）
 7 自查：render_preview 把成品截图发回给你自己看——改完再截一次对比，这是唯一能确认「设了到底有没有变化」的路径
 8 审阅与标题：review_prompt → 模型 → save_review；titles_prompt → 模型 → set_titles
+8.5 爆款拆解：teardown_prompt（传 article 拆外部文章，缺省拆当前正文）→ 模型 → save_teardown 写 teardown.md；用户要借骨架写新文时把「- 骨架：」行转成大纲调 save_outline
 9 封面：render_cover_template（模板直出，中文不会糊）。只渲一张 2.35:1 主图，1:1 是从它裁出来的一段——后台只采纳横图，另外排一版方图它不认，所以构图要让右半单独裁出来也成立（focal 调取哪一段，panel 保底可读性，decor 关装饰，prompt 一步生底图）。要完全自主排版就手写 covers/*.html 再 render_cover_html
 10 交付：export_html / export_docx / export_pdf / push_draft / push_cards（前置见 get_guide publish）
 局部改动（改一句、某段压短、加序号、润色某节）用 patch_article 精准替换，别重写全文；只有整篇重写或大幅结构调整才 write_article。

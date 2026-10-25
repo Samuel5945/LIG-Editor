@@ -152,6 +152,7 @@
 ├── ideas.md          # 本项目选题脑暴记录
 ├── review.md         # 最新审阅报告（每次审阅覆盖，历史入 chat/）
 ├── outline.md        # 大纲（# 标题 + ## 小节）：向导大纲步自动带出；AI 对话「从正文反推大纲」/save_outline 写入，只写此文件不动正文
+├── teardown.md       # 爆款拆解报告（六分区：标题钩子/开头三行/结构骨架/情绪节奏/选题受众/可复用套路）：AI 对话「爆款拆解复盘」/save_teardown 写入
 ├── cards.json        # 贴图卡片组（format=xhs|wechat）；转风格前备份为 cards-<format>.json
 ├── cards/            # 逐张卡片源与产物：cards/<format>/card-N.html → card-N.png（1242×1656）
 ├── assets/           # 全部配图 PNG（AI生图/代码绘图产物/导入真图）
@@ -474,6 +475,9 @@ Agent 文件通道由此从暗箱变明箱：外部改了 `figures/*.html`，树
 - 脑暴会话编排（素材投喂/联网/选题卡/大纲/流式成文与贴图）从 BrainstormPanel **逐项随迁**向导壳层，
   拆出的 `BrainstormIdeas`/`OutlineStep` 为受控展示组件；原面板与收尾清单删除。
   步骤完成推导、占位/图片解析与行替换均在 shared 层单测覆盖
+- **爆款拆解（2026-10-25）**：AI 对话「爆款拆解复盘」预设卡 + teardown_prompt/save_teardown 工具——当前正文或粘贴的外部文章按六分区拆解
+  （标题钩子/开头三行/结构骨架/情绪节奏/选题受众/可复用套路），报告落 teardown.md；「- 骨架：」行可直接转 outline.md 借骨架写新文。
+  防幻觉口径钉进提示词：判断不了的维度如实写「看不出」
 - **大纲步增强（2026-10-25）**：条目卡片化 + 拖拽重排（标题行开条目、说明行随节走，`\n` 精确往返
   不动 AI 原文形态）；工程已有 `outline.md` 时步 2 自动带出（AI 对话「从正文反推大纲」预设卡 /
   外部 Agent `save_outline` 写入后热载，作者动过大纲则不打扰）——反推→重排→「写入当前工程」
@@ -587,9 +591,9 @@ Word（`docx`）与 PDF（`printToPDF`）落工程内 `交付/`，用于对外�
 - **本地 HTTP**：`http://127.0.0.1:随机端口` 的 `GET /health` / `GET /tools` / `POST /tool`（体为 `{name, arguments}`），端口、token、pid、版本写入 `settings\bridge.json` 供本机发现；鉴权 `Authorization: Bearer token`
 - **「一键接入」卡片**：设置页生成 Codex（`config.toml`）/ Qoder / Claude Code 的 MCP 配置片段，一键复制
 
-### 10.2 MCP 工具面（当前 47 个）
+### 10.2 MCP 工具面（当前 49 个）
 
-> **chat-tools v1（2026-09-29，滚动补记）**：内部对话副驾驶已接入工具调用——排除 5 个 `*_prompt` 与 1 个 `headlessOnly`（`render_preview`，结果是图片 base64，对话里没有看图通道，作者本来就能看编辑器）后的 **41 个工具**以 function calling 暴露给对话模型（`agent:listTools` / `agent:callTool`），三层确认（读类静默 / 写类结果卡 / 推送确认卡），供应商不支持 tools 参数时自动降级回围栏协议。规格见 `docs/superpowers/specs/2026-09-29-chat-tools-design.md`。
+> **chat-tools v1（2026-09-29，滚动补记）**：内部对话副驾驶已接入工具调用——排除 5 个 `*_prompt` 与 1 个 `headlessOnly`（`render_preview`，结果是图片 base64，对话里没有看图通道，作者本来就能看编辑器）后的 **42 个工具**以 function calling 暴露给对话模型（`agent:listTools` / `agent:callTool`），三层确认（读类静默 / 写类结果卡 / 推送确认卡），供应商不支持 tools 参数时自动降级回围栏协议。规格见 `docs/superpowers/specs/2026-09-29-chat-tools-design.md`。
 
 > **读侧对称与视觉自证（2026-10-17，滚动补记）**：补齐「IPC 已有而注册表缺」（与 `export_pdf` 同一类）与「只写不读」两类缺口，并把长口径改成按需手册。要点：
 >
@@ -606,8 +610,8 @@ Word（`docx`）与 PDF（`printToPDF`）落工程内 `交付/`，用于对外�
 工程管理   list_projects / create_project / set_project_category / get_project
            rename_project / delete_project / list_project_assets / find_duplicate_projects
 正文读写   read_article / write_article / patch_article（搜索替换式局部改；read_article 可读 ideas/review/outline）
-提示词     brainstorm_prompt / outline_prompt / article_prompt / review_prompt / titles_prompt
-落盘       save_ideas / save_review / save_outline（反推大纲，只写 outline.md）/ set_titles / set_theme / save_theme_preset
+提示词     brainstorm_prompt / outline_prompt / article_prompt / review_prompt / titles_prompt / teardown_prompt（爆款拆解）
+落盘       save_ideas / save_review / save_outline（反推大纲）/ save_teardown（爆款拆解，均只写各自文件不动正文）/ set_titles / set_theme / save_theme_preset
 选题库     list_ideas / schedule_idea（选题→立项→排期）
 主题库     list_themes / set_active_theme / delete_theme
 Skill      list_skills / save_skill / set_project_skill

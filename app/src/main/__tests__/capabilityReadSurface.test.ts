@@ -289,3 +289,32 @@ describe('save_outline（从成文反推大纲）', () => {
     expect(guide).toContain('绝不改 article.md')
   })
 })
+
+describe('爆款拆解双工具（teardown_prompt / save_teardown）', () => {
+  it('teardown_prompt：传 article 拆外部文章；不传读工程正文；两边都空如实报错', async () => {
+    const ext = await call('teardown_prompt', { project: P, article: '# 外部爆款\n\n正文' })
+    expect(ext.messages[1].content).toContain('# 外部爆款')
+    expect(ext.next).toContain('save_teardown')
+
+    await call('write_article', { project: P, content: '# 工程正文\n\n一段' })
+    const own = await call('teardown_prompt', { project: P })
+    expect(own.messages[1].content).toContain('# 工程正文')
+
+    // 正文为空且未传 article：没有可拆解的内容，报错别装成功（新建工程自带 # 标题 骨架行，先清空）
+    call('create_project', { name: P + '-空' })
+    store.writeTextFile(P + '-空', 'article.md', '')
+    expect(() => call('teardown_prompt', { project: P + '-空' })).toThrow(/没有可拆解/)
+  })
+
+  it('save_teardown 写入可回读，绝不碰 article.md 与状态机', async () => {
+    call('write_article', { project: P, content: '# 标题\n\n正文一段' })
+    const articleBefore = call('read_article', { project: P })
+    const statusBefore = store.readMeta(P).status
+
+    const r = await call('save_teardown', { project: P, report: '# 爆款拆解\n## 标题与钩子\n数字+悬念' })
+    expect(r).toEqual({ ok: true, file: 'teardown.md' })
+    expect(call('read_article', { project: P, file: 'teardown.md' })).toBe('# 爆款拆解\n## 标题与钩子\n数字+悬念\n')
+    expect(call('read_article', { project: P })).toBe(articleBefore)
+    expect(store.readMeta(P).status).toBe(statusBefore)
+  })
+})

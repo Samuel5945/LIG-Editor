@@ -7,7 +7,8 @@ import {
   coverHtmlBriefMessages,
   coverHtmlMessages,
   coverPromptMessages,
-  freeChatSystemPrompt
+  freeChatSystemPrompt,
+  teardownMessages
 } from '../prompts'
 
 describe('chatContext', () => {
@@ -119,5 +120,28 @@ describe('cardsCaptionMessages', () => {
     const wechat = cardsCaptionMessages('x', 'wechat', null)[1].content
     expect(xhs).toContain('8-10 个')
     expect(wechat).toContain('3-5 个')
+  })
+})
+
+describe('teardownMessages（爆款拆解）', () => {
+  const msgs = teardownMessages('# 三万块买什么车\n\n正文……', '拆解风格 Skill 全文')
+
+  it('文章进 user 消息、Skill 进 system；报告分区与骨架行约定齐全', () => {
+    expect(msgs[0].role).toBe('system')
+    expect(msgs[0].content).toContain('拆解风格 Skill 全文')
+    expect(msgs[1].content).toContain('# 三万块买什么车')
+    for (const section of ['标题与钩子', '开头三行', '结构骨架', '情绪与节奏', '选题与受众', '可复用套路'])
+      expect(msgs[1].content).toContain(section)
+    // 骨架行是 save_outline 转换闭环的锚点，写法必须稳定
+    expect(msgs[1].content).toContain('- 骨架：')
+  })
+
+  it('防幻觉口径在：判断不了的维度如实写「看不出」', () => {
+    expect(msgs[1].content).toContain('看不出')
+  })
+
+  it('超长文章截到 12000 字（拆机制不需要全文，控上下文）', () => {
+    const long = teardownMessages('x'.repeat(20000), null)
+    expect((long[1].content as string).length).toBeLessThan(14000)
   })
 })
