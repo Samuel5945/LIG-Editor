@@ -24,6 +24,11 @@
 
    **走脚本，别手敲**（`app/scripts/ship-release.mjs` 把下面所有约束变成预检，不通过就不碰远端）：
 
+   > **本机免 `gh auth login` 的小技巧（2026-10-25 起）**：git 凭据管理器里存的令牌带 `repo` 权限，
+   > 直接注入即可，无需再走浏览器登录——
+   > `GH_TOKEN=$(printf "protocol=https\nhost=github.com\n\n" | git credential fill | grep ^password= | cut -d= -f2-) node app/scripts/ship-release.mjs <版本>`
+   > （gh 得在 PATH 里；本机 gh 是 winget 用户级安装。）
+
    ```bash
    node app/scripts/ship-release.mjs <版本> --dry-run   # 先演一遍，看预检与将要执行的命令
    node app/scripts/ship-release.mjs <版本>             # 建 tag + 发 release + 传附件，一条命令完成
