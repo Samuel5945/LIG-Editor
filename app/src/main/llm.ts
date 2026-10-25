@@ -78,6 +78,8 @@ export function openaiThinkingParams(
   const req = options?.thinking
   const on = req === undefined ? cap.reasoning.defaultOn : req !== false
   if (cap.reasoning.openaiParam === 'enable_thinking') return { enable_thinking: on }
+  // deepseek v3.1+ / glm-4.5+ / kimi k2+ 的思考字段（OpenAI 兼容面）：对象形态，只有开/关，档位降级为开
+  if (cap.reasoning.openaiParam === 'thinking_type') return { thinking: { type: on ? 'enabled' : 'disabled' } }
   const level = req === 'low' ? 'low' : req === 'high' ? 'high' : 'medium'
   return on ? { reasoning_effort: level } : {}
 }

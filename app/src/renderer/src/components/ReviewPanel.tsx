@@ -34,6 +34,9 @@ interface Section {
 }
 
 const QUOTE_RE = /^>\s*原文[:：]\s*(.+)$/
+/** 有正文标准（与 wizardProgress 同口径）：非空行 ≥2。新建工程的骨架（一行 # 标题）不算——
+ *  早先只判 trim 非空，骨架也放行，模型对着空壳审出「无正文可审」桩报告落盘，状态便成了「已有报告」 */
+const hasBody = (t: string): boolean => t.split(/\r?\n/).filter((l) => l.trim()).length > 1
 const fileOf = (m: PanelMode): 'review.md' | 'teardown.md' => (m === 'review' ? 'review.md' : 'teardown.md')
 
 /**
@@ -131,8 +134,8 @@ export default function ReviewPanel({
     async (sel?: string) => {
       if (streaming) return
       const current = articleRef.current
-      if (!sel?.trim() && !current.trim()) {
-        onToast('正文为空，先写点内容再审阅')
+      if (!sel?.trim() && !hasBody(current)) {
+        onToast('正文为空，先写点内容再审阅（只有标题的骨架不算）')
         return
       }
       setError(null)
@@ -186,8 +189,9 @@ export default function ReviewPanel({
       if (streaming) return
       const external = Boolean(opts.article?.trim())
       const target = (external ? opts.article : opts.sel?.trim() ? opts.sel : articleRef.current) ?? ''
-      if (!target.trim()) {
-        onToast('正文为空，先写点内容或粘贴待拆的文章')
+      const targetHasBody = external || Boolean(opts.sel?.trim()) || hasBody(target)
+      if (!target.trim() || !targetHasBody) {
+        onToast('正文为空，先写点内容或粘贴待拆的文章（只有标题的骨架不算）')
         return
       }
       setError(null)

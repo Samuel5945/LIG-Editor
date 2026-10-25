@@ -22,10 +22,11 @@ export interface ModelCapability {
      * OpenAI 兼容路径的思考控制参数：
      * - 'enable_thinking'：true/false 双向可开关（qwen3.5/3.6/3.7 系、qwen-plus/flash、qwen3-vl-plus）
      * - 'reasoning_effort'：开 = 发 effort 档位，关 = 不发参数（qwen3.8 系默认恒思考，无关闭档）
-     * - 缺省 = 服务端默认（商汤 deepseek/kimi 系默认开思考，不提供关闭参数）
+     * - 'thinking_type'：deepseek v4 / glm-5 / kimi-k3 系——thinking:{type:enabled|disabled} 对象形态，档位降级为开
+     * - 缺省 = 服务端默认（不主动控制）
      * Anthropic 兼容路径统一走 thinking 块，不看此字段
      */
-    openaiParam?: 'enable_thinking' | 'reasoning_effort'
+    openaiParam?: 'enable_thinking' | 'reasoning_effort' | 'thinking_type'
   }
   /** 是否支持原生工具调用（function calling / tool use） */
   supportsTools?: boolean
@@ -41,9 +42,9 @@ interface CatalogEntry {
 
 const SENSENOVA_MODELS: CatalogEntry[] = [
   // deepseek 系一律按 v4 家族声明（实测列表含 deepseek-flash / deepseek-v4-flash / deepseek-v4-pro / deepseek-v4.1-flash）
-  { match: /^deepseek/, cap: { contextWindow: 1_048_576, maxOutput: 65_536, inputModalities: ['text'], reasoning: { defaultOn: true }, supportsTools: true } },
-  { match: /^kimi-k3/, cap: { contextWindow: 1_000_000, maxOutput: 131_072, inputModalities: ['text', 'image'], reasoning: { defaultOn: true }, supportsTools: true } },
-  { match: /^glm-5/, cap: { contextWindow: 1_000_000, maxOutput: 65_536, inputModalities: ['text'], reasoning: { defaultOn: false }, supportsTools: true } },
+  { match: /^deepseek/, cap: { contextWindow: 1_048_576, maxOutput: 65_536, inputModalities: ['text'], reasoning: { defaultOn: true, openaiParam: 'thinking_type' }, supportsTools: true } },
+  { match: /^kimi-k3/, cap: { contextWindow: 1_000_000, maxOutput: 131_072, inputModalities: ['text', 'image'], reasoning: { defaultOn: true, openaiParam: 'thinking_type' }, supportsTools: true } },
+  { match: /^glm-5/, cap: { contextWindow: 1_000_000, maxOutput: 65_536, inputModalities: ['text'], reasoning: { defaultOn: false, openaiParam: 'thinking_type' }, supportsTools: true } },
   { match: /^sensenova-6\.8-flash-lite/, cap: { contextWindow: 262_144, maxOutput: 65_536, inputModalities: ['text', 'image'], supportsTools: true } },
   { match: /^sensenova-u1(?:\.5-lite|-fast)$/, cap: { outputImage: true } }
 ]
@@ -71,7 +72,7 @@ function tableForProvider(baseUrl: string): CatalogEntry[] {
 /** 未知供应商时按模型名前缀跨表兜底（qwen/deepseek/kimi 系模型能力大体随模型本体） */
 function tableForModelId(modelId: string): CatalogEntry[] | null {
   if (/^qwen/.test(modelId)) return DASHSCOPE_MODELS
-  if (/^(?:deepseek|kimi|sensenova)/.test(modelId)) return SENSENOVA_MODELS
+  if (/^(?:deepseek|kimi|sensenova|glm)/.test(modelId)) return SENSENOVA_MODELS
   return null
 }
 

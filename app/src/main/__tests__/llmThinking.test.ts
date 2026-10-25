@@ -33,8 +33,19 @@ describe('openaiThinkingParams · 档位映射', () => {
     expect(openaiThinkingParams(p, {})).toEqual({ enable_thinking: true })
   })
 
-  it('无 openaiParam 声明的思考模型（deepseek/glm-5）：不发思考参数，保持供应商默认', () => {
-    expect(openaiThinkingParams(provider('deepseek-v4-flash'), { thinking: 'high' })).toEqual({})
-    expect(openaiThinkingParams(provider('glm-5.2'), { thinking: 'low' })).toEqual({})
+  it('无 reasoning 声明的模型（qwen3-max）：不发思考参数，保持供应商默认', () => {
+    expect(openaiThinkingParams(provider('qwen3-max'), { thinking: 'high' })).toEqual({})
+  })
+})
+
+describe('openaiThinkingParams · thinking_type 协议（deepseek / glm-5 / kimi-k3）', () => {
+  it('开 = thinking:{type:enabled}，关 = 显式 disabled；档位降级为开', () => {
+    const p = provider('deepseek-v4-flash')
+    expect(openaiThinkingParams(p, { thinking: 'high' })).toEqual({ thinking: { type: 'enabled' } })
+    expect(openaiThinkingParams(p, { thinking: 'low' })).toEqual({ thinking: { type: 'enabled' } })
+    expect(openaiThinkingParams(p, { thinking: false })).toEqual({ thinking: { type: 'disabled' } })
+    expect(openaiThinkingParams(p, {})).toEqual({ thinking: { type: 'enabled' } }) // 目录 defaultOn=true
+    expect(openaiThinkingParams(provider('glm-5.2'), { thinking: false })).toEqual({ thinking: { type: 'disabled' } })
+    expect(openaiThinkingParams(provider('kimi-k3-flash'), { thinking: 'high' })).toEqual({ thinking: { type: 'enabled' } })
   })
 })

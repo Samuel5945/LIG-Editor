@@ -955,7 +955,7 @@ export default function ChatPanel({
                 onClick={onGoBrainstorm}
                 className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11.5px] text-ink-dim hover:bg-panel-3 hover:text-ink"
               >
-                <Icon name="brain" size={12} />脑暴创作 · 出选题和正文
+                <Icon name="brain" size={12} />去脑暴 · 出选题和正文
               </button>
               <button
                 onClick={onGoReview}
@@ -963,7 +963,7 @@ export default function ChatPanel({
                 title={project ? undefined : '先打开工程'}
                 className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11.5px] text-ink-dim hover:bg-panel-3 hover:text-ink disabled:opacity-40"
               >
-                <Icon name="search" size={12} />审阅 / 爆款拆解 · 分析面板
+                <Icon name="search" size={12} />去审阅 · 审阅与爆款拆解
               </button>
             </div>
           </div>
