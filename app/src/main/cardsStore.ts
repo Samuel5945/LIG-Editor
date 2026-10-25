@@ -52,7 +52,11 @@ export async function renderCard(project: string, index: number): Promise<string
   let renderedZoom: number | undefined
   if (card.mode === 'ai' && card.aiImage) {
     // AI 整卡成图：不走排版模板，直接把成图拷贝为产物
-    base64 = readFileSync(join(projectDir(project), card.aiImage)).toString('base64')
+    const aiAbs = join(projectDir(project), card.aiImage)
+    // 源图可能被手动清理或从未生成完：裸 ENOENT 会原样透传到 toast/Agent，给可执行的指引
+    if (!existsSync(aiAbs))
+      throw new Error(`AI 整卡图不在：${card.aiImage}（重新生成整卡成图，或把该卡切回排版模式渲染）`)
+    base64 = readFileSync(aiAbs).toString('base64')
   } else {
     const html = cardHtml(card, {
       format: deck.format,
