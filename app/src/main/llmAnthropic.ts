@@ -102,8 +102,10 @@ export function toAnthropicBody(
   }
 
   // 商汤等思考模型默认就输出 thinking 块：思考开关只对声明了 reasoning 的模型下发——
-  // 开 = enabled（预算按网关上限 1024），关 = 显式 disabled（实测能真正关掉默认思考）；无思考能力的模型不发该字段
-  const thinkingWanted = options?.thinking ?? cap.reasoning?.defaultOn ?? false
+  // 开 = enabled（预算按网关上限 1024），关 = 显式 disabled（实测能真正关掉默认思考）；无思考能力的模型不发该字段。
+  // 档位（low/high）在此协议不生效：1024 既是商汤网关上限也是标准 Anthropic 的最小预算，没有上下探的空间，
+  // 级别只对 OpenAI 兼容的 reasoning_effort 协议有意义（见 llm.ts openaiThinkingParams）
+  const thinkingWanted = (options?.thinking ?? cap.reasoning?.defaultOn ?? false) !== false
   return {
     model: provider.textModel,
     ...(systemParts.length ? { system: systemParts.join('\n\n') } : {}),

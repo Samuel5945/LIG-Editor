@@ -67,12 +67,19 @@ function extractReply(body: string): string {
  * - enable_thinking：双向开关（qwen3.5/3.6/3.7 系、qwen-plus/flash）
  * - reasoning_effort：开=发档位，关=不发（qwen3.8 系恒思考，无关闭档）
  * - 无参数声明（商汤 deepseek/kimi 系）：服务端默认开思考，不发 */
-function openaiThinkingParams(provider: ProviderConfig, options?: ChatStartOptions): Record<string, unknown> {
+/** 思考参数按协议下发：enable_thinking 只吃开关（级别降级为开）；reasoning_effort 吃档位（low/high，
+ *  true 与跟随默认落 medium——即该协议没有显式选择时的现状）。导出供单测钉映射矩阵 */
+export function openaiThinkingParams(
+  provider: ProviderConfig,
+  options?: ChatStartOptions
+): Record<string, unknown> {
   const cap = modelCapability(provider, provider.textModel)
   if (!cap.reasoning?.openaiParam) return {}
-  const on = options?.thinking ?? cap.reasoning.defaultOn
+  const req = options?.thinking
+  const on = req === undefined ? cap.reasoning.defaultOn : req !== false
   if (cap.reasoning.openaiParam === 'enable_thinking') return { enable_thinking: on }
-  return on ? { reasoning_effort: 'medium' } : {}
+  const level = req === 'low' ? 'low' : req === 'high' ? 'high' : 'medium'
+  return on ? { reasoning_effort: level } : {}
 }
 
 // ---- 上下文自动压缩 ----

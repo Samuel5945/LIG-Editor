@@ -46,3 +46,21 @@ describe('ReasoningBlock（思考过程展示）', () => {
     expect(container.firstElementChild).toBeNull()
   })
 })
+
+describe('ReasoningBlock · 思考档位标识', () => {
+  it('high=「深度思考」、low=「快速思考」，流式与完成两个形态都带档位', () => {
+    const { rerender } = render(h(ReasoningBlock, { text: '推理', streaming: true, level: 'high' }))
+    expect(screen.getByText('深度思考中')).toBeTruthy()
+    rerender(h(ReasoningBlock, { text: '推理完成稿', streaming: false, level: 'high' }))
+    expect(screen.getByText('深度思考')).toBeTruthy()
+
+    rerender(h(ReasoningBlock, { text: '略想', streaming: false, level: 'low' }))
+    expect(screen.getByText('快速思考')).toBeTruthy()
+  })
+
+  it('不传 level 保持通用「思考过程」（跟随默认/其他面板不标档）', () => {
+    render(h(ReasoningBlock, { text: '推理', streaming: false }))
+    expect(screen.getByText('思考过程')).toBeTruthy()
+    expect(screen.queryByText('深度思考')).toBeNull()
+  })
+})

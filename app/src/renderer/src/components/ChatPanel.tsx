@@ -291,8 +291,9 @@ export default function ChatPanel({
   const sessionCreatedRef = useRef<string | null>(null)
   // 当前文本供应商：思考开关/读图 gating/能力徽章/上下文裁剪都按它的模型目录声明走
   const [textProvider, setTextProvider] = useState<{ name: string; baseUrl: string; textModel: string } | null>(null)
-  // 思考开关：null = 跟随模型目录默认；仅模型声明了思考能力时显示
-  const [thinkOn, setThinkOn] = useState<boolean | null>(null)
+  // 思考档位：null = 跟随模型目录默认；false = 关；'low' = 快速；'high' = 深度。仅模型声明了思考能力时显示。
+  // 档位只对 reasoning_effort 协议真正生效（enable_thinking 协议降级为开关，Anthropic 预算无空间）
+  const [thinkLevel, setThinkLevel] = useState<boolean | 'low' | 'high' | null>(null)
   // 当前回复的流式思考过程（完成后随消息落盘，历史渲染走 m.reasoning）
   const [streamReasoning, setStreamReasoning] = useState('')
   const cap: ModelCapability = textProvider ? modelCapability(textProvider, textProvider.textModel) : {}
@@ -680,7 +681,7 @@ export default function ChatPanel({
         apiUser
       ]
       // 思考开关（null=模型目录默认）与历史裁剪：超窗口的旧消息按 user 边界成段丢弃
-      const thinkingOn = thinkOn ?? cap.reasoning?.defaultOn ?? false
+      const thinkingReq = thinkLevel === null ? undefined : thinkLevel
       const history = [...trimHistory(api, cap)]
       // 工具循环（chat-tools v1）：读类静默 / 写类结果卡 / 推送确认卡；最多 TOOL_ROUNDS_MAX 轮
       const bubbleIdx = display.length
@@ -727,7 +728,7 @@ export default function ChatPanel({
           const ask = (withTools: boolean): Promise<ChatRoundResult> => {
             const r = chatOnceWithTools(history, {
               tools: withTools ? native : undefined,
-              thinking: thinkingOn,
+              thinking: thinkingReq,
               onDelta,
               onReasoning
             })
@@ -824,7 +825,7 @@ export default function ChatPanel({
         const note = notes.length ? `${lastText.trim() ? '\n\n' : ''}${notes.join('\n')}` : ''
         const all = [
           ...display,
-          { role: 'assistant', content: lastText + note, ...(lastReasoning ? { reasoning: lastReasoning } : {}) } as ChatMessage
+          { role: 'assistant', content: lastText + note, ...(lastReasoning ? { reasoning: lastReasoning } : {}), ...(thinkLevel === 'low' || thinkLevel === 'high' ? { thinkingLevel: thinkLevel } : {}) } as ChatMessage
         ]
         setMessages(all)
         await persist(all)
@@ -841,7 +842,7 @@ export default function ChatPanel({
           try {
             await persist([
               ...display,
-              { role: 'assistant', content: lastText, ...(lastReasoning ? { reasoning: lastReasoning } : {}) } as ChatMessage
+              { role: 'assistant', content: lastText, ...(lastReasoning ? { reasoning: lastReasoning } : {}), ...(thinkLevel === 'low' || thinkLevel === 'high' ? { thinkingLevel: thinkLevel } : {}) } as ChatMessage
             ])
           } catch {
             // 落盘失败不掩盖原错误
@@ -852,7 +853,7 @@ export default function ChatPanel({
         abortRef.current = null
       }
     },
-    [input, streaming, messages, skill, webOn, onToast, persist, resolveCard, buildContext, attachImages, attachDocs, format, onApplyAccent, onApplyArticleAccent, onCustomThemesChanged, cap, thinkOn]
+    [input, streaming, messages, skill, webOn, onToast, persist, resolveCard, buildContext, attachImages, attachDocs, format, onApplyAccent, onApplyArticleAccent, onCustomThemesChanged, cap, thinkLevel]
   )
 
   const abort = useCallback(() => abortRef.current?.(), [])
@@ -975,6 +976,7 @@ export default function ChatPanel({
                   <ReasoningBlock
                     text={m.reasoning || streamReasoning}
                     streaming={streaming && i === messages.length - 1 && !m.reasoning}
+                    level={streaming && i === messages.length - 1 ? (thinkLevel === 'low' || thinkLevel === 'high' ? thinkLevel : undefined) : m.thinkingLevel}
                   />
                 )}
               <div
@@ -1277,12 +1279,14 @@ export default function ChatPanel({
             {cap.reasoning && (
               <ToolPill
                 compact={pillsRow.narrow}
-                on={thinkOn ?? cap.reasoning.defaultOn}
+                on={(thinkLevel ?? cap.reasoning.defaultOn) !== false}
                 icon="brain"
-                onClick={() => setThinkOn(!(thinkOn ?? cap.reasoning!.defaultOn))}
-                title={`模型思考：${(thinkOn ?? cap.reasoning.defaultOn) ? '已开启' : '已关闭'}，开启后模型先推理再回答，耗时略增`}
+                onClick={() =>
+                  setThinkLevel((v) => (v === null ? 'high' : v === 'high' ? 'low' : v === 'low' ? false : null))
+                }
+                title={`模型思考档位：${thinkLevel === null ? '跟随模型默认' : thinkLevel === false ? '已关闭' : thinkLevel === 'high' ? '深度' : '快速'}——点击循环 跟随→深度→快速→关闭；档位仅对支持 effort 的模型生效`}
               >
-                思考
+                思考·{thinkLevel === null ? '跟随' : thinkLevel === false ? '关' : thinkLevel === 'high' ? '深度' : '快速'}
               </ToolPill>
             )}
           </div>

@@ -77,7 +77,7 @@ export interface ChatRoundResult {
  *  assistant(tool_calls) + tool 结果追加进消息序列再发下一轮（循环逻辑在 ChatPanel） */
 export function chatOnceWithTools(
   messages: ChatMessage[],
-  options?: { tools?: ChatStartOptions['tools']; thinking?: boolean; onDelta?: (full: string, delta: string) => void; onReasoning?: (full: string, delta: string) => void }
+  options?: { tools?: ChatStartOptions['tools']; thinking?: ChatStartOptions['thinking']; onDelta?: (full: string, delta: string) => void; onReasoning?: (full: string, delta: string) => void }
 ): { promise: Promise<ChatRoundResult>; abort: () => void } {
   const requestId = crypto.randomUUID()
   let full = ''

@@ -7,14 +7,17 @@ import { Icon } from '../ui/Icon'
  * - 流式期间自动展开、跟随滚到最新一行——思考模型「先想后答」的等待期里，思考过程就是唯一的进度；
  * - 流结束后自动收起成一行摘要（字数可感知思考量），点开随时回看；
  * - 用户手动开关过就以用户为准，此后不再自动展开/收起（生成→完成之间不打断阅读）。
+ * level 标思考档位（深度/快速）：由发送方显式选择时传入，跟随默认则不标。
  */
 export function ReasoningBlock({
   text,
   streaming = false,
+  level,
   className = ''
 }: {
   text: string
   streaming?: boolean
+  level?: 'low' | 'high'
   className?: string
 }): ReactElement | null {
   const [userOpen, setUserOpen] = useState<boolean | null>(null)
@@ -26,6 +29,17 @@ export function ReasoningBlock({
   }, [text, streaming, open])
 
   if (!text.trim()) return null
+  const label = streaming
+    ? level === 'high'
+      ? '深度思考中'
+      : level === 'low'
+        ? '快速思考中'
+        : '思考中'
+    : level === 'high'
+      ? '深度思考'
+      : level === 'low'
+        ? '快速思考'
+        : '思考过程'
   return (
     <div
       className={`max-w-[92%] rounded-lg border border-panel-3 bg-panel-2 px-2.5 py-1.5 text-[11px] text-ink-dim ${className}`}
@@ -36,7 +50,7 @@ export function ReasoningBlock({
         aria-expanded={open}
       >
         {streaming && <Icon name="spinner" size={12} className="animate-spin shrink-0 text-accent" />}
-        <span className="shrink-0 font-medium">{streaming ? '思考中' : '思考过程'}</span>
+        <span className="shrink-0 font-medium">{label}</span>
         <span className="shrink-0 opacity-70">· {text.length} 字</span>
         <Icon name={open ? 'chevronDown' : 'chevronRight'} size={11} className="ml-auto shrink-0" />
       </button>

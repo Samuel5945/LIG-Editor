@@ -446,10 +446,13 @@ export interface ChatToolSchema {
   function: { name: string; description: string; parameters: unknown }
 }
 
-/** 一次流式对话的请求选项：tools 非空走 function calling；thinking 控制思考开关（缺省按模型目录默认） */
+/** 思考级别：low=快速（effort:low / 轻预算）、high=深度（effort:high）。布尔仍可用（true=默认中档，false=关） */
+export type ThinkingLevel = 'low' | 'high'
+
+/** 一次流式对话的请求选项：tools 非空走 function calling；thinking 控制思考（缺省按模型目录默认，可传级别） */
 export interface ChatStartOptions {
   tools?: ChatToolSchema[]
-  thinking?: boolean
+  thinking?: boolean | ThinkingLevel
 }
 
 export interface ChatMessage {
@@ -458,6 +461,8 @@ export interface ChatMessage {
   content: string | ContentPart[]
   /** assistant 消息的思考过程（reasoning/reasoning_content/thinking_delta 归一），随会话落盘 */
   reasoning?: string
+  /** 生成该条回复时用户显式选的思考档位（跟随/关闭不记）：历史里的思考块据此标「深度/快速思考」 */
+  thinkingLevel?: ThinkingLevel
   /** assistant 消息携带的工具调用；对应结果以 role:'tool' 消息回填（chat-tools v1） */
   tool_calls?: { id: string; type: 'function'; function: { name: string; arguments: string } }[]
   /** role='tool' 消息对应的 tool_calls 项 id */
