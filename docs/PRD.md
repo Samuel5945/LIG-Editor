@@ -1,6 +1,6 @@
 # PRD：立格编辑器（本地优先的公众号图文创作工作台，原名图文编辑器 tuwen-editor）
 
-- 版本：**v1.4（2026-10-07，随 v0.9.0 发布转正）**
+- 版本：**v1.5（2026-10-25，随 v0.9.1 发布转正）**
 - 状态：一期已全部交付，本文转为**随实现滚动维护的现状文档**；下一步计划见 §11
 - 工作区：仓库目录名保留历史名 `tuwen-editor`（开发机本地路径各不相同，勿在文档/配置里写死绝对路径），应用标识为 `LIG-Editor` / 立格编辑器
 - 参考范式：[Nomi](https://github.com/aqm857886159/Nomi)（本地优先 + AI 副驾驶 + 无头能力核），本产品为其"图文版"适配
@@ -34,6 +34,14 @@
 > 4. **§7.12 主题库 v2**：主题独立命名、归属分类，一个分类可挂多套，「分类当前用哪套」由 active 指针决定（v1 旧格式读取时自动迁移落盘）；预览改为跳导出步看真实排版，预览主题显式字段压过工程微调
 > 5. **§6 预装 Skill 2 → 6 个**（按创作向导七步配齐）+ GitHub 合集仓库探测导入；**§7.10** 分类置顶偏好与分类行右键菜单；分类彻底删除留痕（`purgedCategories.json`）
 > 6. **§10.2** `set_theme` / `save_theme_preset` 键清单跟到 40 项，accent 宽进（rgb()/rgba()/8 位 hex/渐变串自动转换，回报实际生效色）
+
+> **v1.4 → v1.5 变更摘要**（2026-10-25，随 v0.9.1 发布转正）
+> 1. **§7.5 封面重做**：只渲 2.35:1 主图（超采样出图更锐），1:1 方图是主图按 focal 的裁剪而非第二版设计稿——公众号后台不认第二张图；六套版式各有一套方图取景；新增 `render_cover_html` 手写 HTML 直渲路径（不重生成源文件、不碰 project.json）
+> 2. **§7.7 贴图卡组**：大图预览（←/→ 切卡、Esc 关闭）；整组渲染进度横幅可中途停止（剩余卡片留待单张补渲）；批量要点序号 / 深色底反白开关；复制卡片；生图真取消（reqId + AbortController 注册表，超时与用户取消合并中断，UI 与工具面贯通）；推送草稿入口按平台显隐；溢出预警改页内实测「已缩字 N%」
+> 3. **§10.2 工具面 27 → 46**：读侧对称（每个写入口配读出口）、`render_preview` 视觉自证回路（`image_base64` 由代理拆成 MCP image 块）、`get_guide` 长口径手册化、破坏性操作 `confirm:true` 门槛、协议收口（300s 上限/批量请求/版本对齐）；bridge 客户端断开（取消调用 / 代理超时）即中止在途生图
+> 4. **修复**：readMeta 白名单补图片四项排版字段——`set_theme imgStyle/imgFrame/imgGap/captionAlign` 此前实际不生效（规格见 docs/superpowers/specs/2026-10-20-readmeta-image-fields-fix.md）
+> 5. **稳定性**：渲染层 ErrorBoundary（组件崩溃换可操作错误页，不再白屏）、`chatOnce` 600s 看门狗与 invoke 异常透传；renderer 交互测试破冰（jsdom 桩扮演主进程侧，贴图渲染队列与对话工具循环各有状态机测试）；移除零引用的 `@modelcontextprotocol/sdk` 与 `zod`（-69 包）
+> 6. **底座**：Electron 31 → 44.9.3（31 已出官方支持线，Chromium 安全线补齐）；clipboard API 随迁异步 ClipboardItem 制
 
 ---
 
@@ -88,12 +96,12 @@
 
 ### 3.1 技术栈
 
-- **Electron 31 + React 18 + Vite 5 + Tailwind CSS 3**（与 Nomi 同源，Agent 修改源码最熟悉）
+- **Electron 44 + React 18 + Vite 5 + Tailwind CSS 3**（与 Nomi 同源，Agent 修改源码最熟悉）
 - 富文本编辑器：**TipTap（ProseMirror）**
 - 图像处理：**sharp**（裁切/合成）+ 自研 JS 抠图算法（白底反预乘/形状掩码/拟合圆，移植自已验证的 Python 实现）
 - 代码绘图渲染：Electron **offscreen BrowserWindow**（HTML→PNG，替代外部 headless Edge 命令行）
 - 交稿文档：`docx`（Word）+ `printToPDF`（PDF）；PDF 预览 `pdfjs-dist`
-- MCP：`@modelcontextprotocol/sdk`（stdio）+ 内置 HTTP server（127.0.0.1 随机端口，写入锁文件供发现）
+- MCP：自研 stdio 代理（`resources/mcp-proxy.cjs`，原生 http 实现）+ 内置 HTTP server（127.0.0.1 随机端口，写入锁文件供发现）
 - 新手引导：`driver.js`
 - 测试：`vitest`（18 文件 / 317 例）——以 `src/shared/` 的纯函数层为主，主进程 store 也可测
   （`app/vitest.config.ts` 提供 `@shared` 别名，测试内 mock `electron` 的 safeStorage 与 `./paths` 临时目录）

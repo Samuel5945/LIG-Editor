@@ -116,4 +116,4 @@ for (const k of THEME_OVERRIDE_KEYS) expect(m[k], `字段 ${k} 未在 readMeta �
 - [x] 测试种子补上述四项 + `pageBg` / `h1Bg`（`projectMetaVisualPassthrough.test.ts` / `capabilityReadSurface.test.ts`）
 - [x] 确认改完种子后测试先红后绿
 - [x] 重新构建（`npm run build`），验证 MCP `set_theme imgStyle=fullwidth` 在导出里生效
-- [ ] 发布 0.9.1 时在 release notes 里提一句：图片四项排版覆盖此前不生效
+- [x] 发布 0.9.1 时在 release notes 里提一句：图片四项排版覆盖此前不生效（见 docs/site/lig-editor-update.json 第 4 条）

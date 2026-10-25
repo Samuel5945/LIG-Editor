@@ -54,12 +54,12 @@
 
 | 层 | 技术 |
 |---|---|
-| 桌面框架 | Electron 31 |
+| 桌面框架 | Electron 44 |
 | 前端 | React 18 + Vite 5 + Tailwind CSS 3 |
 | 富文本编辑器 | TipTap（ProseMirror） |
 | 图像处理 | sharp + 自研抠图算法 |
 | 代码绘图 | Electron offscreen BrowserWindow（HTML→PNG） |
-| MCP | `@modelcontextprotocol/sdk`（stdio + 本地 HTTP） |
+| MCP | 自研 stdio 代理（mcp-proxy.cjs）+ 本地 HTTP bridge |
 | 文件监听 | chokidar（工程文件热载） |
 
 ## 开发
