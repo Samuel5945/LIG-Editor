@@ -9,8 +9,10 @@ appId: com.lig.editor
 productName: 立格编辑器
 directories:
   # NSIS 要求纯 ASCII 输出路径（中文路径会被 GBK 转码搞乱 Can't open output file），
-  # 本地工程目录名 tuwen-editor 不变（改名只动应用标识），输出仍放工程根的 releases
-  output: C:/Users/PC/Desktop/tuwen-editor/releases
+  # 输出固定放工程根的 releases/——相对路径，换机器/换用户名不再失效；
+  # 若工程本身落在中文路径下（如 C:/Users/航/...）NSIS 仍可能报错，
+  # 兜底：electron-builder --config.directories.output=C:/lig-releases 指到纯 ASCII 目录
+  output: ../releases
 files:
   - out/**
   - package.json

@@ -2,7 +2,7 @@
 
 - 版本：**v1.4（2026-10-07，随 v0.9.0 发布转正）**
 - 状态：一期已全部交付，本文转为**随实现滚动维护的现状文档**；下一步计划见 §11
-- 工作区：`C:\Users\PC\Desktop\tuwen-editor`（仓库目录名保留历史名 `tuwen-editor`，应用标识为 `LIG-Editor` / 立格编辑器）
+- 工作区：仓库目录名保留历史名 `tuwen-editor`（开发机本地路径各不相同，勿在文档/配置里写死绝对路径），应用标识为 `LIG-Editor` / 立格编辑器
 - 参考范式：[Nomi](https://github.com/aqm857886159/Nomi)（本地优先 + AI 副驾驶 + 无头能力核），本产品为其"图文版"适配
 
 > **v1.0 → v1.1 变更摘要**（v1.0 定稿于 2026-07-28，此后实现推进到内部里程碑 M13，本文按实际代码全面校正）
@@ -137,7 +137,7 @@
 每篇图文 = 一个工程目录，**article.md 为正文唯一事实源**。工程按分类分子文件夹存放（`workspace/<分类>/<工程>/`）：
 
 ```
-C:\Users\PC\Desktop\tuwen-editor\workspace\<分类>\<项目名>\
+<工程根>\workspace\<分类>\<项目名>\
 ├── project.json      # 元信息（见下）
 ├── article.md        # 正文事实源：Markdown + 图片引用 + 图注语法
 ├── article.html      # 导出物：内联样式 HTML（由导出动作生成，勿手改）
@@ -573,9 +573,9 @@ Word（`docx`）与 PDF（`printToPDF`）落工程内 `交付/`，用于对外�
 - **本地 HTTP**：`http://127.0.0.1:随机端口` 的 `GET /health` / `GET /tools` / `POST /tool`（体为 `{name, arguments}`），端口、token、pid、版本写入 `settings\bridge.json` 供本机发现；鉴权 `Authorization: Bearer token`
 - **「一键接入」卡片**：设置页生成 Codex（`config.toml`）/ Qoder / Claude Code 的 MCP 配置片段，一键复制
 
-### 10.2 MCP 工具面（当前 45 个）
+### 10.2 MCP 工具面（当前 46 个）
 
-> **chat-tools v1（2026-09-29，滚动补记）**：内部对话副驾驶已接入工具调用——排除 5 个 `*_prompt` 与 1 个 `headlessOnly`（`render_preview`，结果是图片 base64，对话里没有看图通道，作者本来就能看编辑器）后的 **39 个工具**以 function calling 暴露给对话模型（`agent:listTools` / `agent:callTool`），三层确认（读类静默 / 写类结果卡 / 推送确认卡），供应商不支持 tools 参数时自动降级回围栏协议。规格见 `docs/superpowers/specs/2026-09-29-chat-tools-design.md`。
+> **chat-tools v1（2026-09-29，滚动补记）**：内部对话副驾驶已接入工具调用——排除 5 个 `*_prompt` 与 1 个 `headlessOnly`（`render_preview`，结果是图片 base64，对话里没有看图通道，作者本来就能看编辑器）后的 **40 个工具**以 function calling 暴露给对话模型（`agent:listTools` / `agent:callTool`），三层确认（读类静默 / 写类结果卡 / 推送确认卡），供应商不支持 tools 参数时自动降级回围栏协议。规格见 `docs/superpowers/specs/2026-09-29-chat-tools-design.md`。
 
 > **读侧对称与视觉自证（2026-10-17，滚动补记）**：补齐「IPC 已有而注册表缺」（与 `export_pdf` 同一类）与「只写不读」两类缺口，并把长口径改成按需手册。要点：
 >

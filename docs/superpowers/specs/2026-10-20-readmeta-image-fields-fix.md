@@ -112,8 +112,8 @@ for (const k of THEME_OVERRIDE_KEYS) expect(m[k], `字段 ${k} 未在 readMeta �
 
 ## 待办
 
-- [ ] `readMeta()` 补 `imgStyle` / `imgFrame` / `imgGap` / `captionAlign`
-- [ ] 测试种子补上述四项 + `pageBg` / `h1Bg`
-- [ ] 确认改完种子后测试先红后绿
-- [ ] 重新构建（`npm run build`），验证 MCP `set_theme imgStyle=fullwidth` 在导出里生效
+- [x] `readMeta()` 补 `imgStyle` / `imgFrame` / `imgGap` / `captionAlign`（658ae02 落地，见 `projectStore.ts` readMeta 白名单）
+- [x] 测试种子补上述四项 + `pageBg` / `h1Bg`（`projectMetaVisualPassthrough.test.ts` / `capabilityReadSurface.test.ts`）
+- [x] 确认改完种子后测试先红后绿
+- [x] 重新构建（`npm run build`），验证 MCP `set_theme imgStyle=fullwidth` 在导出里生效
 - [ ] 发布 0.9.1 时在 release notes 里提一句：图片四项排版覆盖此前不生效

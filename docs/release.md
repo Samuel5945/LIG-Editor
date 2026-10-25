@@ -54,7 +54,7 @@
    > master 的当前顶端，先建后推就会指向旧提交（v0.7.0 就吃过这个亏）。tag 本身可删可重打
    > （`git push origin :refs/tags/<tag>` 实测有效，v0.9.0 那次删裸 `0.9.0` 就成功了），
    > 但**删掉带过 release 的 tag 只留下墓碑**：名字不能再用，只能换个写法。
-5. **更新官网**：官网源在本地 `C:\Users\PC\Documents\Qoder\2026-08-28\1b3e82f9\lig-site`（GitHub `Samuel5945/lig-site`，分支 `main`）。把 `docs/site/lig-editor-update.json` 的内容同步过去（版本/日期/notes），文案改动要**三处一起改**：`assets/i18n.js` 的 `zh` 与 `en` 两套，加上页面里的中文兜底文字；改词典必须把六个顶层页的 `assets/i18n.js?v=` 一起递增。本地先跑 `node tools/publish.mjs`（组 staging + 断链自检，不部署），再 **push main**：线上 ligdesign.win 由 Cloudflare Pages 的 **git 构建**喂（项目 `ligdesign`，Build command `node tools/publish.mjs --out dist`），**不要再走 `wrangler pages deploy` 直传**——直传改不动域名，还会把 `tools/`、`covers/` 暴露出去。这一步里 update.json 完成，应用内「发现新版本」提醒才正式上线，所以它必须排在 Release 之后。
+5. **更新官网**：官网源在本地 `C:\Users\航\Desktop\lig-site`（GitHub `Samuel5945/lig-site`，分支 `main`）。把 `docs/site/lig-editor-update.json` 的内容同步过去（版本/日期/notes），文案改动要**三处一起改**：`assets/i18n.js` 的 `zh` 与 `en` 两套，加上页面里的中文兜底文字；改词典必须把六个顶层页的 `assets/i18n.js?v=` 一起递增。本地先跑 `node tools/publish.mjs`（组 staging + 断链自检，不部署），再 **push main**：线上 ligdesign.win 由 Cloudflare Pages 的 **git 构建**喂（项目 `ligdesign`，Build command `node tools/publish.mjs --out dist`），**不要再走 `wrangler pages deploy` 直传**——直传改不动域名，还会把 `tools/`、`covers/` 暴露出去。这一步里 update.json 完成，应用内「发现新版本」提醒才正式上线，所以它必须排在 Release 之后。
 
 ## update.json 格式
 
