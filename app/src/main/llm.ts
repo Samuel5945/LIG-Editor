@@ -8,7 +8,7 @@ import type {
   ProviderConfig,
   ProviderModelsResult
 } from '@shared/types'
-import { accumulateToolCalls } from '@shared/llmText'
+import { accumulateToolCalls, parseOpenAiStreamLine } from '@shared/llmText'
 import { knownImageModels } from '@shared/providerSites'
 import { classifyModels, estimateTokens, modelCapability } from '@shared/modelCatalog'
 import { broadcast } from './ipc'
@@ -363,7 +363,8 @@ export async function chatStart(
       return
     }
 
-    // SSE 解析：按行切 data: 前缀，[DONE] 结束；跨 chunk 断行用 buffer 兜住
+    // SSE 解析：按行切 data: 前缀，[DONE] 结束；跨 chunk 断行用 buffer 兜住。
+    // 单行归一（SSE/NDJSON 双格式、思考字段、tool_calls 碎片）在 shared/parseOpenAiStreamLine
     const decoder = new TextDecoder()
     let buffer = ''
     for await (const chunk of res.body as unknown as AsyncIterable<Uint8Array>) {
@@ -371,31 +372,11 @@ export async function chatStart(
       const lines = buffer.split('\n')
       buffer = lines.pop() ?? ''
       for (const raw of lines) {
-        // 兼容 SSE（data: 前缀）与 NDJSON（裸 JSON 行）两种流格式
-        let line = raw.trim()
-        if (line.startsWith('data:')) line = line.slice(5).trim()
-        if (!line || line === '[DONE]') continue
-        try {
-          const json = JSON.parse(line) as {
-            choices?: {
-              delta?: {
-                content?: string
-                // 思考过程字段：千问系 reasoning_content（OpenAI 兼容约定）；商汤系非标 reasoning
-                reasoning_content?: string
-                reasoning?: string
-                tool_calls?: { index?: number; id?: string; function?: { name?: string; arguments?: string } }[]
-              }
-            }[]
-          }
-          const delta = json.choices?.[0]?.delta
-          if (delta?.content) broadcast('llm:stream', { requestId, delta: delta.content })
-          const reasoning = delta?.reasoning_content ?? delta?.reasoning
-          if (reasoning) broadcast('llm:stream', { requestId, delta: '', reasoning })
-          const tcs = delta?.tool_calls
-          if (tcs?.length) accumulateToolCalls(toolAcc, tcs)
-        } catch {
-          // 非 JSON 心跳行，忽略
-        }
+        const ev = parseOpenAiStreamLine(raw)
+        if (!ev) continue
+        if (ev.delta) broadcast('llm:stream', { requestId, delta: ev.delta })
+        if (ev.reasoning) broadcast('llm:stream', { requestId, delta: '', reasoning: ev.reasoning })
+        if (ev.toolCalls) accumulateToolCalls(toolAcc, ev.toolCalls)
       }
     }
     broadcast('llm:done', {

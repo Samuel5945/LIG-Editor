@@ -7,6 +7,8 @@ import type { ChatToolSchema } from '@shared/types'
 import { describe, expect, it } from 'vitest'
 import {
   accumulateToolCalls,
+  parseAnthropicStreamLine,
+  parseOpenAiStreamLine,
   buildToolSchemas,
   coerceArrayArg,
   parseTextToolCalls,
@@ -286,5 +288,94 @@ describe('inventoryFor · 注入判据是「真的收到过原生 tool_calls」'
   it('文本协议通路（原生清单为空）同样注入；空注册表不注入', () => {
     expect(inventoryFor(reg, [], false)).toContain('export_docx')
     expect(inventoryFor([], [], false)).toBe('')
+  })
+})
+
+describe('parseOpenAiStreamLine · 流单行归一（主进程 chatStart 的解析内核）', () => {
+  it('SSE（data: 前缀，带空格/不带空格）与 NDJSON（裸 JSON 行）同一路径', () => {
+    const sse = 'data: {"choices":[{"delta":{"content":"你好"}}]}'
+    const sseNoSpace = 'data:{"choices":[{"delta":{"content":"好"}}]}'
+    const ndjson = '{"choices":[{"delta":{"content":"呀"}}]}'
+    expect(parseOpenAiStreamLine(sse)).toEqual({ delta: '你好' })
+    expect(parseOpenAiStreamLine(sseNoSpace)).toEqual({ delta: '好' })
+    expect(parseOpenAiStreamLine(ndjson)).toEqual({ delta: '呀' })
+  })
+
+  it('思考字段归一：千问系 reasoning_content 与商汤系非标 reasoning 都进 reasoning', () => {
+    const qwen = 'data: {"choices":[{"delta":{"reasoning_content":"先想想"}}]}'
+    const sense = 'data: {"choices":[{"delta":{"reasoning":"再想想"}}]}'
+    const both = 'data: {"choices":[{"delta":{"content":"答","reasoning_content":"想"}}]}'
+    expect(parseOpenAiStreamLine(qwen)).toEqual({ reasoning: '先想想' })
+    expect(parseOpenAiStreamLine(sense)).toEqual({ reasoning: '再想想' })
+    expect(parseOpenAiStreamLine(both)).toEqual({ delta: '答', reasoning: '想' })
+  })
+
+  it('静默行返回 null：[DONE]（含 data: 前缀）、空行、SSE 注释、非 JSON 噪声', () => {
+    expect(parseOpenAiStreamLine('data: [DONE]')).toBeNull()
+    expect(parseOpenAiStreamLine('[DONE]')).toBeNull()
+    expect(parseOpenAiStreamLine('')).toBeNull()
+    expect(parseOpenAiStreamLine('   ')).toBeNull()
+    expect(parseOpenAiStreamLine(': keep-alive')).toBeNull()
+    expect(parseOpenAiStreamLine('data: not-json')).toBeNull()
+  })
+
+  it('容错形状：choices 缺失 / delta 缺失 / delta 全空对象 → null 不炸', () => {
+    expect(parseOpenAiStreamLine('data: {"choices":[]}')).toBeNull()
+    expect(parseOpenAiStreamLine('data: {"choices":[{"delta":{}}]}')).toBeNull()
+    expect(parseOpenAiStreamLine('data: {}')).toBeNull()
+  })
+
+  it('tool_calls 碎片透传给 accumulateToolCalls：分段 arguments 还原成一次完整调用', () => {
+    const acc: { id: string; name: string; arguments: string }[] = []
+    const lines = [
+      'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"c1","function":{"name":"set_theme","arguments":"{\\"pro"}}]}}]}',
+      'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"ject\\":\\"demo\\"}"}}]}}]}'
+    ]
+    for (const l of lines) {
+      const ev = parseOpenAiStreamLine(l)
+      if (ev?.toolCalls) accumulateToolCalls(acc, ev.toolCalls)
+    }
+    expect(acc).toEqual([{ id: 'c1', name: 'set_theme', arguments: '{"project":"demo"}' }])
+  })
+})
+
+describe('parseAnthropicStreamLine · Anthropic Messages 流事件归一', () => {
+  it('三类 delta：text / thinking（归一为 reasoning 通道）/ input_json_delta（工具参数碎片）', () => {
+    expect(parseAnthropicStreamLine('data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"答"}}')).toEqual({ kind: 'text', text: '答' })
+    expect(parseAnthropicStreamLine('data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"想"}}')).toEqual({ kind: 'thinking', text: '想' })
+    expect(parseAnthropicStreamLine('data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{\\"a\\""}}')).toEqual({ kind: 'tool-json', index: 1, fragment: '{"a"' })
+  })
+
+  it('tool_use 起始事件带 id/name；message_start 记为内容证据；error 事件取服务端消息', () => {
+    expect(parseAnthropicStreamLine('data: {"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"tu_1","name":"set_theme"}}')).toEqual({ kind: 'tool-start', index: 0, id: 'tu_1', name: 'set_theme' })
+    expect(parseAnthropicStreamLine('data: {"type":"message_start","message":{}}')).toEqual({ kind: 'content' })
+    expect(parseAnthropicStreamLine('data: {"type":"error","error":{"message":"overloaded"}}')).toEqual({ kind: 'error', message: 'overloaded' })
+    expect(parseAnthropicStreamLine('data: {"type":"error"}')).toEqual({ kind: 'error', message: 'Anthropic 流错误' })
+  })
+
+  it('非 data 行 / [DONE] / message_stop / 非 JSON 全部 null（空流哨兵靠它们零命中）', () => {
+    expect(parseAnthropicStreamLine('event: content_block_delta')).toBeNull()
+    expect(parseAnthropicStreamLine(': ping')).toBeNull()
+    expect(parseAnthropicStreamLine('data: [DONE]')).toBeNull()
+    expect(parseAnthropicStreamLine('data: {"type":"message_stop"}')).toBeNull()
+    expect(parseAnthropicStreamLine('data: not-json')).toBeNull()
+  })
+
+  it('工具调用跨事件还原：start + 两段 json 碎片拼成完整 arguments（对话循环的降级命脉）', () => {
+    const tools = new Map<number, { id: string; name: string; arguments: string }>()
+    for (const l of [
+      'data: {"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"tu_1","name":"set_theme"}}',
+      'data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{\\"accent\\":"}}',
+      'data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"\\"#b0803c\\"}"}}'
+    ]) {
+      const ev = parseAnthropicStreamLine(l)
+      if (!ev) continue
+      if (ev.kind === 'tool-start') tools.set(ev.index, { id: ev.id, name: ev.name, arguments: '' })
+      else if (ev.kind === 'tool-json') {
+        const t = tools.get(ev.index)
+        if (t) t.arguments += ev.fragment
+      }
+    }
+    expect([...tools.values()]).toEqual([{ id: 'tu_1', name: 'set_theme', arguments: '{"accent":"#b0803c"}' }])
   })
 })

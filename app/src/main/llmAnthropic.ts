@@ -1,6 +1,7 @@
 import { net } from 'electron'
 import type { ChatMessage, ChatStartOptions, LlmTestResult, ProviderConfig } from '@shared/types'
 import { modelCapability } from '@shared/modelCatalog'
+import { parseAnthropicStreamLine } from '@shared/llmText'
 import { broadcast } from './ipc'
 import { apiUserAgent, friendlyHttpError } from './apiUa'
 
@@ -209,47 +210,28 @@ export async function anthropicChatStart(ctx: {
     const tools = new Map<number, ToolAccEntry>()
     let errored = false
     // 空流哨兵：网关限流时实测会回 HTTP 200 + 零事件的 SSE（kimi-k3 限流场景），若不拦
-    // 就是无报错的空回复。正常 Anthropic 流必有 message_start / content_block_* 之一
+    // 就是无报错的空回复。事件归一在 shared/parseAnthropicStreamLine——非 null 且非 error
+    // 的事件本身就是「流里有内容」的证据
     let sawStreamContent = false
     for await (const chunk of res.body as unknown as AsyncIterable<Uint8Array>) {
       buffer += decoder.decode(chunk, { stream: true })
       const lines = buffer.split('\n')
       buffer = lines.pop() ?? ''
       for (const raw of lines) {
-        let line = raw.trim()
-        if (!line.startsWith('data:')) continue
-        line = line.slice(5).trim()
-        if (!line || line === '[DONE]') continue
-        try {
-          const json = JSON.parse(line) as {
-            type: string
-            error?: { message?: string }
-            content_block?: { type: string; id?: string; name?: string }
-            index?: number
-            delta?: { type?: string; text?: string; thinking?: string; partial_json?: string }
-          }
-          if (json.type === 'message_start' || json.type === 'content_block_start' || json.type === 'content_block_delta') {
-            sawStreamContent = true
-          }
-          if (json.type === 'error') {
-            errored = true
-            broadcast('llm:done', { requestId, error: json.error?.message ?? 'Anthropic 流错误' })
-            return
-          }
-          if (json.type === 'content_block_start' && json.content_block?.type === 'tool_use') {
-            tools.set(json.index ?? 0, { id: json.content_block.id ?? '', name: json.content_block.name ?? '', arguments: '' })
-          } else if (json.type === 'content_block_delta') {
-            if (json.delta?.type === 'text_delta' && json.delta.text) {
-              broadcast('llm:stream', { requestId, delta: json.delta.text })
-            } else if (json.delta?.type === 'thinking_delta' && json.delta.thinking) {
-              broadcast('llm:stream', { requestId, delta: '', reasoning: json.delta.thinking })
-            } else if (json.delta?.type === 'input_json_delta' && json.delta.partial_json) {
-              const t = tools.get(json.index ?? 0)
-              if (t) t.arguments += json.delta.partial_json
-            }
-          }
-        } catch {
-          // 非 JSON 心跳行（event: 行、ping 注释），忽略
+        const ev = parseAnthropicStreamLine(raw)
+        if (!ev) continue
+        if (ev.kind === 'error') {
+          errored = true
+          broadcast('llm:done', { requestId, error: ev.message })
+          return
+        }
+        sawStreamContent = true
+        if (ev.kind === 'text') broadcast('llm:stream', { requestId, delta: ev.text })
+        else if (ev.kind === 'thinking') broadcast('llm:stream', { requestId, delta: '', reasoning: ev.text })
+        else if (ev.kind === 'tool-start') tools.set(ev.index, { id: ev.id, name: ev.name, arguments: '' })
+        else if (ev.kind === 'tool-json') {
+          const t = tools.get(ev.index)
+          if (t) t.arguments += ev.fragment
         }
       }
     }

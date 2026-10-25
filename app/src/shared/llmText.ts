@@ -1,6 +1,97 @@
 /** LLM 输出文本解析工具（渲染层与主进程能力核共用） */
 import type { ChatToolSchema } from './types'
 
+/** OpenAI 兼容流单行事件的归一结果：无内容（心跳/[DONE]/空行/非 JSON）为 null */
+export interface StreamLineEvent {
+  /** 正文增量 */
+  delta?: string
+  /** 思考过程增量（千问系 reasoning_content / 商汤系非标 reasoning，这一层归一） */
+  reasoning?: string
+  /** 原生工具调用碎片（跨块累积交给 accumulateToolCalls） */
+  toolCalls?: { index?: number; id?: string; function?: { name?: string; arguments?: string } }[]
+}
+
+/**
+ * OpenAI 兼容流的一行（已去换行）→ 增量事件。兼容 SSE（data: 前缀）与 NDJSON（裸 JSON 行）
+ * 两种流格式；思考字段归一、心跳与 [DONE] 静默、choices 缺失容错，三类供应商差异都在这层吃掉。
+ * 提取为纯函数供主进程流循环与单测共用。
+ */
+export function parseOpenAiStreamLine(line: string): StreamLineEvent | null {
+  let s = line.trim()
+  if (s.startsWith('data:')) s = s.slice(5).trim()
+  if (!s || s === '[DONE]') return null
+  try {
+    const json = JSON.parse(s) as {
+      choices?: { delta?: { content?: string; reasoning_content?: string; reasoning?: string; tool_calls?: StreamLineEvent['toolCalls'] } }[]
+    }
+    const delta = json.choices?.[0]?.delta
+    if (!delta) return null
+    const ev: StreamLineEvent = {}
+    if (delta.content) ev.delta = delta.content
+    const reasoning = delta.reasoning_content ?? delta.reasoning
+    if (reasoning) ev.reasoning = reasoning
+    if (delta.tool_calls?.length) ev.toolCalls = delta.tool_calls
+    return ev.delta || ev.reasoning || ev.toolCalls ? ev : null
+  } catch {
+    // SSE 注释行（: keep-alive 一类）与任意非 JSON 噪声行
+    return null
+  }
+}
+
+/** Anthropic Messages 流单行事件（kind 区分；无事件行返回 null） */
+export type AnthropicStreamEvent =
+  | { kind: 'text'; text: string }
+  | { kind: 'thinking'; text: string }
+  | { kind: 'tool-start'; index: number; id: string; name: string }
+  | { kind: 'tool-json'; index: number; fragment: string }
+  /** message_start / content_block_* 的存在证据（空流哨兵用：零事件 = 网关限流空回复） */
+  | { kind: 'content' }
+  | { kind: 'error'; message: string }
+
+/**
+ * Anthropic Messages 流的一行（已去换行）→ 事件。只认 data: 前缀的 JSON 行；
+ * event:/ping 注释与 [DONE] 静默。非 null 且非 error 的事件本身即「流里有内容」的证据。
+ */
+export function parseAnthropicStreamLine(line: string): AnthropicStreamEvent | null {
+  let s = line.trim()
+  if (!s.startsWith('data:')) return null
+  s = s.slice(5).trim()
+  if (!s || s === '[DONE]') return null
+  try {
+    const json = JSON.parse(s) as {
+      type: string
+      error?: { message?: string }
+      content_block?: { type: string; id?: string; name?: string }
+      index?: number
+      delta?: { type?: string; text?: string; thinking?: string; partial_json?: string }
+    }
+    if (json.type === 'error') return { kind: 'error', message: json.error?.message ?? 'Anthropic 流错误' }
+    if (json.type === 'content_block_delta') {
+      const d = json.delta
+      if (d?.type === 'text_delta' && d.text) return { kind: 'text', text: d.text }
+      if (d?.type === 'thinking_delta' && d.thinking) return { kind: 'thinking', text: d.thinking }
+      if (d?.type === 'input_json_delta' && d.partial_json)
+        return { kind: 'tool-json', index: json.index ?? 0, fragment: d.partial_json }
+      return { kind: 'content' }
+    }
+    if (json.type === 'content_block_start') {
+      if (json.content_block?.type === 'tool_use')
+        return {
+          kind: 'tool-start',
+          index: json.index ?? 0,
+          id: json.content_block.id ?? '',
+          name: json.content_block.name ?? ''
+        }
+      return { kind: 'content' }
+    }
+    if (json.type === 'message_start') return { kind: 'content' }
+    // message_delta / message_stop / ping 等其余事件不算内容证据
+    return null
+  } catch {
+    return null
+  }
+}
+
 /** 累积流式 tool_calls 碎片：按 index 合并，id/name 取值覆盖、arguments 字符串拼接。
  *  纯函数（主进程流解析与单测共用）；acc 由调用方持有、跨 chunk 复用 */
 export function accumulateToolCalls(
