@@ -3,7 +3,9 @@ import { safeStorage } from 'electron'
 import { existsSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import type { WechatAccount, WechatConfig } from '@shared/wechat'
+import type { KeyStorage } from '@shared/types'
 import { getAppPaths } from './paths'
+import { keyStorageKind } from './settingsStore'
 
 /**
  * 公众号配置持久化：settings/wechat.json（多账号）
@@ -116,8 +118,8 @@ function normalizeDisk(disk: DiskWechat): NormalizedDisk {
   }
 }
 
-/** 读取全量配置（AppSecret 已解密，供推送设置表单与推送取用） */
-export function getWechatConfig(): WechatConfig {
+/** 读取全量配置（AppSecret 已解密，供推送设置表单与推送取用）；keyStorage 随读带回供界面警示明文降级 */
+export function getWechatConfig(): WechatConfig & { keyStorage: KeyStorage } {
   const disk = normalizeDisk(readDisk())
   return {
     accounts: disk.accounts.map((a) => ({
@@ -127,7 +129,8 @@ export function getWechatConfig(): WechatConfig {
       appSecret: decryptSecret(a)
     })),
     defaultAccountId: disk.defaultAccountId || null,
-    bindings: disk.bindings
+    bindings: disk.bindings,
+    keyStorage: keyStorageKind()
   }
 }
 

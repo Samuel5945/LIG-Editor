@@ -3,7 +3,7 @@ import { existsSync, readFileSync, writeFileSync } from 'fs'
 import { homedir } from 'os'
 import { join } from 'path'
 import { randomUUID } from 'crypto'
-import type { LlmSettings, ProviderConfig, ProviderModelCache, SearchSettings } from '@shared/types'
+import type { KeyStorage, LlmSettings, ProviderConfig, ProviderModelCache, SearchSettings } from '@shared/types'
 import {
   RHYTHM_PROVIDER_SEED,
   AGNES_PROVIDER_SEED,
@@ -129,6 +129,11 @@ function decryptKey(p: { apiKeyEnc?: string; apiKey?: string }): string {
   return p.apiKey ?? ''
 }
 
+/** 密钥落盘形态：供读取端随配置带回，界面据此警示明文降级（策略本身见 encryptKey） */
+export function keyStorageKind(): KeyStorage {
+  return safeStorage.isEncryptionAvailable() ? 'encrypted' : 'plain'
+}
+
 /** 读取时归正 imageApi：apimart-images / agnes-images 原样保留；
  * 历史迁移——Agnes 域名下早期存盘的 openai-images（其端点禁止顶层 response_format）归正为 agnes-images；
  * 未知/缺省值按 baseUrl 域名回退 */
@@ -138,12 +143,12 @@ function migrateImageApi(api: string | undefined, baseUrl: string): ProviderConf
   return 'openai-images'
 }
 
-export function getLlmSettings(): LlmSettings {
+export function getLlmSettings(): LlmSettings & { keyStorage: KeyStorage } {
   const file = settingsFile()
   if (!existsSync(file)) {
     const preset = presetSettings()
     setLlmSettings(preset)
-    return preset
+    return { ...preset, keyStorage: keyStorageKind() }
   }
   try {
     const disk = JSON.parse(readFileSync(file, 'utf-8')) as DiskSettings
@@ -169,10 +174,11 @@ export function getLlmSettings(): LlmSettings {
       unpinnedIds: disk.unpinnedIds,
       search: disk.search
         ? { provider: disk.search.provider, apiKey: decryptKey(disk.search) }
-        : { ...DEFAULT_SEARCH }
+        : { ...DEFAULT_SEARCH },
+      keyStorage: keyStorageKind()
     }
   } catch {
-    return presetSettings()
+    return { ...presetSettings(), keyStorage: keyStorageKind() }
   }
 }
 

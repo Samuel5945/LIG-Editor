@@ -80,6 +80,8 @@ export default function IntegrationDialog({
   const [importPath, setImportPath] = useState('')
   // 公众号推送账号列表（多账号，本页签单独保存）
   const [wechat, setWechat] = useState<WechatConfig>({ accounts: [], defaultAccountId: null, bindings: {} })
+  // safeStorage 不可用：AppSecret 明文落 settings/wechat.json，输入框下方如实警示
+  const [keyPlain, setKeyPlain] = useState(false)
   // 公网 IP 查询（IP 白名单辅助）
   const [fetchingIp, setFetchingIp] = useState(false)
   const [ipResult, setIpResult] = useState<{ ok: boolean; text: string } | null>(null)
@@ -90,7 +92,10 @@ export default function IntegrationDialog({
 
   useEffect(() => {
     window.api.invoke('mcp:accessCard').then(setCard)
-    window.api.invoke('wechat:get-config').then(setWechat)
+    window.api.invoke('wechat:get-config').then((c) => {
+      setWechat(c)
+      setKeyPlain(c.keyStorage === 'plain')
+    })
     void refreshSkills()
   }, [refreshSkills])
 
@@ -295,12 +300,17 @@ export default function IntegrationDialog({
                       type="password"
                       value={a.appSecret}
                       onChange={(e) => patchAccount(i, { appSecret: e.target.value })}
-                      placeholder="AppSecret（加密存储在本机）"
+                      placeholder={keyPlain ? 'AppSecret（本机未启用加密，明文保存）' : 'AppSecret（加密存储在本机）'}
                       className="w-full rounded-lg border border-panel-3 bg-panel px-2.5 py-1.5 text-ink outline-none placeholder:text-ink-dim focus:border-accent"
                     />
                   </div>
                 )
               })}
+              {keyPlain && (
+                <p className="text-[11px] leading-4 text-st-bad">
+                  本机系统加密（safeStorage）不可用，AppSecret 将以明文保存在 settings/wechat.json——仅本机磁盘可见，介意请勿在共用设备保存
+                </p>
+              )}
 
               <div className="flex flex-wrap items-center gap-3 pt-1">
                 <button onClick={addAccount} className={btnGhost}>

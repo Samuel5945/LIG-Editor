@@ -417,6 +417,9 @@ export interface LlmSettings {
   search: SearchSettings
 }
 
+/** 密钥落盘形态：safeStorage（DPAPI）可用 = 加密；不可用降级明文，读取端随配置带回供界面警示 */
+export type KeyStorage = 'encrypted' | 'plain'
+
 export interface SearchSettings {
   /** none=免密内置（DDG/Bing 抓取）；tavily/bocha 需 API Key */
   provider: 'none' | 'tavily' | 'bocha'
@@ -731,7 +734,8 @@ export interface IpcApi {
   /** 左栏工作树按需监听：以展开的工程全量集合做差量挂/卸，变化推 workspace:assets-changed */
   'project:setWatchedProjects': (names: string[]) => void
   // ---- 模型接入（M4）----
-  'settings:getLlm': () => LlmSettings
+  /** keyStorage 随读带回：safeStorage 不可用时为 'plain'，设置界面据此警示明文落盘 */
+  'settings:getLlm': () => LlmSettings & { keyStorage: KeyStorage }
   'settings:setLlm': (settings: LlmSettings) => void
   /** 用给定配置试连（不要求先保存） */
   'llm:test': (provider: ProviderConfig) => LlmTestResult

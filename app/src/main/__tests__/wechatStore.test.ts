@@ -50,8 +50,9 @@ beforeEach(() => {
 })
 
 describe('公众号多账号配置', () => {
-  it('文件不存在时返回空配置', () => {
-    expect(getWechatConfig()).toEqual({ accounts: [], defaultAccountId: null, bindings: {} })
+  it('文件不存在时返回空配置，并随读带回密钥落盘形态', () => {
+    // 测试环境 safeStorage 恒可用；明文降级路径由 settingsStore.keyStorageKind 的实现保证
+    expect(getWechatConfig()).toEqual({ accounts: [], defaultAccountId: null, bindings: {}, keyStorage: 'encrypted' })
   })
 
   it('旧版单账号结构迁移为一个默认账号，name 回落为 appId', () => {

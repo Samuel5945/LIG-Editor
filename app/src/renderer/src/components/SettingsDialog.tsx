@@ -66,10 +66,13 @@ export default function SettingsDialog({ onClose, appearance, onOpenIntegration 
   const [fetchingModels, setFetchingModels] = useState(false)
   const [modelsError, setModelsError] = useState<string | null>(null)
   const [addMenuOpen, setAddMenuOpen] = useState(false)
+  // safeStorage 不可用：Key 明文落 settings/llm.json，输入框下方如实警示（placeholder 不能再说「加密存储」）
+  const [keyPlain, setKeyPlain] = useState(false)
 
   useEffect(() => {
     window.api.invoke('settings:getLlm').then((s) => {
       setSettings(s)
+      setKeyPlain(s.keyStorage === 'plain')
       // 初始选中跟随展示顺序（置顶供应商优先）
       const first = [...s.providers].sort(
         (a, b) => Number(isRhythmProvider(a)) - Number(isRhythmProvider(b))
@@ -504,8 +507,13 @@ export default function SettingsDialog({ onClose, appearance, onOpenIntegration 
                     type="password"
                     value={provider.apiKey}
                     onChange={(e) => patchProviderById(provider.id, { apiKey: e.target.value })}
-                    placeholder="sk-…（加密存储在本机）"
+                    placeholder={keyPlain ? 'sk-…（本机未启用加密，明文保存）' : 'sk-…（加密存储在本机）'}
                   />
+                  {keyPlain && (
+                    <p className="mt-1 text-[11px] leading-4 text-st-bad">
+                      本机系统加密（safeStorage）不可用，Key 将以明文保存在 settings/llm.json——仅本机磁盘可见，介意请勿在共用设备保存
+                    </p>
+                  )}
 
                   <div className="flex gap-3">
                     <div className="flex-1">
@@ -738,8 +746,13 @@ export default function SettingsDialog({ onClose, appearance, onOpenIntegration 
                     type="password"
                     value={settings.search.apiKey}
                     onChange={(e) => setSettings({ ...settings, search: { ...settings.search, apiKey: e.target.value } })}
-                    placeholder="加密存储在本机"
+                    placeholder={keyPlain ? '本机未启用加密，明文保存' : '加密存储在本机'}
                   />
+                  {keyPlain && (
+                    <p className="mt-1 text-[11px] leading-4 text-st-bad">
+                      本机系统加密不可用，搜索 Key 同样以明文保存在 settings/llm.json
+                    </p>
+                  )}
                 </div>
               )}
             </div>
