@@ -17,6 +17,8 @@
 
 1. **bump 版本**：改 `app/package.json` 的 `version`（应用内当前版本号即来自这里）。
 2. **构建**：`cd app && npm run dist`，产物在 `releases/`（`LIG-Editor-setup-<版本>.exe` + portable）。
+   - v0.9.1 实测（electron-builder 26）：中文用户名路径（`C:\Users\航\...`）下 NSIS 正常出包，无需再迁 ASCII 目录。
+   - ⛔ electron-builder **24** 在无管理员权限的 Windows 上会卡死在 winCodeSign 解包（`Cannot create symbolic link : 客户端没有所需的特权`，darwin dylib 符号链接建不了），且 app-builder 每次重下不认缓存、手工预解包救不回来——升 26 即好，别降回去。
 3. **上传网盘**：夸克 + 百度网盘（分享链接若变动，记下新链接）。
 4. **发 GitHub Release**：tag **必须带 `v` 前缀**（`v<版本>`，与 `v0.3.0`…`v0.8.0` 一致），正文写更新说明，**正文必须贴夸克/百度网盘链接**（裸链或 markdown 链接均可）。正文顶部若要像 0.8.0 那样放界面轮播图，先把 GIF 放进官网 `assets/img/lig-editor-<版本>-tour.gif` 并 push 上线，再回填链接。
 
