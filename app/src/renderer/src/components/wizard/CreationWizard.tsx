@@ -14,6 +14,7 @@ import {
 } from '@shared/wizardProgress'
 import { chatOnce, extractJsonArray } from '../../copilot/llm'
 import { brainstormMessages, outlineMessages, fullArticleMessages, cardsMessages } from '../../copilot/prompts'
+import { ReasoningBlock } from '../ReasoningBlock'
 import { extractFileText } from '../../copilot/material'
 import type { FigPipeline } from '../../editor/FigSuggest'
 import BrainstormIdeas from './BrainstormIdeas'
@@ -106,6 +107,8 @@ export default function CreationWizard({
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [cards, setCards] = useState<IdeaCard[]>([])
   const [streamText, setStreamText] = useState('')
+  // 当前流式生成的思考过程：思考模型「先想后答」的等待期里这是唯一进度，经 ReasoningBlock 展示
+  const [streamReasoning, setStreamReasoning] = useState('')
   const [outline, setOutline] = useState('')
   const [projName, setProjName] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -247,6 +250,7 @@ export default function CreationWizard({
     }
     setError(null)
     setStreamText('')
+    setStreamReasoning('')
     setPhase('brainstorming')
     const web = await searchWeb(ask.trim() || attachments[0]?.name || '')
     const msgs = brainstormMessages(material, ask.trim(), skill, web)
@@ -260,7 +264,7 @@ export default function CreationWizard({
       ]
       msgs[msgs.length - 1] = { ...last, content: parts }
     }
-    const { promise, abort } = chatOnce(msgs, setStreamText)
+    const { promise, abort } = chatOnce(msgs, setStreamText, setStreamReasoning)
     abortRef.current = abort
     try {
       const full = await promise
@@ -268,6 +272,7 @@ export default function CreationWizard({
       if (parsed) {
         setCards(parsed.filter((c) => c && typeof c.title === 'string'))
         setStreamText('')
+        setStreamReasoning('')
         setPhase('input')
       } else {
         setError('选题解析失败，可重试（原始输出保留在下方）')
@@ -285,10 +290,11 @@ export default function CreationWizard({
     async (topicAsk: string, defaultName: string) => {
       setError(null)
       setStreamText('')
+      setStreamReasoning('')
       setPhase('outlining')
       setActiveId('outline')
       const web = await searchWeb(topicAsk)
-      const { promise, abort } = chatOnce(outlineMessages(topicAsk, material, skill, web), setStreamText)
+      const { promise, abort } = chatOnce(outlineMessages(topicAsk, material, skill, web), setStreamText, setStreamReasoning)
       abortRef.current = abort
       try {
         const full = (await promise).trim()
@@ -297,6 +303,7 @@ export default function CreationWizard({
         const h1 = /^#\s+(.+)$/m.exec(full)
         setProjName(sanitizeProjectName(h1?.[1] ?? defaultName))
         setStreamText('')
+        setStreamReasoning('')
         setPhase('outline')
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err))
@@ -347,13 +354,14 @@ export default function CreationWizard({
     async (targetProject: string) => {
       setError(null)
       setStreamText('')
+      setStreamReasoning('')
       setCardsFormat(null)
       setPhase('writing')
       setActiveId('draft')
       const { promise, abort } = chatOnce(fullArticleMessages(outline, skill), (full) => {
         onArticleGenerated(full)
         setStreamText(`已生成 ${full.length} 字…`)
-      })
+      }, setStreamReasoning)
       abortRef.current = abort
       try {
         const full = await promise
@@ -411,6 +419,7 @@ export default function CreationWizard({
       }
       setError(null)
       setStreamText('')
+      setStreamReasoning('')
       setCardsFormat(format)
       setPhase('writing')
       setActiveId('draft')
@@ -424,7 +433,7 @@ export default function CreationWizard({
         onProjectsChanged()
         const { promise, abort } = chatOnce(cardsMessages(outline, '大纲', format, skill), (full) => {
           setStreamText(`已生成 ${full.length} 字…`)
-        })
+        }, setStreamReasoning)
         abortRef.current = abort
         const parsed = parseCardItems(await promise)
         if (!parsed) throw new Error('卡片解析失败，可重试')
@@ -464,6 +473,7 @@ export default function CreationWizard({
     setCards([])
     setOutline('')
     setStreamText('')
+    setStreamReasoning('')
     setCardsFormat(null)
     setError(null)
   }, [])
@@ -497,6 +507,11 @@ export default function CreationWizard({
             停止
           </button>
         </div>
+      )}
+
+      {/* 思考过程（脑暴/大纲/正文/贴图任一流式生成期）：思考模型先想后答，这段就是等待期的进度 */}
+      {(phase === 'brainstorming' || phase === 'outlining' || writing) && streamReasoning && (
+        <ReasoningBlock text={streamReasoning} streaming className="mx-4 my-1.5 max-w-none" />
       )}
 
       {/* 步 1 选题（常驻挂载保活） */}

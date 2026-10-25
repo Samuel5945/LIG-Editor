@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactElement, type ReactNode } from 'react'
 import { confirmAction } from '../confirm'
 import { ToolLogCard, type ToolCardState } from './ToolLogCard'
+import { ReasoningBlock } from './ReasoningBlock'
 import { TOOL_LABELS } from '../copilot/toolLabels'
 import { Icon, type IconName } from '../ui/Icon'
 import { Button, Chip, FIELD_SHELL_CLS, IconButton, useFittingRow } from '../ui/primitives'
@@ -958,14 +959,10 @@ export default function ChatPanel({
             <div key={i} className={`mb-2 flex flex-col ${m.role === 'user' ? 'items-end' : 'items-start'}`}>
               {m.role === 'assistant' &&
                 (m.reasoning || (streaming && i === messages.length - 1 && streamReasoning)) && (
-                  <details className="max-w-[92%] rounded-lg border border-panel-3 bg-panel-2 px-2.5 py-1.5 text-[11px] text-ink-dim">
-                    <summary className="cursor-pointer select-none">
-                      {streaming && i === messages.length - 1 && !mText ? '思考中…' : '思考过程'}
-                    </summary>
-                    <div className="mt-1 max-h-48 overflow-y-auto whitespace-pre-wrap break-words leading-relaxed">
-                      {m.reasoning || streamReasoning}
-                    </div>
-                  </details>
+                  <ReasoningBlock
+                    text={m.reasoning || streamReasoning}
+                    streaming={streaming && i === messages.length - 1 && !m.reasoning}
+                  />
                 )}
               <div
                 className={`max-w-[92%] break-words whitespace-pre-wrap px-3 py-2 text-[12.5px] leading-relaxed ${
