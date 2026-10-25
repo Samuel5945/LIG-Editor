@@ -446,13 +446,17 @@ export interface ChatToolSchema {
   function: { name: string; description: string; parameters: unknown }
 }
 
-/** 思考级别：low=快速（effort:low / 轻预算）、high=深度（effort:high）。布尔仍可用（true=默认中档，false=关） */
-export type ThinkingLevel = 'low' | 'high'
+/** 思考档位 = reasoning_effort 协议词汇表（商汤 token 网关实测校验值：none/minimal/low/medium/high/xhigh/max；
+ *  qwen3.8 系只认 low/medium/high，目录按模型预置 levels）。none=显式关闭；布尔仍可用（true=默认档，false=关） */
+export type ThinkingLevel = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
+
+/** UI 思考选择态：null=跟随模型默认，false=关闭，true=开（默认档），字符串=显式档位 */
+export type ThinkingChoice = boolean | ThinkingLevel | null
 
 /** 一次流式对话的请求选项：tools 非空走 function calling；thinking 控制思考（缺省按模型目录默认，可传级别） */
 export interface ChatStartOptions {
   tools?: ChatToolSchema[]
-  thinking?: boolean | ThinkingLevel
+  thinking?: ThinkingChoice
 }
 
 export interface ChatMessage {

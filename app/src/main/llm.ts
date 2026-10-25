@@ -63,12 +63,10 @@ function extractReply(body: string): string {
   }
 }
 
-/** OpenAI 兼容路径的思考控制参数（Anthropic 路径在 llmAnthropic 内处理）：
- * - enable_thinking：双向开关（qwen3.5/3.6/3.7 系、qwen-plus/flash）
- * - reasoning_effort：开=发档位，关=不发（qwen3.8 系恒思考，无关闭档）
- * - 无参数声明（商汤 deepseek/kimi 系）：服务端默认开思考，不发 */
-/** 思考参数按协议下发：enable_thinking 只吃开关（级别降级为开）；reasoning_effort 吃档位（low/high，
- *  true 与跟随默认落 medium——即该协议没有显式选择时的现状）。导出供单测钉映射矩阵 */
+/** 思考参数按协议下发（导出供单测钉映射矩阵）：
+ * - enable_thinking / thinking_type 只吃开关：'none' 一并视作关，档位降级为开/关
+ * - reasoning_effort 档位直达：跟随默认不发参数（服务端默认最准）；false/'none' = effort:none
+ *   （商汤网关实测真关闭，qwen3.8 无 none 档落为不发）；档位不在目录 levels 里时丢弃不发（防 400） */
 export function openaiThinkingParams(
   provider: ProviderConfig,
   options?: ChatStartOptions
@@ -76,12 +74,17 @@ export function openaiThinkingParams(
   const cap = modelCapability(provider, provider.textModel)
   if (!cap.reasoning?.openaiParam) return {}
   const req = options?.thinking
-  const on = req === undefined ? cap.reasoning.defaultOn : req !== false
+  const on = req === undefined ? cap.reasoning.defaultOn : req !== false && req !== 'none'
   if (cap.reasoning.openaiParam === 'enable_thinking') return { enable_thinking: on }
-  // deepseek v3.1+ / glm-4.5+ / kimi k2+ 的思考字段（OpenAI 兼容面）：对象形态，只有开/关，档位降级为开
+  // deepseek v4 / glm-5 / kimi-k3 官方 API 的思考字段（OpenAI 兼容面）：对象形态，只有开/关
   if (cap.reasoning.openaiParam === 'thinking_type') return { thinking: { type: on ? 'enabled' : 'disabled' } }
-  const level = req === 'low' ? 'low' : req === 'high' ? 'high' : 'medium'
-  return on ? { reasoning_effort: level } : {}
+  if (req === false || req === 'none') return cap.reasoning.levels?.includes('none') ? { reasoning_effort: 'none' } : {}
+  if (typeof req === 'string') {
+    if (cap.reasoning.levels && !cap.reasoning.levels.includes(req)) return {}
+    return { reasoning_effort: req }
+  }
+  if (req === true) return { reasoning_effort: 'medium' }
+  return {}
 }
 
 // ---- 上下文自动压缩 ----

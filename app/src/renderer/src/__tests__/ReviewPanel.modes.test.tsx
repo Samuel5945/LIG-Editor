@@ -39,6 +39,11 @@ beforeEach(() => {
   onToast.mockClear()
   files['review.md'] = ''
   files['teardown.md'] = ''
+  // 档位菜单读当前模型能力表：给个商汤供应商（deepseek 系 = reasoning_effort 全档）
+  api.on('settings:getLlm', () => ({
+    providers: [{ id: 'p1', name: '商汤', baseUrl: 'https://token.sensenova.cn/v1', textModel: 'deepseek-v4-flash', apiKey: 'k' }],
+    textProviderId: 'p1'
+  }))
   api.on('project:readFile', (_p: string, file: string) => files[file] ?? '')
   api.on('project:writeFile', (_p: string, file: string, content: string) => {
     writes.push({ file, content })
@@ -83,11 +88,12 @@ describe('分析面板双模式', () => {
 })
 
 describe('拆解档位与外部文章', () => {
-  it('档位循环：跟随→深度后发起，请求带 thinking: high', async () => {
+  it('档位展开菜单：单选「深度」后发起，请求带 thinking: high', async () => {
     render(h(ReviewPanel, props()))
     fireEvent.click(await screen.findByText('爆款拆解'))
-    const levelChip = await screen.findByText(/档位·跟随/)
-    fireEvent.click(levelChip)
+    fireEvent.click(await screen.findByText(/档位·跟随/))
+    // 展开选择菜单（替代旧的循环点击）：选预置档位「深度」
+    fireEvent.click(await screen.findByText('深度'))
     expect(screen.getByText(/档位·深度/)).toBeTruthy()
     fireEvent.click(screen.getByText('拆解当前正文'))
     await waitFor(() => expect(chatStarts.length).toBe(1))

@@ -5,7 +5,7 @@
  * 未知模型返回空声明 —— 调用侧按「无能力信息」处理，保持与目录引入前相同的行为。
  */
 
-import type { ContentPart, ModelInfo, ProviderConfig } from './types'
+import type { ContentPart, ModelInfo, ProviderConfig, ThinkingLevel } from './types'
 
 export interface ModelCapability {
   /** 上下文窗口（tokens） */
@@ -20,19 +20,37 @@ export interface ModelCapability {
     defaultOn: boolean
     /**
      * OpenAI 兼容路径的思考控制参数：
-     * - 'enable_thinking'：true/false 双向可开关（qwen3.5/3.6/3.7 系、qwen-plus/flash、qwen3-vl-plus）
-     * - 'reasoning_effort'：开 = 发 effort 档位，关 = 不发参数（qwen3.8 系默认恒思考，无关闭档）
-     * - 'thinking_type'：deepseek v4 / glm-5 / kimi-k3 系——thinking:{type:enabled|disabled} 对象形态，档位降级为开
-     * - 缺省 = 服务端默认（不主动控制）
+     * - 'reasoning_effort'：档位直达，levels 声明该模型接受的档位集（UI 出展开选择菜单）
+     * - 'enable_thinking'：true/false 双向可开关（qwen3.5/3.6/3.7 系、qwen-plus/flash、qwen3-vl-plus），纯开关无档位
+     * - 'thinking_type'：{thinking:{type:enabled|disabled}} 对象开关，档位降级为开——deepseek/glm/kimi
+     *   官方 API 的约定，未知 baseUrl 兜底走这套（这些端点不认 reasoning_effort，硬发会 400）
      * Anthropic 兼容路径统一走 thinking 块，不看此字段
      */
     openaiParam?: 'enable_thinking' | 'reasoning_effort' | 'thinking_type'
+    /** 该模型接受的思考档位集（UI 预置菜单）；缺省 = 纯开关无档位。含 'none' = 可显式关闭 */
+    levels?: ThinkingLevel[]
   }
   /** 是否支持原生工具调用（function calling / tool use） */
   supportsTools?: boolean
   /** 生图模型（输出图像，不用于文本对话） */
   outputImage?: boolean
 }
+
+/** 档位中文标签（选择菜单与思考块标识共用；low/high 沿用既有叫法「快速/深度」） */
+export const THINKING_LEVEL_LABEL: Record<ThinkingLevel, string> = {
+  none: '关闭',
+  minimal: '极简',
+  low: '快速',
+  medium: '标准',
+  high: '深度',
+  xhigh: '超深',
+  max: '最大'
+}
+
+/** 商汤 token 网关实测档位集（2026-10-25 probe：effort=none 真关闭 reasoning 归零；
+ *  非法值 400 报文直接回显完整词汇表，kimi-k3 同一套）。qwen3.8（阿里百炼）只认 low/medium/high */
+const EFFORT_LEVELS_FULL: ThinkingLevel[] = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']
+const EFFORT_LEVELS_QWEN: ThinkingLevel[] = ['low', 'medium', 'high']
 
 interface CatalogEntry {
   /** 模型 id 匹配（允许带日期/版本后缀，如 qwen3.7-max-2026-06-08） */
@@ -41,17 +59,18 @@ interface CatalogEntry {
 }
 
 const SENSENOVA_MODELS: CatalogEntry[] = [
-  // deepseek 系一律按 v4 家族声明（实测列表含 deepseek-flash / deepseek-v4-flash / deepseek-v4-pro / deepseek-v4.1-flash）
-  { match: /^deepseek/, cap: { contextWindow: 1_048_576, maxOutput: 65_536, inputModalities: ['text'], reasoning: { defaultOn: true, openaiParam: 'thinking_type' }, supportsTools: true } },
-  { match: /^kimi-k3/, cap: { contextWindow: 1_000_000, maxOutput: 131_072, inputModalities: ['text', 'image'], reasoning: { defaultOn: true, openaiParam: 'thinking_type' }, supportsTools: true } },
-  { match: /^glm-5/, cap: { contextWindow: 1_000_000, maxOutput: 65_536, inputModalities: ['text'], reasoning: { defaultOn: false, openaiParam: 'thinking_type' }, supportsTools: true } },
+  // deepseek 系一律按 v4 家族声明（实测列表含 deepseek-flash / deepseek-v4-flash / deepseek-v4-pro / deepseek-v4.1-flash）。
+  // 商汤 token 网关收 reasoning_effort 全档（probe 实测），glm-5.2 基线思考开着 → defaultOn 修正为 true
+  { match: /^deepseek/, cap: { contextWindow: 1_048_576, maxOutput: 65_536, inputModalities: ['text'], reasoning: { defaultOn: true, openaiParam: 'reasoning_effort', levels: EFFORT_LEVELS_FULL }, supportsTools: true } },
+  { match: /^kimi-k3/, cap: { contextWindow: 1_000_000, maxOutput: 131_072, inputModalities: ['text', 'image'], reasoning: { defaultOn: true, openaiParam: 'reasoning_effort', levels: EFFORT_LEVELS_FULL }, supportsTools: true } },
+  { match: /^glm-5/, cap: { contextWindow: 1_000_000, maxOutput: 65_536, inputModalities: ['text'], reasoning: { defaultOn: true, openaiParam: 'reasoning_effort', levels: EFFORT_LEVELS_FULL }, supportsTools: true } },
   { match: /^sensenova-6\.8-flash-lite/, cap: { contextWindow: 262_144, maxOutput: 65_536, inputModalities: ['text', 'image'], supportsTools: true } },
   { match: /^sensenova-u1(?:\.5-lite|-fast)$/, cap: { outputImage: true } }
 ]
 
 const DASHSCOPE_MODELS: CatalogEntry[] = [
-  // qwen3.8 系：思考恒开（openai-compat 下用 reasoning_effort 调档，无关闭档）
-  { match: /^qwen3\.8-(?:max|flash)/, cap: { contextWindow: 1_000_000, maxOutput: 131_072, inputModalities: ['text', 'image'], reasoning: { defaultOn: true, openaiParam: 'reasoning_effort' }, supportsTools: true } },
+  // qwen3.8 系：思考恒开（openai-compat 下用 reasoning_effort 调档，无关闭档——false 落为不发参数）
+  { match: /^qwen3\.8-(?:max|flash)/, cap: { contextWindow: 1_000_000, maxOutput: 131_072, inputModalities: ['text', 'image'], reasoning: { defaultOn: true, openaiParam: 'reasoning_effort', levels: EFFORT_LEVELS_QWEN }, supportsTools: true } },
   { match: /^qwen3\.7-(?:plus|flash)/, cap: { contextWindow: 1_000_000, maxOutput: 131_072, inputModalities: ['text', 'image'], reasoning: { defaultOn: true, openaiParam: 'enable_thinking' }, supportsTools: true } },
   { match: /^qwen3\.7-max/, cap: { contextWindow: 1_000_000, maxOutput: 131_072, inputModalities: ['text'], reasoning: { defaultOn: true, openaiParam: 'enable_thinking' }, supportsTools: true } },
   { match: /^qwen3\.6-(?:plus|flash)/, cap: { contextWindow: 1_000_000, maxOutput: 65_536, inputModalities: ['text', 'image'], reasoning: { defaultOn: true, openaiParam: 'enable_thinking' }, supportsTools: true } },
@@ -69,10 +88,18 @@ function tableForProvider(baseUrl: string): CatalogEntry[] {
   return []
 }
 
-/** 未知供应商时按模型名前缀跨表兜底（qwen/deepseek/kimi 系模型能力大体随模型本体） */
+/** 未知供应商时按模型名前缀跨表兜底（qwen/deepseek/kimi/glm 系模型能力大体随模型本体）。
+ *  deepseek/glm/kimi 兜底成 thinking_type 开关而非商汤的 effort 全档：这些家族的官方 API 不认
+ *  reasoning_effort，硬发 400；只有商汤 token 网关（tableForProvider 命中）实测收全档 */
 function tableForModelId(modelId: string): CatalogEntry[] | null {
   if (/^qwen/.test(modelId)) return DASHSCOPE_MODELS
-  if (/^(?:deepseek|kimi|sensenova|glm)/.test(modelId)) return SENSENOVA_MODELS
+  if (/^(?:deepseek|kimi|sensenova|glm)/.test(modelId)) {
+    return SENSENOVA_MODELS.map((e) =>
+      e.cap.reasoning
+        ? { match: e.match, cap: { ...e.cap, reasoning: { ...e.cap.reasoning, openaiParam: 'thinking_type' as const, levels: undefined } } }
+        : e
+    )
+  }
   return null
 }
 

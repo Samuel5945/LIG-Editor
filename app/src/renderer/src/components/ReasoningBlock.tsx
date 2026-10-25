@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState, type ReactElement } from 'react'
+import { THINKING_LEVEL_LABEL } from '@shared/modelCatalog'
+import type { ThinkingLevel } from '@shared/types'
 import { Icon } from '../ui/Icon'
 
 /**
@@ -7,7 +9,7 @@ import { Icon } from '../ui/Icon'
  * - 流式期间自动展开、跟随滚到最新一行——思考模型「先想后答」的等待期里，思考过程就是唯一的进度；
  * - 流结束后自动收起成一行摘要（字数可感知思考量），点开随时回看；
  * - 用户手动开关过就以用户为准，此后不再自动展开/收起（生成→完成之间不打断阅读）。
- * level 标思考档位（深度/快速）：由发送方显式选择时传入，跟随默认则不标。
+ * level 标思考档位（快速/深度/最大…按目录词汇表）：由发送方显式选择时传入，跟随默认则不标。
  */
 export function ReasoningBlock({
   text,
@@ -17,7 +19,7 @@ export function ReasoningBlock({
 }: {
   text: string
   streaming?: boolean
-  level?: 'low' | 'high'
+  level?: ThinkingLevel
   className?: string
 }): ReactElement | null {
   const [userOpen, setUserOpen] = useState<boolean | null>(null)
@@ -29,17 +31,14 @@ export function ReasoningBlock({
   }, [text, streaming, open])
 
   if (!text.trim()) return null
+  const levelName = level && level !== 'none' ? THINKING_LEVEL_LABEL[level] : ''
   const label = streaming
-    ? level === 'high'
-      ? '深度思考中'
-      : level === 'low'
-        ? '快速思考中'
-        : '思考中'
-    : level === 'high'
-      ? '深度思考'
-      : level === 'low'
-        ? '快速思考'
-        : '思考过程'
+    ? levelName
+      ? `${levelName}思考中`
+      : '思考中'
+    : levelName
+      ? `${levelName}思考`
+      : '思考过程'
   return (
     <div
       className={`max-w-[92%] rounded-lg border border-panel-3 bg-panel-2 px-2.5 py-1.5 text-[11px] text-ink-dim ${className}`}

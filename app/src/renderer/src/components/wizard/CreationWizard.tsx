@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from 'react'
 import { confirmAction } from '../../confirm'
-import type { ContentPart, IdeaCard, ProjectMeta, WebSearchResult } from '@shared/types'
+import type { ContentPart, IdeaCard, ProjectMeta, ThinkingChoice, WebSearchResult } from '@shared/types'
 import { CARD_FORMAT_LABEL, parseCardItems, type CardFormat } from '@shared/cards'
 import { sanitizeProjectName } from '@shared/projectName'
 import {
@@ -115,8 +115,8 @@ export default function CreationWizard({
   const [benchBusy, setBenchBusy] = useState(false)
   const [benchStream, setBenchStream] = useState('')
   const [benchReasoning, setBenchReasoning] = useState('')
-  // 拆对标档位：null=跟随默认（协议不支持时主进程自然降级）
-  const [benchLevel, setBenchLevel] = useState<'low' | 'high' | null>(null)
+  // 拆对标思考选择：null=跟随默认（协议不支持时主进程自然降级）
+  const [benchLevel, setBenchLevel] = useState<ThinkingChoice>(null)
   const [outline, setOutline] = useState('')
   const [projName, setProjName] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -588,7 +588,7 @@ export default function CreationWizard({
               benchStream={benchStream}
               benchReasoning={benchReasoning}
               benchLevel={benchLevel}
-              onCycleBenchLevel={() => setBenchLevel((v) => (v === null ? 'high' : v === 'high' ? 'low' : null))}
+              onBenchLevelChange={setBenchLevel}
               onRunBench={() => void runBenchmarkTeardown()}
               onIdeasChanged={onIdeasChanged}
               onToast={onToast}

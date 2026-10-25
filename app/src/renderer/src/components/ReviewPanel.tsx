@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react'
-import type { WebSearchResult } from '@shared/types'
+import type { ThinkingChoice, WebSearchResult } from '@shared/types'
 import { chatOnce } from '../copilot/llm'
 import { reviewMessages, teardownMessages } from '../copilot/prompts'
 import { ReasoningBlock } from './ReasoningBlock'
+import { ThinkingSelect, useTextModelCap } from './ThinkingSelect'
 import { Icon } from '../ui/Icon'
 import { Button, Chip, Segmented, Switch } from '../ui/primitives'
 
@@ -80,8 +81,10 @@ export default function ReviewPanel({
   const webOnRef = useRef(webOn)
   webOnRef.current = webOn
   const [searching, setSearching] = useState(false)
+  // 拆解档位菜单需要当前模型的能力表（预置档位集从目录读）
+  const cap = useTextModelCap()
   // 拆解档位：null=跟随模型默认，'low'/'high' 显式下发（协议不支持时主进程自然降级，见 llmThinking 映射）
-  const [tdLevel, setTdLevel] = useState<'low' | 'high' | null>(null)
+  const [tdLevel, setTdLevel] = useState<ThinkingChoice>(null)
   // 拆外部对标：粘贴的文章只在面板内展示（externalView 标记），teardown.md 留给本工程正文的拆解
   const [pasteOpen, setPasteOpen] = useState(false)
   const [pasteText, setPasteText] = useState('')
@@ -308,14 +311,7 @@ export default function ReviewPanel({
                 </Button>
               )}
               {!streaming && mode === 'teardown' && (
-                <Chip
-                  on={tdLevel !== null}
-                  icon="brain"
-                  onClick={() => setTdLevel((v) => (v === null ? 'high' : v === 'high' ? 'low' : null))}
-                  title={`拆解档位：${tdLevel === null ? '跟随模型默认' : tdLevel === 'high' ? '深度' : '快速'}——点击循环 跟随→深度→快速；仅对支持 effort 档位的模型生效`}
-                >
-                  档位·{tdLevel === null ? '跟随' : tdLevel === 'high' ? '深度' : '快速'}
-                </Chip>
+                <ThinkingSelect cap={cap} value={tdLevel} onChange={setTdLevel} prefix="档位" />
               )}
               {!streaming && !empty && mode === 'review' && (
                 <Button size="sm" variant="pri" icon="sparkles" onClick={() => onOptimize(reportMd)} title="按审阅报告逐条修订正文，diff 确认后覆盖">
@@ -408,7 +404,7 @@ export default function ReviewPanel({
 
         {/* 思考过程（思考模型的等待期进度；拆解模式带用户选的档位） */}
         {streaming && streamReasoning && (
-          <ReasoningBlock text={streamReasoning} streaming level={mode === 'teardown' ? (tdLevel ?? undefined) : undefined} className="mb-2" />
+          <ReasoningBlock text={streamReasoning} streaming level={mode === 'teardown' ? (typeof tdLevel === 'string' && tdLevel !== 'none' ? tdLevel : undefined) : undefined} className="mb-2" />
         )}
 
         {/* 流式过程预览 */}
