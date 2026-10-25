@@ -37,6 +37,8 @@ beforeEach(() => {
   chatStarts = []
   writes.length = 0
   onToast.mockClear()
+  files['review.md'] = ''
+  files['teardown.md'] = ''
   api.on('project:readFile', (_p: string, file: string) => files[file] ?? '')
   api.on('project:writeFile', (_p: string, file: string, content: string) => {
     writes.push({ file, content })
@@ -77,5 +79,37 @@ describe('分析面板双模式', () => {
     })
     await waitFor(() => expect(writes).toEqual([{ file: 'teardown.md', content: '# 爆款拆解\n## 标题与钩子\n数字+悬念\n' }]))
     expect(onToast).toHaveBeenCalledWith('选段拆解已写入 teardown.md')
+  })
+})
+
+describe('拆解档位与外部文章', () => {
+  it('档位循环：跟随→深度后发起，请求带 thinking: high', async () => {
+    render(h(ReviewPanel, props()))
+    fireEvent.click(await screen.findByText('爆款拆解'))
+    const levelChip = await screen.findByText(/档位·跟随/)
+    fireEvent.click(levelChip)
+    expect(screen.getByText(/档位·深度/)).toBeTruthy()
+    fireEvent.click(screen.getByText('拆解当前正文'))
+    await waitFor(() => expect(chatStarts.length).toBe(1))
+    const opts = api.callsOf('llm:chatStart')[0][2] as { thinking?: string }
+    expect(opts?.thinking).toBe('high')
+  })
+
+  it('粘贴外部文章：面板内展示、不落盘（writes 保持空）、toast 如实标注', async () => {
+    render(h(ReviewPanel, props()))
+    fireEvent.click(await screen.findByText('爆款拆解'))
+    fireEvent.click(screen.getByText('拆外部文章'))
+    const ta = screen.getByPlaceholderText(/粘贴对标爆款全文/) as HTMLTextAreaElement
+    fireEvent.change(ta, { target: { value: '# 对标爆款标题\n\n钩子开头' } })
+    fireEvent.click(screen.getByText('拆解粘贴的文章'))
+    await waitFor(() => expect(chatStarts.length).toBe(1))
+    await act(async () => {
+      api.emit('llm:stream', { requestId: chatStarts[0], delta: '# 爆款拆解\n## 标题与钩子\n数字+悬念' })
+      api.emit('llm:done', { requestId: chatStarts[0] })
+    })
+    await waitFor(() => expect(onToast).toHaveBeenCalledWith('外部文章拆解完成（仅面板展示，未落盘）'))
+    expect(writes).toEqual([])
+    expect(screen.getByText('teardown.md（外部文章 · 未落盘）')).toBeTruthy()
+    expect(screen.getByText('标题与钩子')).toBeTruthy()
   })
 })

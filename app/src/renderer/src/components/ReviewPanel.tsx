@@ -4,7 +4,7 @@ import { chatOnce } from '../copilot/llm'
 import { reviewMessages, teardownMessages } from '../copilot/prompts'
 import { ReasoningBlock } from './ReasoningBlock'
 import { Icon } from '../ui/Icon'
-import { Button, Segmented, Switch } from '../ui/primitives'
+import { Button, Chip, Segmented, Switch } from '../ui/primitives'
 
 type PanelMode = 'review' | 'teardown'
 
@@ -77,6 +77,12 @@ export default function ReviewPanel({
   const webOnRef = useRef(webOn)
   webOnRef.current = webOn
   const [searching, setSearching] = useState(false)
+  // 拆解档位：null=跟随模型默认，'low'/'high' 显式下发（协议不支持时主进程自然降级，见 llmThinking 映射）
+  const [tdLevel, setTdLevel] = useState<'low' | 'high' | null>(null)
+  // 拆外部对标：粘贴的文章只在面板内展示（externalView 标记），teardown.md 留给本工程正文的拆解
+  const [pasteOpen, setPasteOpen] = useState(false)
+  const [pasteText, setPasteText] = useState('')
+  const [externalView, setExternalView] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -84,6 +90,7 @@ export default function ReviewPanel({
       setSections(parseSections(md))
       setReportMd(md)
       setEmpty(!md.trim())
+      setExternalView(false)
     } catch {
       setSections([])
       setReportMd('')
@@ -161,25 +168,41 @@ export default function ReviewPanel({
   // ---- 发起爆款拆解（独立一次性调用；选段非空则只拆该段） ----
 
   const runTeardown = useCallback(
-    async (sel?: string) => {
+    async (opts: { sel?: string; article?: string } = {}) => {
       if (streaming) return
-      const target = sel?.trim() ? sel : articleRef.current
+      const external = Boolean(opts.article?.trim())
+      const target = (external ? opts.article : opts.sel?.trim() ? opts.sel : articleRef.current) ?? ''
       if (!target.trim()) {
-        onToast('正文为空，先写点内容再拆解')
+        onToast('正文为空，先写点内容或粘贴待拆的文章')
         return
       }
       setError(null)
       setStreaming(true)
       setStreamText('')
       setStreamReasoning('')
-      setScopeTip(sel?.trim() ? `只拆选段（${sel.trim().length} 字）` : null)
-      const { promise, abort } = chatOnce(teardownMessages(target, skillRef.current), setStreamText, setStreamReasoning)
+      setScopeTip(opts.sel?.trim() ? `只拆选段（${opts.sel.trim().length} 字）` : null)
+      const { promise, abort } = chatOnce(
+        teardownMessages(target, skillRef.current),
+        setStreamText,
+        setStreamReasoning,
+        tdLevel === null ? undefined : { thinking: tdLevel }
+      )
       abortRef.current = abort
       try {
         const full = await promise
-        await window.api.invoke('project:writeFile', project, 'teardown.md', full.trim() + '\n')
-        await load()
-        onToast(sel?.trim() ? '选段拆解已写入 teardown.md' : '拆解报告已写入 teardown.md')
+        if (external) {
+          // 外部对标只在面板内展示，不覆盖本工程正文的 teardown.md（要留存时走对话/选题步的落盘路径）
+          setSections(parseSections(full))
+          setReportMd(full)
+          setEmpty(false)
+          setExternalView(true)
+          setPasteOpen(false)
+          onToast('外部文章拆解完成（仅面板展示，未落盘）')
+        } else {
+          await window.api.invoke('project:writeFile', project, 'teardown.md', full.trim() + '\n')
+          await load()
+          onToast(opts.sel?.trim() ? '选段拆解已写入 teardown.md' : '拆解报告已写入 teardown.md')
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err))
       } finally {
@@ -189,7 +212,7 @@ export default function ReviewPanel({
         abortRef.current = null
       }
     },
-    [streaming, project, load, onToast]
+    [streaming, project, load, onToast, tdLevel]
   )
 
   // BubbleMenu「AI 审阅」触发（选区非空则只审选段）
@@ -208,7 +231,7 @@ export default function ReviewPanel({
     if (teardownRequest > 0 && teardownRequest !== tornRef.current) {
       tornRef.current = teardownRequest
       setMode('teardown')
-      runTeardown(selectionRef.current ?? undefined)
+      void runTeardown({ sel: selectionRef.current ?? undefined })
     }
   }, [teardownRequest, runTeardown])
 
@@ -246,9 +269,30 @@ export default function ReviewPanel({
                   {empty ? '全文审阅' : '重新审阅'}
                 </Button>
               ) : (
-                <Button size="sm" variant="sec" icon="compass" onClick={() => runTeardown()}>
+                <Button size="sm" variant="sec" icon="compass" onClick={() => void runTeardown()}>
                   {empty ? '拆解当前正文' : '重新拆解'}
                 </Button>
+              )}
+              {!streaming && mode === 'teardown' && (
+                <Button
+                  size="sm"
+                  variant="sec"
+                  icon="clip"
+                  onClick={() => setPasteOpen((v) => !v)}
+                  title="拆一篇外部对标文章：粘贴全文拆机制，只在面板展示（不落盘、不覆盖本工程拆解报告）"
+                >
+                  {pasteOpen ? '收起粘贴' : '拆外部文章'}
+                </Button>
+              )}
+              {!streaming && mode === 'teardown' && (
+                <Chip
+                  on={tdLevel !== null}
+                  icon="brain"
+                  onClick={() => setTdLevel((v) => (v === null ? 'high' : v === 'high' ? 'low' : null))}
+                  title={`拆解档位：${tdLevel === null ? '跟随模型默认' : tdLevel === 'high' ? '深度' : '快速'}——点击循环 跟随→深度→快速；仅对支持 effort 档位的模型生效`}
+                >
+                  档位·{tdLevel === null ? '跟随' : tdLevel === 'high' ? '深度' : '快速'}
+                </Chip>
               )}
               {!streaming && !empty && mode === 'review' && (
                 <Button size="sm" variant="pri" icon="sparkles" onClick={() => onOptimize(reportMd)} title="按审阅报告逐条修订正文，diff 确认后覆盖">
@@ -266,10 +310,36 @@ export default function ReviewPanel({
               )}
             </div>
           </div>
+          {mode === 'teardown' && pasteOpen && (
+            <div className="mt-2">
+              <textarea
+                rows={4}
+                value={pasteText}
+                onChange={(e) => setPasteText(e.target.value)}
+                disabled={streaming}
+                placeholder="粘贴对标爆款全文（标题 + 正文），拆它的标题钩子/开头/骨架/节奏——只在面板展示，不落盘"
+                className="w-full resize-none rounded-lg border border-panel-3 bg-panel p-2 text-[11.5px] leading-5 text-ink outline-none placeholder:text-ink-dim focus:border-accent disabled:opacity-50"
+              />
+              <div className="mt-1.5 flex justify-end">
+                <Button
+                  size="sm"
+                  variant="pri"
+                  icon="compass"
+                  disabled={streaming || !pasteText.trim()}
+                  onClick={() => void runTeardown({ article: pasteText })}
+                >
+                  拆解粘贴的文章
+                </Button>
+              </div>
+            </div>
+          )}
           <div className="mt-2 flex flex-wrap items-center gap-2 text-[11.5px] text-ink-dim">
             <span className="inline-flex items-center gap-1.5">
               报告写入
-              <span className="rounded border border-panel-3 bg-panel px-1.5 py-0.5 font-mono text-[11px]">{fileOf(mode)}</span>
+              <span className="rounded border border-panel-3 bg-panel px-1.5 py-0.5 font-mono text-[11px]">
+                {fileOf(mode)}
+                {externalView && mode === 'teardown' ? '（外部文章 · 未落盘）' : ''}
+              </span>
             </span>
             {searching ? (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-panel-3 px-2.5 py-0.5 text-ink">
@@ -303,8 +373,10 @@ export default function ReviewPanel({
           </p>
         )}
 
-        {/* 思考过程（思考模型的等待期进度） */}
-        {streaming && streamReasoning && <ReasoningBlock text={streamReasoning} streaming className="mb-2" />}
+        {/* 思考过程（思考模型的等待期进度；拆解模式带用户选的档位） */}
+        {streaming && streamReasoning && (
+          <ReasoningBlock text={streamReasoning} streaming level={mode === 'teardown' ? (tdLevel ?? undefined) : undefined} className="mb-2" />
+        )}
 
         {/* 流式过程预览 */}
         {streaming && (
@@ -323,7 +395,7 @@ export default function ReviewPanel({
             <p className="max-w-[320px] text-[11.5px] leading-relaxed text-ink-dim">
               {mode === 'review'
                 ? '点上方「全文审阅」发起一次独立上下文审阅（开联网会先检索最新资料），报告落 review.md 后可逐条跳转原文。'
-                : '把当前正文当爆款复盘（或选中一段拆它的写法）：按标题钩子/开头三行/结构骨架/情绪节奏/选题受众六维拆为什么能火，套路与骨架直接可复用。'}
+                : '拆当前正文复盘、选中一段拆写法，或点「拆外部文章」粘贴一篇对标——按标题钩子/开头三行/结构骨架/情绪节奏/选题受众六维拆为什么能火。'}
             </p>
           </div>
         )}

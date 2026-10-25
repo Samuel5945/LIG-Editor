@@ -147,3 +147,39 @@ describe('工具循环（chat-tools v1）', () => {
     await waitFor(() => expect(screen.getByText('已取消，未推送。')).toBeTruthy())
   })
 })
+
+describe('save_outline 深链', () => {
+  it('大纲落盘成功后出「去大纲步」入口，点击回调跳转', async () => {
+    api.on('agent:callTool', () => ({ ok: true, result: { file: 'outline.md' } }))
+    const goOutline = vi.fn()
+    cleanup() // 共享 beforeEach 已挂一份（无 onGoOutlineStep），这里换带深链回调的实例
+    render(
+      h(ChatPanel, {
+        project: '演示工程',
+        article: '# 标题',
+        format: 'article',
+        skill: null,
+        onToast,
+        onSkillsChanged: () => {},
+        onGoBrainstorm: () => {},
+        onGoReview: () => {},
+        onGoOutlineStep: goOutline
+      })
+    )
+    fireEvent.change(screen.getByPlaceholderText('自由对话，Enter 发送（可附带图片/文档）'), {
+      target: { value: '反推大纲' }
+    })
+    fireEvent.click(screen.getByTitle('发送（Enter）'))
+    await waitFor(() => expect(chatStarts.length).toBe(1))
+    await act(async () => {
+      finishRound(chatStarts[0], '整理中', [
+        { id: 'c1', name: 'save_outline', arguments: JSON.stringify({ project: '演示工程', outline: '# 标题\n## 节' }) }
+      ])
+    })
+    await waitFor(() => expect(chatStarts.length).toBe(2))
+    await act(async () => finishRound(chatStarts[1], '已存好。'))
+    const link = await screen.findByText(/去大纲步查看并拖拽重排/)
+    fireEvent.click(link)
+    expect(goOutline).toHaveBeenCalledTimes(1)
+  })
+})

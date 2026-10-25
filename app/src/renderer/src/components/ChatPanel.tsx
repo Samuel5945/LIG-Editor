@@ -219,6 +219,8 @@ interface ChatPanelProps {
   /** 空白态功能卡片：切到「脑暴创作」/「审阅」页签 */
   onGoBrainstorm: () => void
   onGoReview: () => void
+  /** save_outline 落盘后跳向导大纲步（看/拖拽重排反推出的大纲） */
+  onGoOutlineStep?: () => void
 }
 
 /** 空白态功能卡片的预设提问（发送时自动附带工程上下文） */
@@ -257,7 +259,8 @@ export default function ChatPanel({
   onApplyArticleAccent,
   onApplyArticle,
   onGoBrainstorm,
-  onGoReview
+  onGoReview,
+  onGoOutlineStep
 }: ChatPanelProps): ReactElement {
   const [sessions, setSessions] = useState<ChatSessionMeta[]>([])
   const [sessionId, setSessionId] = useState<string | null>(null)
@@ -279,6 +282,8 @@ export default function ChatPanel({
   const [toolCards, setToolCards] = useState<Record<number, ToolCardState[]>>({})
   const toolCardsRef = useRef<Record<number, ToolCardState[]>>({})
   const [pushConfirm, setPushConfirm] = useState<{ tool: string; summary: string; resolve: (ok: boolean) => void } | null>(null)
+  // 本轮 save_outline 落过盘：收尾给一条「去大纲步」深链（反推→查看/重排的断点在导航上接通）
+  const [outlineSaved, setOutlineSaved] = useState(false)
   // 会话桶：默认跟当前工程走；「临时」切换后看向临时对话桶（settings/chat-temp/，与主进程 TEMP_CHAT_KEY 对应）
   const [tempMode, setTempMode] = useState(false)
   const chatBucket = !project || tempMode ? '__temp__' : project
@@ -625,6 +630,7 @@ export default function ChatPanel({
       setError(null)
       setStreaming(true)
       setStreamReasoning('')
+      setOutlineSaved(false)
       // 开了联网：先搜再喂——结果只拼进当轮 API 请求，不进可见历史/落盘会话
       let web: WebSearchResult[] = []
       if (webOn) {
@@ -787,6 +793,7 @@ export default function ChatPanel({
             // AI 生成的整套主题入库：立刻让 App 重拉自定义主题列表，
             // 作者不用重开应用就能在该分类的调性下拉里看到它（新分类目录也会随 workspace:changed 出现）
             if (ok && tc.name === 'save_theme_preset') onCustomThemesChanged?.()
+            if (ok && tc.name === 'save_outline') setOutlineSaved(true)
             history.push({ role: 'tool', tool_call_id: tc.id, content: summary })
             if (!PUSH_TOOLS.includes(tc.name)) outcomes.set(tc.name, ok)
             // 连续两次工具失败：停止重试，让模型向用户询问缺失信息而不是死循环
@@ -941,21 +948,22 @@ export default function ChatPanel({
                   <span className="mt-1 block leading-4 text-ink-dim">拆为什么能火，套路存 teardown.md</span>
                 </button>
               )}
+            </div>
+            {/* 跳转入口不再与对话内动作平起平坐：收窄成链接行（执行卡四张管「在这里做」，这两个管「去哪做」） */}
+            <div className="flex flex-wrap gap-1.5">
               <button
                 onClick={onGoBrainstorm}
-                className="rounded-lg border border-panel-3 bg-panel-2 p-2.5 text-left hover:bg-panel-3"
+                className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11.5px] text-ink-dim hover:bg-panel-3 hover:text-ink"
               >
-                <span className="inline-flex items-center gap-1.5 font-semibold text-ink"><Icon name="brain" size={12} className="text-accent" />脑暴选题</span>
-                <span className="mt-1 block leading-4 text-ink-dim">去「脑暴创作」出选题和正文</span>
+                <Icon name="brain" size={12} />脑暴创作 · 出选题和正文
               </button>
               <button
                 onClick={onGoReview}
                 disabled={!project}
                 title={project ? undefined : '先打开工程'}
-                className="rounded-lg border border-panel-3 bg-panel-2 p-2.5 text-left hover:bg-panel-3 disabled:opacity-40"
+                className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11.5px] text-ink-dim hover:bg-panel-3 hover:text-ink disabled:opacity-40"
               >
-                <span className="inline-flex items-center gap-1.5 font-semibold text-ink"><Icon name="search" size={12} className="text-accent" />审阅打磨</span>
-                <span className="mt-1 block leading-4 text-ink-dim">去「审阅」逐段/逐张点评</span>
+                <Icon name="search" size={12} />审阅 / 爆款拆解 · 分析面板
               </button>
             </div>
           </div>
@@ -1153,6 +1161,16 @@ export default function ChatPanel({
             </div>
           )
         })}
+        {outlineSaved && !streaming && onGoOutlineStep && (
+          <button
+            onClick={onGoOutlineStep}
+            className="mt-1 inline-flex items-center gap-1.5 rounded-lg border border-accent/40 bg-accent/10 px-2.5 py-1.5 text-[11.5px] text-accent hover:bg-accent/20"
+          >
+            <Icon name="checkCircle" size={12} />
+            大纲已存 outline.md · 去大纲步查看并拖拽重排
+            <Icon name="chevronRight" size={11} />
+          </button>
+        )}
         {error && <p className="mt-1 break-all text-st-bad"><Icon name="xCircle" size={12} className="mr-1" />{error}</p>}
         {searching && <p className="mt-1 text-ink-dim"><Icon name="globe" size={12} className="mr-1" />联网搜索中…</p>}
       </div>

@@ -37,6 +37,9 @@ export interface BrainstormIdeasProps {
   benchBusy: boolean
   benchStream: string
   benchReasoning: string
+  /** 拆解档位（null=跟随默认）与循环切换 */
+  benchLevel: 'low' | 'high' | null
+  onCycleBenchLevel: () => void
   onRunBench: () => void
   onIdeasChanged: () => void
   onToast: (msg: string) => void
@@ -65,6 +68,8 @@ export default function BrainstormIdeas({
   benchBusy,
   benchStream,
   benchReasoning,
+  benchLevel,
+  onCycleBenchLevel,
   onRunBench,
   onIdeasChanged,
   onToast,
@@ -132,7 +137,9 @@ export default function BrainstormIdeas({
           <div className="px-2.5 pb-2.5">
             {benchBusy ? (
               <>
-                {benchReasoning && <ReasoningBlock text={benchReasoning} streaming className="mb-2" />}
+                {benchReasoning && (
+                  <ReasoningBlock text={benchReasoning} streaming level={benchLevel ?? undefined} className="mb-2" />
+                )}
                 <div className="thin-scroll max-h-32 overflow-auto whitespace-pre-wrap rounded bg-panel p-2 text-[11px] leading-5 text-ink-dim">
                   {benchStream || '拆解中…'}
                   <span className="animate-pulse">▌</span>
@@ -145,6 +152,16 @@ export default function BrainstormIdeas({
               </>
             ) : (
               <>
+                <div className="mb-1.5 flex justify-end">
+                  <Chip
+                    on={benchLevel !== null}
+                    icon="brain"
+                    onClick={onCycleBenchLevel}
+                    title={`拆解档位：${benchLevel === null ? '跟随模型默认' : benchLevel === 'high' ? '深度' : '快速'}——点击循环 跟随→深度→快速；仅对支持 effort 档位的模型生效`}
+                  >
+                    档位·{benchLevel === null ? '跟随' : benchLevel === 'high' ? '深度' : '快速'}
+                  </Chip>
+                </div>
                 <textarea
                   rows={4}
                   value={benchText}

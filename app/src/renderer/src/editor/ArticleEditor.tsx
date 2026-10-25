@@ -10,7 +10,7 @@ import {
   type ReactNode
 } from 'react'
 import { Icon } from '../ui/Icon'
-import { ChoiceTile, POPOVER_CLS, PopoverLabel } from '../ui/primitives'
+import { ChoiceTile, MenuItem, Popover, POPOVER_CLS, PopoverLabel } from '../ui/primitives'
 import { useEditor, EditorContent, BubbleMenu } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import type { JSONContent } from '@tiptap/react'
@@ -308,6 +308,8 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
   }, [])
   /** 选区样式弹层：color 字色 / bg 背景高亮 / size 字号 */
   const [stylePop, setStylePop] = useState<'color' | 'bg' | 'size' | null>(null)
+  // 选区「分析」菜单（AI 审阅 / 拆解这段）：两个次动作收进一处，浮条不再无限加宽
+  const [analysisPop, setAnalysisPop] = useState(false)
   /** 工具栏排版弹层：body 正文（字号/排列）/ heading 标题（字号/排列/装饰版式/序号/前缀） */
   /** 工具栏弹层互斥：同一时刻只开一个（accent/bg/body/heading） */
   const [toolPop, setToolPop] = useState<'accent' | 'bg' | 'body' | 'heading' | null>(null)
@@ -994,23 +996,40 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
               <Icon name="pencil" size={12} />
               AI 修改
             </button>
-            <button
-              type="button"
-              onClick={() => onAiReview?.()}
-              className="inline-flex h-[26px] shrink-0 items-center gap-1 rounded-md border border-panel-3 px-2 text-[11.5px] text-ink-dim hover:bg-panel-3 hover:text-ink"
-            >
-              <Icon name="search" size={12} />
-              AI 审阅
-            </button>
-            <button
-              type="button"
-              onClick={() => onAiTeardown?.()}
-              title="拆这段为什么留人：钩子/节奏/写法机制，报告进分析面板的爆款拆解"
-              className="inline-flex h-[26px] shrink-0 items-center gap-1 rounded-md border border-panel-3 px-2 text-[11.5px] text-ink-dim hover:bg-panel-3 hover:text-ink"
-            >
-              <Icon name="compass" size={12} />
-              拆解这段
-            </button>
+            <div className="relative shrink-0">
+              <button
+                type="button"
+                onClick={() => setAnalysisPop((v) => !v)}
+                title="AI 审阅找问题 · 爆款拆解找机制（选段非空则只处理选中部分）"
+                className="inline-flex h-[26px] items-center gap-1 rounded-md border border-panel-3 px-2 text-[11.5px] text-ink-dim hover:bg-panel-3 hover:text-ink"
+              >
+                <Icon name="search" size={12} />
+                分析
+                <Icon name="chevronDown" size={11} />
+              </button>
+              {analysisPop && (
+                <Popover onClose={() => setAnalysisPop(false)} className="absolute right-0 top-full mt-1 min-w-[196px] py-1">
+                  <MenuItem
+                    icon="search"
+                    onClick={() => {
+                      setAnalysisPop(false)
+                      onAiReview?.()
+                    }}
+                  >
+                    AI 审阅 · 找问题
+                  </MenuItem>
+                  <MenuItem
+                    icon="compass"
+                    onClick={() => {
+                      setAnalysisPop(false)
+                      onAiTeardown?.()
+                    }}
+                  >
+                    爆款拆解 · 拆这段写法
+                  </MenuItem>
+                </Popover>
+              )}
+            </div>
           </div>
         </BubbleMenu>
         <EditorContent

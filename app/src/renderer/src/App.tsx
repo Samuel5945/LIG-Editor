@@ -1699,6 +1699,10 @@ export default function App(): JSX.Element {
                 setCenterTab('create')
                 setStepRequest({ id: 'review', ts: Date.now() })
               }}
+              onGoOutlineStep={() => {
+                setCenterTab('create')
+                setStepRequest({ id: 'outline', ts: Date.now() })
+              }}
             />
           </div>
         </aside>

@@ -12,11 +12,13 @@ export { extractJsonArray, stripHtmlFence } from '@shared/llmText'
 const WATCHDOG_MS = 600_000
 
 /** 把 llm:chatStart 的事件流包装成 Promise；onDelta 可拿到累计全文做流式 UI，
- * onReasoning 拿累计思考过程（模型思考字段 reasoning/reasoning_content/thinking_delta 已在主进程归一） */
+ * onReasoning 拿累计思考过程（模型思考字段 reasoning/reasoning_content/thinking_delta 已在主进程归一）；
+ * options.thinking 传思考档位（false/low/high，缺省跟随模型默认——分析面板等一次性调用用） */
 export function chatOnce(
   messages: ChatMessage[],
   onDelta?: (full: string, delta: string) => void,
-  onReasoning?: (full: string, delta: string) => void
+  onReasoning?: (full: string, delta: string) => void,
+  options?: { thinking?: ChatStartOptions['thinking'] }
 ): { promise: Promise<string>; abort: () => void } {
   const requestId = crypto.randomUUID()
   let full = ''
@@ -53,7 +55,9 @@ export function chatOnce(
       })
     })
     // invoke 本身失败（如桥接层异常）不会有 llm:done 来收场，直接当错误收掉
-    window.api.invoke('llm:chatStart', requestId, messages).catch((err) =>
+    window.api
+      .invoke('llm:chatStart', requestId, messages, options?.thinking === undefined ? undefined : { thinking: options.thinking })
+      .catch((err) =>
       settle(() => {
         offStream()
         offDone()

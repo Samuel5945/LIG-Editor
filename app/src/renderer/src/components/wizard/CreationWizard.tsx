@@ -115,6 +115,8 @@ export default function CreationWizard({
   const [benchBusy, setBenchBusy] = useState(false)
   const [benchStream, setBenchStream] = useState('')
   const [benchReasoning, setBenchReasoning] = useState('')
+  // 拆对标档位：null=跟随默认（协议不支持时主进程自然降级）
+  const [benchLevel, setBenchLevel] = useState<'low' | 'high' | null>(null)
   const [outline, setOutline] = useState('')
   const [projName, setProjName] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -140,7 +142,12 @@ export default function CreationWizard({
     setBenchBusy(true)
     setBenchStream('')
     setBenchReasoning('')
-    const { promise, abort } = chatOnce(teardownMessages(benchText, skill), setBenchStream, setBenchReasoning)
+    const { promise, abort } = chatOnce(
+      teardownMessages(benchText, skill),
+      setBenchStream,
+      setBenchReasoning,
+      benchLevel === null ? undefined : { thinking: benchLevel }
+    )
     abortRef.current = abort
     try {
       const full = await promise
@@ -165,7 +172,7 @@ export default function CreationWizard({
       setBenchReasoning('')
       abortRef.current = null
     }
-  }, [benchBusy, benchText, skill, project, onToast])
+  }, [benchBusy, benchText, skill, project, onToast, benchLevel])
 
   // 流式预览自动滚底（两个会话步各自的滚动容器）
   useEffect(() => {
@@ -575,6 +582,8 @@ export default function CreationWizard({
               benchBusy={benchBusy}
               benchStream={benchStream}
               benchReasoning={benchReasoning}
+              benchLevel={benchLevel}
+              onCycleBenchLevel={() => setBenchLevel((v) => (v === null ? 'high' : v === 'high' ? 'low' : null))}
               onRunBench={() => void runBenchmarkTeardown()}
               onIdeasChanged={onIdeasChanged}
               onToast={onToast}
