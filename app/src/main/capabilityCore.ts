@@ -238,17 +238,21 @@ export const TOOLS: ToolDef[] = [
   },
   {
     name: 'read_article',
-    description: '读工程内文本文件原文（article.md 正文 / ideas.md 灵感 / review.md 审阅报告）',
+    description: '读工程内文本文件原文（article.md 正文 / ideas.md 灵感 / review.md 审阅报告 / outline.md 大纲）',
     inputSchema: {
       type: 'object',
       properties: {
         project: P.project,
-        file: { type: 'string', enum: ['article.md', 'ideas.md', 'review.md'], description: '缺省 article.md' }
+        file: { type: 'string', enum: ['article.md', 'ideas.md', 'review.md', 'outline.md'], description: '缺省 article.md' }
       },
       required: ['project']
     },
     handler: (a) => {
-      const file = (str(a, 'file', false) || 'article.md') as 'article.md' | 'ideas.md' | 'review.md'
+      const file = (str(a, 'file', false) || 'article.md') as
+        | 'article.md'
+        | 'ideas.md'
+        | 'review.md'
+        | 'outline.md'
       return store.readTextFile(projectArg(a), file)
     }
   },
@@ -449,6 +453,23 @@ export const TOOLS: ToolDef[] = [
       // 审阅报告落盘 = 进审阅（选题看板「已成稿」的依据），与 UI 写 review.md 同规则（ipc project:writeFile）
       if (store.advanceStatus(project, 'reviewing')) notifyChange(project, 'project.json')
       return { ok: true }
+    }
+  },
+  {
+    name: 'save_outline',
+    description:
+      '把大纲写入工程 outline.md（# 标题 + ## 各小节）。正文已有成稿时用于反推/维护大纲——只写 outline.md，绝不改写 article.md；创作向导的大纲步会自动带出这份文件',
+    inputSchema: {
+      type: 'object',
+      properties: { project: P.project, outline: { type: 'string', description: '大纲 markdown 全文（# 一级标题为文章标题，## 二级标题为小节，节下一句说明）' } },
+      required: ['project', 'outline']
+    },
+    handler: (a) => {
+      const project = projectArg(a)
+      store.writeTextFile(project, 'outline.md', str(a, 'outline').trim() + '\n')
+      notifyChange(project, 'outline.md')
+      // 大纲不是流程状态：落盘不推动选题看板状态机（与 save_review 的 reviewing 戳刻意不同）
+      return { ok: true, file: 'outline.md' }
     }
   },
   {

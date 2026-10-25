@@ -66,7 +66,7 @@ const GUIDE_BODIES: Record<AgentGuideTopic, () => string> = {
     `创作流程（本应用不代跑 LLM：*_prompt 只给提示词，用你自己的模型跑完，再调落盘工具写回）
 1 选题：brainstorm_prompt(material) → 模型出 5 张选题卡 JSON → save_ideas 入库
 2 立项：schedule_idea(index,date) 从选题库立项并排期；或 create_project(name,category) 直接建一个
-3 大纲：outline_prompt(project,ask,material) → 模型出大纲
+3 大纲：outline_prompt(project,ask,material) → 模型出大纲；正文已成稿要反推/维护大纲时：read_article 拿正文 → 忠实提炼（# 标题 + ## 小节，节下一句说明）→ save_outline 写 outline.md——只写大纲文件，绝不改 article.md
 4 正文：article_prompt(project,outline) → 模型出 markdown 全文 → write_article 落盘（语法见 get_guide markdown）
 5 配图：render_figure（代码画图，可复现）/ generate_image（AI 文生图）/ import_image（本机现成图）
 6 排版：set_theme 改单个工程；整套存成分类主题用 save_theme_preset；先 list_themes 读现状，切换用 set_active_theme（字段表见 get_guide theme）

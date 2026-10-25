@@ -149,7 +149,7 @@ function summarizeToolResult(r: { ok: boolean; result?: unknown; error?: string 
 /** 工具守则：注入系统提示（当前工程 + 补丁优先 + 一次一个工具 + 围栏降级协议）。
  *  inventory 由调用方按通路决定——原生 tools 能下发的模型不再重复列清单 */
 function toolsGuardrail(project: string | null, inventory: string): string {
-  return `\n\n<工具守则>\n${project ? `当前工程：「${project}」，涉及它的操作默认对它执行，但每个调用仍要显式带上 project=「${project}」。` : '当前未打开工程：需要工程参数时先 list_projects 查询，或先 create_project 立项再用它返回的工程名；写入类工具（write_article / patch_article / set_titles 等）一律要显式带 project，省略即失败。'}\n改正文优先用 patch_article（patches 传数组：[{"old":"原文唯一片段","new":"替换后文本"}]，old 须与正文逐字一致且全文唯一）；新写的整篇文章落成正文用 write_article（必须同时带 project 与 content），写前先读原文；已有正文的局部改动只用 patch_article，整篇重写或大幅调整走 article-update 围栏由作者在确认卡片里应用。\\n工程名照抄 list_projects / create_project 返回的 name 即可，标点变体（半角冒号、引号换成「」等）系统会自动归一匹配；名字里带奇怪标点时改传 dir（工程绝对路径）最稳。\n排版类请求分两层，两层常要连用：文本结构（分段、小标题、加粗、引用）用 patch_article，视觉参数（行距、字距、字体、段间距、引用形态、分隔线形态、加粗形态、圆角、内边距、表格样式、各类配色——set_theme 覆盖全部排版字段，键名与取值口径不确定就先调 get_guide 带 topic=theme 取字段表）用 set_theme；作者说「排版太挤」「不够醒目」「换个气质」时先看视觉层能不能解决，不要只动文字。\n作者要为某个分类设计整套排版主题 → 输出完整主题 JSON 调 save_theme_preset（accent 必填十六进制，其余字段按白名单口径给），保存即生效，该分类下的工程自动套用。\n工具返回里带 hint / ignoredKeys / unknownKeys 时（数值被夹取、键名不认识被忽略、只写入部分字段），必须把这些原样转述给用户，禁止把部分生效说成整套完成；用户给的值被改动过时，明确说出「你要的是 X，实际按 Y 生效」。\n一次只调用一个工具，等结果返回再决定下一步；结论要基于工具结果而非猜测。${inventory}\n用户想把你脑暴/撰写的内容落成工程：create_project（起简洁工程名）→ write_article 写入全文，完成后明确告知用户已落到哪个工程；只想存选题灵感时用 save_ideas。\n工具结果未确认成功前，不得声称已完成写入；工具失败时按返回的原因改正参数再试一次，仍失败就如实说明哪一步没做成、需要用户补什么，不得说「已完成」。\n若无法原生调用工具，改用文本协议发起（每次一个）：\n\`\`\`tool-call\n{"name": "工具名", "arguments": { 参数 }}\n\`\`\`\n或 <tool_call><function=工具名><parameter=参数名>值（可多行）</parameter></function></tool_call>。\n</工具守则>`
+  return `\n\n<工具守则>\n${project ? `当前工程：「${project}」，涉及它的操作默认对它执行，但每个调用仍要显式带上 project=「${project}」。` : '当前未打开工程：需要工程参数时先 list_projects 查询，或先 create_project 立项再用它返回的工程名；写入类工具（write_article / patch_article / set_titles 等）一律要显式带 project，省略即失败。'}\n改正文优先用 patch_article（patches 传数组：[{"old":"原文唯一片段","new":"替换后文本"}]，old 须与正文逐字一致且全文唯一）；新写的整篇文章落成正文用 write_article（必须同时带 project 与 content），写前先读原文；已有正文的局部改动只用 patch_article，整篇重写或大幅调整走 article-update 围栏由作者在确认卡片里应用。\\n工程名照抄 list_projects / create_project 返回的 name 即可，标点变体（半角冒号、引号换成「」等）系统会自动归一匹配；名字里带奇怪标点时改传 dir（工程绝对路径）最稳。\n排版类请求分两层，两层常要连用：文本结构（分段、小标题、加粗、引用）用 patch_article，视觉参数（行距、字距、字体、段间距、引用形态、分隔线形态、加粗形态、圆角、内边距、表格样式、各类配色——set_theme 覆盖全部排版字段，键名与取值口径不确定就先调 get_guide 带 topic=theme 取字段表）用 set_theme；作者说「排版太挤」「不够醒目」「换个气质」时先看视觉层能不能解决，不要只动文字。\n作者要为某个分类设计整套排版主题 → 输出完整主题 JSON 调 save_theme_preset（accent 必填十六进制，其余字段按白名单口径给），保存即生效，该分类下的工程自动套用。\n工具返回里带 hint / ignoredKeys / unknownKeys 时（数值被夹取、键名不认识被忽略、只写入部分字段），必须把这些原样转述给用户，禁止把部分生效说成整套完成；用户给的值被改动过时，明确说出「你要的是 X，实际按 Y 生效」。\n一次只调用一个工具，等结果返回再决定下一步；结论要基于工具结果而非猜测。${inventory}\n用户想把你脑暴/撰写的内容落成工程：create_project（起简洁工程名）→ write_article 写入全文，完成后明确告知用户已落到哪个工程；只想存选题灵感时用 save_ideas。\n用户要大纲（从正文反推、整理或改写大纲）：忠实于现有正文结构提炼后调 save_outline 写 outline.md（# 标题为文章标题、## 为小节，节下一句说明）——大纲只落 outline.md，绝不改写 article.md；改大纲 ≠ 改正文，用户要改正文时才动 article。\n工具结果未确认成功前，不得声称已完成写入；工具失败时按返回的原因改正参数再试一次，仍失败就如实说明哪一步没做成、需要用户补什么，不得说「已完成」。\n若无法原生调用工具，改用文本协议发起（每次一个）：\n\`\`\`tool-call\n{"name": "工具名", "arguments": { 参数 }}\n\`\`\`\n或 <tool_call><function=工具名><parameter=参数名>值（可多行）</parameter></function></tool_call>。\n</工具守则>`
 }
 
 /** 经主进程执行单个工具，返回给模型的文本结果（成功给内容/失败给原因） */
@@ -225,6 +225,9 @@ const PRESET_INSPIRE =
   '今天有什么值得写的选题？结合当前日期给我 5 个灵感，每个用一句话说明切入角度和为什么现在写。'
 const PRESET_TAGS =
   '根据工程上下文里的内容，推荐 10 个发布时适合带的话题标签（#xx 形式），按引流潜力排序，并说明前 3 个为什么合适。'
+/** 从成文反推大纲：模型读上下文里的正文 → 提炼标题/小节 → save_outline 落 outline.md（守则里钉死不动正文） */
+const PRESET_DEOUTLINE =
+  '从当前工程正文反推一份大纲：# 文章标题 + ## 各小节标题（每节一句话说明该节写了什么，忠实于现有正文结构，不新增不删节）。整理好后调 save_outline 存入工程的 outline.md。注意：只写大纲文件，不要改写正文。'
 
 /** 对话安装 Skill 确认卡片的状态机（按 assistant 消息索引挂卡） */
 interface InstallCard {
@@ -913,6 +916,16 @@ export default function ChatPanel({
                 <span className="inline-flex items-center gap-1.5 font-semibold text-ink"><Icon name="tag" size={12} className="text-accent" />话题标签推荐</span>
                 <span className="mt-1 block leading-4 text-ink-dim">按当前正文/贴图推荐发布标签</span>
               </button>
+              {project && format === 'article' && (
+                <button
+                  onClick={() => void send(PRESET_DEOUTLINE)}
+                  title="从正文提炼标题与小节结构，存入 outline.md（创作向导的大纲步会带出）"
+                  className="rounded-lg border border-panel-3 bg-panel-2 p-2.5 text-left hover:bg-panel-3"
+                >
+                  <span className="inline-flex items-center gap-1.5 font-semibold text-ink"><Icon name="sort" size={12} className="text-accent" />从正文反推大纲</span>
+                  <span className="mt-1 block leading-4 text-ink-dim">提炼小节结构存 outline.md，不动正文</span>
+                </button>
+              )}
               <button
                 onClick={onGoBrainstorm}
                 className="rounded-lg border border-panel-3 bg-panel-2 p-2.5 text-left hover:bg-panel-3"

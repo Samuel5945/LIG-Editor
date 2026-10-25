@@ -268,3 +268,24 @@ describe('get_guide 手册', () => {
     expect(() => call('get_guide', { topic: 'nope' })).toThrow(/可查：pipeline/)
   })
 })
+
+describe('save_outline（从成文反推大纲）', () => {
+  it('写入 outline.md 可经 read_article 回读，且绝不碰 article.md 与状态机', async () => {
+    call('write_article', { project: P, content: '# 标题\n\n正文一段' })
+    const articleBefore = call('read_article', { project: P })
+    const statusBefore = store.readMeta(P).status
+
+    const r = await call('save_outline', { project: P, outline: '# 标题\n## 第一节\n说明' })
+    expect(r).toEqual({ ok: true, file: 'outline.md' })
+    expect(call('read_article', { project: P, file: 'outline.md' })).toBe('# 标题\n## 第一节\n说明\n')
+    // 成文一个字没动（这是反推大纲的红线），选题状态机也不因大纲落盘推进
+    expect(call('read_article', { project: P })).toBe(articleBefore)
+    expect(store.readMeta(P).status).toBe(statusBefore)
+  })
+
+  it('get_guide 的 pipeline 册写明反推口径：只写 outline.md、绝不改 article.md', () => {
+    const guide = call('get_guide', { topic: 'pipeline' }).guide as string
+    expect(guide).toContain('save_outline')
+    expect(guide).toContain('绝不改 article.md')
+  })
+})

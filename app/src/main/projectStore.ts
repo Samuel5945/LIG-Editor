@@ -37,7 +37,7 @@ import { listCategoryPresets, presetFillFor, renameCategoryPreset, deleteCategor
 import { renameWechatBinding, setWechatBinding } from './wechatStore'
 
 /** 工程目录约定（PRD §4）：article.md 为唯一事实源 */
-const TEXT_FILES: ProjectTextFile[] = ['article.md', 'ideas.md', 'review.md']
+const TEXT_FILES: ProjectTextFile[] = ['article.md', 'ideas.md', 'review.md', 'outline.md']
 const SUB_DIRS = ['assets', 'figures', 'chat'] as const
 
 // ---------- 自写回声抑制 ----------
@@ -787,7 +787,7 @@ export function openProject(name: string): ProjectData {
 // ---------- 拖拽/关联打开 .md（文件→工程） ----------
 
 /** 工程内直接可编辑的 md 文件名（拖拽到图标时这些文件会定位到所属工程） */
-const PROJECT_MD_FILES = ['article.md', 'ideas.md', 'review.md', 'cards-review.md']
+const PROJECT_MD_FILES = ['article.md', 'ideas.md', 'review.md', 'outline.md', 'cards-review.md']
 
 /** 把拖拽/关联打开的 .md 定位到工程：workspace 内命中已有工程则直接打开，
  * 外部 md 导入为新工程（article.md 内容拷贝进 workspace/未分类/<同名>/）。

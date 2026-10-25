@@ -134,6 +134,23 @@ export default function CreationWizard({
   // 卸载清理：正在流式时关向导（不会发生——常驻挂载——但兜底不悬挂主进程生成）
   useEffect(() => () => abortRef.current?.(), [])
 
+  // 大纲步预填 + 外部热载：工程已有 outline.md（AI 对话「从正文反推大纲」/外部 Agent 写入）时带进向导，
+  // 作者接着拖拽重排、重新成文。只在当前大纲为空时带——作者动过（生成中/手动编辑）就不打扰
+  useEffect(() => {
+    if (!project) return
+    const fillIfEmpty = (): void => {
+      void window.api
+        .invoke('project:readFile', project, 'outline.md')
+        .then((md) => setOutline((prev) => (!prev.trim() && md.trim() ? md : prev)))
+        .catch(() => {})
+    }
+    if (phase === 'outline') fillIfEmpty()
+    const off = window.api.on('file:external-change', ({ project: p, file }) => {
+      if (p === project && file === 'outline.md') fillIfEmpty()
+    })
+    return off
+  }, [project, phase])
+
   // ---- 步骤事实推导（渲染现算，规格 §5.1） ----
 
   const isCards = meta?.format === 'cards'

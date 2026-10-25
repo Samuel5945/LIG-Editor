@@ -302,7 +302,7 @@ export interface ProjectSummary {
 }
 
 /** 工程内直接可编辑的文本文件（约定文件名即 ID）；cards-review.md 按需创建不预建 */
-export type ProjectTextFile = 'article.md' | 'ideas.md' | 'review.md' | 'cards-review.md'
+export type ProjectTextFile = 'article.md' | 'ideas.md' | 'review.md' | 'outline.md' | 'cards-review.md'
 
 /**
  * 工程内可入左栏工作树的资产清单（左栏工作树用，见 shared/workTree.ts）。
