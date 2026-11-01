@@ -397,9 +397,26 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
         })
         if (found < 0) return false
         editor.commands.setTextSelection({ from: found, to: found + snippet.length })
-        const dom = editor.view.domAtPos(found)
-        const el = dom.node instanceof HTMLElement ? dom.node : dom.node.parentElement
-        el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        const scroll = (): void => {
+          // focus 让选区真正可见（审阅「定位到原文」跳成文步后用户要看到高亮）；已聚焦则不打断
+          if (!editor.isFocused) editor.commands.focus()
+          const dom = editor.view.domAtPos(found)
+          const el = dom.node instanceof HTMLElement ? dom.node : dom.node.parentElement
+          el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        }
+        // 编辑器可能在隐藏步里（如审阅步跳成文步）：display:none 下 scrollIntoView 静默无效，
+        // 等容器真正可见再滚（约一帧内换步，兜底 40 帧防挂死）
+        if (editor.view.dom.offsetParent === null) {
+          let waited = 0
+          const tick = (): void => {
+            if (!editor || editor.isDestroyed) return
+            if (editor.view.dom.offsetParent !== null || ++waited > 40) scroll()
+            else requestAnimationFrame(tick)
+          }
+          requestAnimationFrame(tick)
+        } else {
+          scroll()
+        }
         return true
       },
       refreshFigures() {
