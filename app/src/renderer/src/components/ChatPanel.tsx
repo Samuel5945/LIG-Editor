@@ -24,7 +24,9 @@ import { expandWrapperCalls, normalizeToolArgs } from '@shared/toolArgs'
 import { extractInlineContent, parseSkillDirective } from '@shared/skillInstall'
 import { cardsPlainText, parseAccentDirective } from '@shared/cards'
 import { parseArticleUpdate } from '@shared/articleUpdate'
+import type { ProviderConfig } from '@shared/types'
 import { chatOnceWithTools, type ChatRoundResult } from '../copilot/llm'
+import { ModelSelect, type ModelSel } from './ModelSelect'
 import { chatContext, freeChatSystemPrompt, webContext } from '../copilot/prompts'
 import { extractFileText } from '../copilot/material'
 import { parseAccentIntent } from '@shared/accentIntent'
@@ -298,12 +300,19 @@ export default function ChatPanel({
   const sessionCreatedRef = useRef<string | null>(null)
   // 当前文本供应商：思考开关/读图 gating/能力徽章/上下文裁剪都按它的模型目录声明走
   const [textProvider, setTextProvider] = useState<{ name: string; baseUrl: string; textModel: string } | null>(null)
+  // 全量供应商（ModelSelect 分组列已填 Key 的供应商与其模型缓存；llmChanged 时刷新）
+  const [llmAll, setLlmAll] = useState<{ providers: ProviderConfig[]; textProviderId: string | null } | null>(null)
+  // 会话级模型覆盖（ModelSelect 按会话记忆）：null = 跟随全局默认
+  const [modelSel, setModelSel] = useState<ModelSel | null>(null)
   // 思考选择：null = 跟随模型目录默认；false = 关；字符串 = 显式档位（商汤全档 none~max，
   // qwen3.8 三档；enable_thinking 协议由主进程降级为开关，Anthropic 预算无空间）
   const [thinkLevel, setThinkLevel] = useState<ThinkingChoice>(null)
   // 当前回复的流式思考过程（完成后随消息落盘，历史渲染走 m.reasoning）
   const [streamReasoning, setStreamReasoning] = useState('')
-  const cap: ModelCapability = textProvider ? modelCapability(textProvider, textProvider.textModel) : {}
+  // 会话级覆盖命中已填 Key 的供应商才生效，否则跟随全局 textProvider
+  const selProvider = modelSel ? (llmAll?.providers.find((p) => p.id === modelSel.providerId && p.apiKey) ?? null) : null
+  const effProvider = selProvider ? { ...selProvider, textModel: modelSel!.modelId } : textProvider
+  const cap: ModelCapability = effProvider ? modelCapability(effProvider, effProvider.textModel) : {}
   // addAttachments 的 useCallback 依赖里不放 cap（对象每次渲染重建），经 ref 取最新值
   const capRef = useRef(cap)
   capRef.current = cap
@@ -314,6 +323,7 @@ export default function ChatPanel({
       void window.api
         .invoke('settings:getLlm')
         .then((s) => {
+          setLlmAll({ providers: s.providers, textProviderId: s.textProviderId })
           const p = s.providers.find((x) => x.id === s.textProviderId) ?? s.providers[0] ?? null
           setTextProvider(p ? { name: p.name, baseUrl: p.baseUrl, textModel: p.textModel } : null)
         })
@@ -322,6 +332,27 @@ export default function ChatPanel({
     load()
     return window.api.on('settings:llmChanged', load)
   }, [])
+
+  // 换模型后档位校验：显式档位不在新模型的 levels（或新模型无思考能力）就回跟随——
+  // 否则主进程 openaiThinkingParams 会静默丢参数，胶囊显示的档位与实际下发不一致
+  useEffect(() => {
+    if (typeof thinkLevel === 'string' && thinkLevel !== 'none') {
+      const lv = cap.reasoning
+      if (!lv || (lv.levels && !lv.levels.includes(thinkLevel))) setThinkLevel(null)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- cap 随 effProvider 重建，按模型身份触发即可
+  }, [effProvider?.baseUrl, effProvider?.textModel, thinkLevel])
+
+  // 拉取供应商模型列表（ModelSelect「拉取模型列表」项）：llm:fetchModels 刷缓存后回读全量
+  const fetchModels = useCallback(async (p: ProviderConfig): Promise<void> => {
+    await window.api.invoke('llm:fetchModels', p)
+    const s = await window.api.invoke('settings:getLlm')
+    setLlmAll({ providers: s.providers, textProviderId: s.textProviderId })
+  }, [])
+
+  // 会话级模型覆盖经 ref 进 send（send 的依赖里不放每次渲染重建的对象，同 capRef 模式）
+  const modelReqRef = useRef<{ providerId: string; modelId: string } | null>(null)
+  modelReqRef.current = selProvider && modelSel ? { providerId: selProvider.id, modelId: modelSel.modelId } : null
 
   // ---- 会话列表 / 切换 ----
 
@@ -334,6 +365,7 @@ export default function ChatPanel({
     setTempMode(false)
     setSessionId(null)
     setMessages([])
+    setModelSel(null)
     setCards({})
     setAccentCards({})
     setArticleCards({})
@@ -347,6 +379,7 @@ export default function ChatPanel({
     // 切会话桶（工程 ↔ 临时对话）：清空当前会话状态并加载目标桶的会话列表
     setSessionId(null)
     setMessages([])
+    setModelSel(null)
     setCards({})
     setAccentCards({})
     setArticleCards({})
@@ -360,6 +393,7 @@ export default function ChatPanel({
   const newSession = useCallback(() => {
     setSessionId(null)
     setMessages([])
+    setModelSel(null)
     setCards({})
     setAccentCards({})
     setArticleCards({})
@@ -390,6 +424,8 @@ export default function ChatPanel({
       const s = await window.api.invoke('chat:read', chatBucket, id)
       setSessionId(s.id)
       setMessages(s.messages)
+      // 会话级模型覆盖跟着会话走：落盘过的恢复，没落盘的回跟随全局默认
+      setModelSel(s.providerId && s.modelId ? { providerId: s.providerId, modelId: s.modelId } : null)
       setCards({})
       setAccentCards({})
       setArticleCards({})
@@ -443,7 +479,10 @@ export default function ChatPanel({
         created_at: sessionCreatedRef.current,
         updated_at: now,
         messages: msgs,
-        toolTrace: Object.keys(trace).length ? trace : undefined
+        toolTrace: Object.keys(trace).length ? trace : undefined,
+        // 会话级模型覆盖随会话落盘：切回来还认（ModelSel 按会话记忆）
+        providerId: modelReqRef.current?.providerId,
+        modelId: modelReqRef.current?.modelId
       })
       refreshSessions()
     },
@@ -690,6 +729,8 @@ export default function ChatPanel({
       ]
       // 思考开关（null=模型目录默认）与历史裁剪：超窗口的旧消息按 user 边界成段丢弃
       const thinkingReq = thinkLevel === null ? undefined : thinkLevel
+      // 会话级模型覆盖（ModelSelect 选中且供应商有效时非空）：随请求下发，不动全局默认
+      const modelReq = modelReqRef.current
       const history = [...trimHistory(api, cap)]
       // 工具循环（chat-tools v1）：读类静默 / 写类结果卡 / 推送确认卡；最多 TOOL_ROUNDS_MAX 轮
       const bubbleIdx = display.length
@@ -737,6 +778,8 @@ export default function ChatPanel({
             const r = chatOnceWithTools(history, {
               tools: withTools ? native : undefined,
               thinking: thinkingReq,
+              providerId: modelReq?.providerId,
+              modelId: modelReq?.modelId,
               onDelta,
               onReasoning
             })
@@ -1296,6 +1339,19 @@ export default function ChatPanel({
             >
               上下文
             </ToolPill>
+            {/* 会话级模型选择（ZCode 风格分组菜单）：始终可点，跟不跟随/换模型都不影响其他面板 */}
+            <ModelSelect
+              providers={llmAll?.providers ?? []}
+              defaultModelLabel={textProvider ? `${textProvider.name}/${textProvider.textModel}` : ''}
+              value={modelSel}
+              onChange={(v) => {
+                setModelSel(v)
+                void persist(messages)
+              }}
+              onFetchModels={fetchModels}
+              compact={pillsRow.narrow}
+              direction="up"
+            />
             {cap.reasoning && (
               <ThinkingSelect
                 tone="pill"

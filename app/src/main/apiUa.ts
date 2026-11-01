@@ -16,6 +16,7 @@ export function friendlyHttpError(status: number, text: string): string {
   if (status !== 429) return `HTTP ${status}：${text}`
   return (
     '已触发供应商限流（TPM/RPM 超额：每分钟 token/请求数到顶）。' +
-    '通常 1 分钟内自动恢复；思考模型每轮消耗较大，可关闭「思考」或换轻量模型（如 sensenova-6.8-flash-lite）降低消耗。'
+    '通常 1 分钟内自动恢复；思考模型每轮消耗较大，可关闭「思考」或换轻量模型降低消耗，' +
+    '也可以在对话胶囊里直接换别的供应商/模型。'
   )
 }

@@ -11,6 +11,24 @@ export { extractJsonArray, stripHtmlFence } from '@shared/llmText'
  */
 const WATCHDOG_MS = 600_000
 
+/** 渲染层一次对话的请求选项：thinking 档位 + 会话级模型覆盖（对话面板 ModelSelect 用，
+ * 其他 20+ 调用点不传即走全局默认） */
+export interface ChatOnceOptions {
+  thinking?: ChatStartOptions['thinking']
+  providerId?: string
+  modelId?: string
+}
+
+/** 组主进程 ChatStartOptions：全空发 undefined（跟随全局默认），部分填充省掉未填字段 */
+function toStartOptions(o?: ChatOnceOptions): ChatStartOptions | undefined {
+  if (!o || (o.thinking === undefined && !o.providerId && !o.modelId)) return undefined
+  return {
+    ...(o.thinking !== undefined ? { thinking: o.thinking } : {}),
+    ...(o.providerId ? { providerId: o.providerId } : {}),
+    ...(o.modelId ? { modelId: o.modelId } : {})
+  }
+}
+
 /** 把 llm:chatStart 的事件流包装成 Promise；onDelta 可拿到累计全文做流式 UI，
  * onReasoning 拿累计思考过程（模型思考字段 reasoning/reasoning_content/thinking_delta 已在主进程归一）；
  * options.thinking 传思考档位（false/low/high，缺省跟随模型默认——分析面板等一次性调用用） */
@@ -18,7 +36,7 @@ export function chatOnce(
   messages: ChatMessage[],
   onDelta?: (full: string, delta: string) => void,
   onReasoning?: (full: string, delta: string) => void,
-  options?: { thinking?: ChatStartOptions['thinking'] }
+  options?: ChatOnceOptions
 ): { promise: Promise<string>; abort: () => void } {
   const requestId = crypto.randomUUID()
   let full = ''
@@ -56,7 +74,7 @@ export function chatOnce(
     })
     // invoke 本身失败（如桥接层异常）不会有 llm:done 来收场，直接当错误收掉
     window.api
-      .invoke('llm:chatStart', requestId, messages, options?.thinking === undefined ? undefined : { thinking: options.thinking })
+      .invoke('llm:chatStart', requestId, messages, toStartOptions(options))
       .catch((err) =>
       settle(() => {
         offStream()
@@ -81,7 +99,7 @@ export interface ChatRoundResult {
  *  assistant(tool_calls) + tool 结果追加进消息序列再发下一轮（循环逻辑在 ChatPanel） */
 export function chatOnceWithTools(
   messages: ChatMessage[],
-  options?: { tools?: ChatStartOptions['tools']; thinking?: ChatStartOptions['thinking']; onDelta?: (full: string, delta: string) => void; onReasoning?: (full: string, delta: string) => void }
+  options?: { tools?: ChatStartOptions['tools']; onDelta?: (full: string, delta: string) => void; onReasoning?: (full: string, delta: string) => void } & ChatOnceOptions
 ): { promise: Promise<ChatRoundResult>; abort: () => void } {
   const requestId = crypto.randomUUID()
   let full = ''
@@ -119,8 +137,8 @@ export function chatOnceWithTools(
     })
     // invoke 本身失败（如桥接层异常）不会有 llm:done 来收场，直接当错误收掉
     window.api.invoke('llm:chatStart', requestId, messages, {
-      tools: options?.tools?.length ? options.tools : undefined,
-      thinking: options?.thinking
+      ...toStartOptions(options),
+      tools: options?.tools?.length ? options.tools : undefined
     }).catch((err) =>
       settle(() => {
         offStream()

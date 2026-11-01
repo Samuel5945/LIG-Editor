@@ -453,10 +453,14 @@ export type ThinkingLevel = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xh
 /** UI 思考选择态：null=跟随模型默认，false=关闭，true=开（默认档），字符串=显式档位 */
 export type ThinkingChoice = boolean | ThinkingLevel | null
 
-/** 一次流式对话的请求选项：tools 非空走 function calling；thinking 控制思考（缺省按模型目录默认，可传级别） */
+/** 一次流式对话的请求选项：tools 非空走 function calling；thinking 控制思考（缺省按模型目录默认，可传级别）；
+ *  providerId/modelId 为对话面板的按会话模型覆盖——指定已填 key 的供应商与其目录里的模型，
+ *  缺省走全局默认（设置中心 textProviderId/textModel），不影响其他面板 */
 export interface ChatStartOptions {
   tools?: ChatToolSchema[]
   thinking?: ThinkingChoice
+  providerId?: string
+  modelId?: string
 }
 
 export interface ChatMessage {
@@ -515,6 +519,9 @@ export interface ChatSession extends ChatSessionMeta {
   messages: ChatMessage[]
   /** assistant 气泡在 messages 中的下标 → 该轮工具调用留痕 */
   toolTrace?: Record<string, ToolTraceEntry[]>
+  /** 会话级模型覆盖（对话面板 ModelSelect 的按会话记忆）：缺省 = 跟随全局默认 */
+  providerId?: string
+  modelId?: string
 }
 
 /** skills/ 目录下可挂载的风格/能力 Skill（SKILL.md 为内容主体） */

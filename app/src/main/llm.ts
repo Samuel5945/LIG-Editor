@@ -328,17 +328,24 @@ export async function chatComplete(messages: ChatMessage[], timeoutMs = 300_000)
 }
 
 /** 发起流式对话：增量经 llm:stream 广播（思考过程在 reasoning 字段），结束发 llm:done。
- * options.tools 非空时走 function calling；options.thinking 控制思考开关（缺省按模型目录默认） */
+ * options.tools 非空时走 function calling；options.thinking 控制思考开关（缺省按模型目录默认）；
+ * options.providerId/modelId 为对话面板的按会话模型覆盖——只在请求内生效，不动全局默认 */
 export async function chatStart(
   requestId: string,
   messages: ChatMessage[],
   options?: ChatStartOptions
 ): Promise<void> {
-  const provider = getTextProvider()
+  let provider = getTextProvider()
   if (!provider) {
     broadcast('llm:done', { requestId, error: '未配置模型供应商，请先在「模型接入」中设置' })
     return
   }
+  // 会话级覆盖：指定供应商必须存在且已填 Key，否则静默回退全局默认（renderer 选择器只列合法项，这里是防御）
+  const override =
+    options?.providerId !== undefined
+      ? getLlmSettings().providers.find((p) => p.id === options.providerId && p.apiKey)
+      : undefined
+  if (override) provider = { ...override, textModel: options?.modelId || override.textModel }
 
   const ctrl = new AbortController()
   activeRequests.set(requestId, ctrl)
