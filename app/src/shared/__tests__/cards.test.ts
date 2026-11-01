@@ -355,8 +355,13 @@ describe('normalizeDeck', () => {
     expect(normalizeDeck({ caption: '', cards: [] })!.caption).toBeUndefined()
     expect(normalizeDeck({ cards: 'oops' as unknown as CardItem[] })).toBeNull()
     expect(normalizeDeck({})).toBeNull()
-    // 设计态枚举透传：mode=design + designHtml 白名单重建后原样保留
-    expect(normalizeDeck({ cards: [{ mode: 'design', designHtml: '<b>x</b>' }] })!.cards[0]).toMatchObject({
+    // 设计态枚举透传：mode=design + designHtml 白名单重建后原样保留（设计卡可只有 HTML 稿，
+    // 其余字段落盘即空串——字面量补齐 CardItem 必填字段，运行时 normalize 原样透传）
+    expect(
+      normalizeDeck({
+        cards: [{ mode: 'design', designHtml: '<b>x</b>', title: '', body: '', bgPrompt: '', bgImage: '', png: '' }]
+      })!.cards[0]
+    ).toMatchObject({
       mode: 'design',
       designHtml: '<b>x</b>'
     })
