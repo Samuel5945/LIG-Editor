@@ -205,6 +205,28 @@ export default function CreationWizard({
     return off
   }, [project, phase])
 
+  // 大纲步落地即带出：已立项工程从对话深链（「去大纲步查看并拖拽重排」）或手动切到大纲步时，
+  // 会话相位还停在 input——只切步不出相位会永远落在「尚无大纲」空态，反推→重排闭环断在重排
+  // （2026-11-01 回归走查实锤）。磁盘有 outline.md（反推落盘/外部 Agent 写入/已有大纲）就直接进
+  // outline 相位展示可拖拽条目；没有则维持「尚无大纲」引导不变
+  useEffect(() => {
+    if (activeId !== 'outline' || phase !== 'input' || !project) return
+    if (outline.trim()) {
+      setPhase('outline')
+      return
+    }
+    void window.api
+      .invoke('project:readFile', project, 'outline.md')
+      .then((md) => {
+        if (md.trim()) {
+          setOutline(md)
+          setOutlineOnDisk(md)
+          setPhase('outline')
+        }
+      })
+      .catch(() => {})
+  }, [activeId, phase, project, outline])
+
   // ---- 步骤事实推导（渲染现算，规格 §5.1） ----
 
   const isCards = meta?.format === 'cards'
