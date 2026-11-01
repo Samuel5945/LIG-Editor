@@ -122,9 +122,9 @@ describe('导出类工具注册表', () => {
     expect(pdf?.description).toContain('PDF')
   })
 
-  it('四种交付出口都在：html / docx / pdf / longimage（清单注入时它们的第一句用途就是模型的决策依据）', () => {
+  it('五种交付出口都在：html / docx / pdf / longimage / design_longimage（清单注入时它们的第一句用途就是模型的决策依据）', () => {
     const names = TOOLS.filter((t) => t.name.startsWith('export_')).map((t) => t.name)
-    expect(names).toEqual(['export_html', 'export_docx', 'export_pdf', 'export_longimage'])
+    expect(names).toEqual(['export_html', 'export_docx', 'export_pdf', 'export_longimage', 'export_design_longimage'])
     for (const n of names) expect(TOOLS.find((t) => t.name === n)?.inputSchema.required).toContain('project')
   })
 })

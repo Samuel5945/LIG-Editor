@@ -281,6 +281,7 @@ describe('normalizeDeck', () => {
     numbered: true,
     mode: 'ai',
     aiImage: 'assets/b.png',
+    designHtml: '<div>设计稿</div>',
     renderedZoom: 0.85,
     png: 'cards/xhs/card-1.png',
     hackerField: 'x',
@@ -307,6 +308,7 @@ describe('normalizeDeck', () => {
           numbered: true,
           mode: 'ai',
           aiImage: 'assets/b.png',
+          designHtml: '<div>设计稿</div>',
           renderedZoom: 0.85,
           png: 'cards/xhs/card-1.png'
         }
@@ -341,6 +343,7 @@ describe('normalizeDeck', () => {
       numbered: undefined,
       mode: undefined,
       aiImage: '',
+      designHtml: '',
       renderedZoom: undefined,
       png: ''
     })
@@ -352,6 +355,11 @@ describe('normalizeDeck', () => {
     expect(normalizeDeck({ caption: '', cards: [] })!.caption).toBeUndefined()
     expect(normalizeDeck({ cards: 'oops' as unknown as CardItem[] })).toBeNull()
     expect(normalizeDeck({})).toBeNull()
+    // 设计态枚举透传：mode=design + designHtml 白名单重建后原样保留
+    expect(normalizeDeck({ cards: [{ mode: 'design', designHtml: '<b>x</b>' }] })!.cards[0]).toMatchObject({
+      mode: 'design',
+      designHtml: '<b>x</b>'
+    })
   })
 })
 

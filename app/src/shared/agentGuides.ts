@@ -74,7 +74,7 @@ const GUIDE_BODIES: Record<AgentGuideTopic, () => string> = {
 8 审阅与标题：review_prompt → 模型 → save_review；titles_prompt → 模型 → set_titles
 8.5 爆款拆解：teardown_prompt（传 article 拆外部文章，缺省拆当前正文）→ 模型 → save_teardown 写 teardown.md；用户要借骨架写新文时把「- 骨架：」行转成大纲调 save_outline
 9 封面：render_cover_template（模板直出，中文不会糊）。只渲一张 2.35:1 主图，1:1 是从它裁出来的一段——后台只采纳横图，另外排一版方图它不认，所以构图要让右半单独裁出来也成立（focal 调取哪一段，panel 保底可读性，decor 关装饰，prompt 一步生底图）。要完全自主排版就手写 covers/*.html 再 render_cover_html
-10 交付：export_html / export_docx / export_pdf / export_longimage / push_draft / push_cards（前置见 get_guide publish）
+10 交付：export_html / export_docx / export_pdf / export_longimage / export_design_longimage / push_draft / push_cards（前置见 get_guide publish）
 局部改动（改一句、某段压短、加序号、润色某节）用 patch_article 精准替换，别重写全文；只有整篇重写或大幅结构调整才 write_article。
 状态由落盘动作自动推进，不用手动设：落正文→撰写，存审阅报告→审阅，出交付物或推送成功→已成稿。
 风格方法论交给 Skill：list_skills 看有什么，save_skill 写一套，set_project_skill 挂到工程——挂载后 outline/article/review/titles 各提示词会自动带上它全文。`,
@@ -94,7 +94,8 @@ color=字色，background-color=背景高亮，font-size=字号（12-24px），�
   cards: () =>
     `贴图卡组（落盘 cards.json，画布统一 3:4 竖版 1242×1656，两种风格共用）
 deck：format（wechat 公众号贴图=书面克制 / xhs 小红书贴图=口语活泼）、accent（#rrggbb，覆盖强调色）、caption（发布配文，转平台后作废需重生成）、cards（数组顺序即读者翻页顺序）。
-每张卡：title（必填，封面卡是大标题）、body（必填，\\n 分行，支持 **加粗**）、tag（封面角标文案，仅封面卡生效，空=平台默认）、bgPrompt（AI 背图画面描述，空=纯排版底色）、bgImage（背图 assets/ 相对路径）、bgOpacity（0-100，越大背图越清晰、文字遮罩越淡，缺省 15）、dark（背图偏深时切浅色配色板）、fontScale（80-150，只缩字号不动版式）、mode（layout 排版+背图 / ai 整卡 AI 成图）、aiImage（mode=ai 时的成品图路径）、numbered（内容卡每行前加强调色序号，封面卡不生效）、png（渲染产物，别自己编，交 render_card 回写）。
+每张卡：title（必填，封面卡是大标题）、body（必填，\\n 分行，支持 **加粗**）、tag（封面角标文案，仅封面卡生效，空=平台默认）、bgPrompt（AI 背图画面描述，空=纯排版底色）、bgImage（背图 assets/ 相对路径）、bgOpacity（0-100，越大背图越清晰、文字遮罩越淡，缺省 15）、dark（背图偏深时切浅色配色板）、fontScale（80-150，只缩字号不动版式）、mode（layout 排版+背图 / ai 整卡 AI 成图 / design 设计卡）、aiImage（mode=ai 时的成品图路径）、designHtml（mode=design 的卡面设计稿）、numbered（内容卡每行前加强调色序号，封面卡不生效）、png（渲染产物，别自己编，交 render_card 回写）。
+设计卡（mode=design，排版放开）：designHtml 传 body 内 HTML 片段，全量 CSS 生效（flex/grid/渐变/色块/图文混排，无净化约束），画布 1242×1656 固定，正文建议 ≥30px；配图写 assets/ 相对路径直接嵌；同步内联 script 可用但禁动画/异步等待（截图只等 500ms）；无自动缩字保护，溢出自己控制并 render_preview target:card 自查。同一组里设计卡与排版卡可混排，推送/存档/互切不受影响。
 流程：write_cards 建组（覆盖式，不是追加）→ render_card all:true 出图 → read_cards 核对 rendered_count → push_cards 推送（最多 20 张，要求全部已出图）。
 转风格或大改前先 write_cards 带 archive:true 存一份（写到 cards-风格.json，当前 cards.json 不动），之后可用 read_cards 的 archive 读回对照。
 落盘按字段白名单重建：白名单外的键会被丢弃，write_cards 返回的 droppedKeys 必须照实转述，不得声称已生效。
@@ -109,6 +110,8 @@ push_cards：贴图组的图片消息形态，需全部卡片已渲染、最多 
 export_html：落工程根 article.html（公众号排版）或 article-<platform>.html（platform=zhihu/toutiao/baijiahao，按各平台编辑器的净化规则简化排版，图片仍是相对路径，作为多平台分发前的稿源）。
 export_docx / export_pdf：落工程「交付/」目录，给甲方审稿用 docx（可继续编辑），存档打印用 pdf；两者成功即把工程推进「已成稿」。
 export_longimage：整文竖图 PNG 落「交付/长图/」（750px 宽 2 倍超采样，与导出预览同源同折行），超长按段落边界自动分段、files 数组逐张返回；发朋友圈/小红书这类只收图的渠道用它。
+export_design_longimage：AI 自由设计的精美竖图——传自写 HTML（全量 CSS：flex/grid/渐变/色块卡片/杂志式图文混排，无净化约束），750px 宽画布、设计坐标即输出像素，落「交付/长图/」。
+设计长图口径：html 传 body 内片段（根容器自带背景色，别传完整文档）；工程配图写 assets/ 相对路径直接嵌；顶层块级元素是分段安全单元，整稿尽量控制在 12288px 高内（超了自动分段）；同步内联 script 可用但禁动画/异步等待（截图不等它）；字体用本机栈（Microsoft YaHei / PingFang SC / system-ui）；出图前可先 render_preview 看排版自查。设计贴图卡（mode=design）是同一思路的固定画布版，见 cards 段。
 任何写操作后 GUI 会热载；推送/导出失败要如实报错误文本，不要说成「已入草稿」。`
 }
 

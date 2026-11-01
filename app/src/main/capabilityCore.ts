@@ -30,7 +30,7 @@ import { readArchivedCards, readCards, renderCard, writeArchivedCards, writeCard
 import { renderCoverHtml, renderCoverTemplate } from './coverStore'
 import { exportArticleHtml, exportPlatformHtml } from './exporter'
 import { exportDocx, exportPdf } from './docExport'
-import { exportLongImage } from './longImageExport'
+import { exportDesignLongImage, exportLongImage } from './longImageExport'
 import { pushCards, pushDraft } from './wechatPublish'
 import { listSkills, parseDescription, readSkill, saveSkill } from './skillStore'
 import { deleteTheme, listLibrary, saveTheme, setActiveTheme } from './themeStore'
@@ -1043,6 +1043,30 @@ export const TOOLS: ToolDef[] = [
     }
   },
   {
+    name: 'export_design_longimage',
+    description:
+      'AI 自由设计的整幅竖图：传一段自写 HTML（全量 CSS 可用：flex/grid/渐变/色块卡片/杂志式图文混排，没有公众号净化约束），按 750px 宽画布渲染成 PNG 落「交付/长图/」，返回 files/files_abs/宽/逐张高/张数。工程配图写 assets/ 相对路径直接嵌；顶层块级元素是分段安全单元，超 12288px 高自动分段兜底；同步内联 script 可用但别用动画/异步等待（截图不等它）。做小红书/朋友圈精美物料用它；要文章原文竖图用 export_longimage',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project: P.project,
+        html: {
+          type: 'string',
+          description: '设计稿 body 内 HTML 片段（自带根容器与背景色，宽 750 约束在页壳上）；不要传完整 <!DOCTYPE html> 文档'
+        }
+      },
+      required: ['project', 'html']
+    },
+    handler: async (a) => {
+      const project = projectArg(a)
+      const html = str(a, 'html', true).trim()
+      if (!html) throw new Error('html 不能为空：传设计稿 body 内片段（根容器自带背景色）')
+      const r = await exportDesignLongImage(project, html)
+      store.stampExported(project)
+      return r
+    }
+  },
+  {
     name: 'push_draft',
     description:
       '把工程推送到公众号草稿箱：正文本地图片自动上传微信 CDN，封面传永久素材，draft/add 入草稿。variant 配色二选一（缺省 day）。账号、分类绑定与本机公网 IP 白名单等前置条件先读 get_guide 的 publish 段；前置不满足时的失败文本要照实转述给作者，不要说成已入草稿',
@@ -1116,7 +1140,7 @@ export const TOOLS: ToolDef[] = [
   {
     name: 'write_cards',
     description:
-      '整体写入贴图卡组 cards.json（覆盖式，传完整卡组而不是追加）。每张卡可带 title/body/tag/bgPrompt/bgImage/bgOpacity/dark/fontScale/numbered/mode/aiImage，字段口径见 get_guide 的 cards 段；写完不会自动出图，要 render_card。archive 传 true 则只存档到 cards-<format>.json（转风格前留原版），不动当前卡组',
+      '整体写入贴图卡组 cards.json（覆盖式，传完整卡组而不是追加）。每张卡可带 title/body/tag/bgPrompt/bgImage/bgOpacity/dark/fontScale/numbered/mode/aiImage/designHtml，字段口径见 get_guide 的 cards 段；mode=design 是 AI 自写 HTML 的设计卡（排版放开，画布 1242×1656）。写完不会自动出图，要 render_card。archive 传 true 则只存档到 cards-<format>.json（转风格前留原版），不动当前卡组',
     inputSchema: {
       type: 'object',
       properties: {

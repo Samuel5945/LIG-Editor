@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync } from 'fs'
 import { join } from 'path'
-import { CARD_H, CARD_W, cardHtml, normalizeDeck, type CardDeck, type CardFormat } from '@shared/cards'
+import { CARD_H, CARD_W, cardHtml, designCardHtml, normalizeDeck, type CardDeck, type CardFormat } from '@shared/cards'
 import { projectDir, saveAsset, writeTracked } from './projectStore'
 import { renderHtmlFixed } from './figureRender'
 
@@ -8,8 +8,8 @@ import { renderHtmlFixed } from './figureRender'
  * 贴图卡片存储与渲染（cards.json + cards/格式/card-N.html|png）
  * - readCards/writeCards：卡片组落盘（own-write 标记避免 watcher 回环）
  * - 存档 cards-格式.json：转风格前备份原版，支持零成本互切
- * - renderCard：模板注入 → cards/格式/card-N.html → 固定 1242×1656 离屏截图 → 同目录 PNG，
- *   并把页内溢出保护实测的缩字系数回写 renderedZoom（编辑区「已缩字」预警数据源）
+ * - renderCard：模板注入 / AI 整卡成图 / 设计卡（AI 自写 HTML 全量 CSS）→ cards/格式/card-N.html
+ *   → 固定 1242×1656 离屏截图 → 同目录 PNG，排版卡并把页内溢出保护实测的缩字系数回写 renderedZoom
  */
 
 function cardsPath(project: string): string {
@@ -57,6 +57,15 @@ export async function renderCard(project: string, index: number): Promise<string
     if (!existsSync(aiAbs))
       throw new Error(`AI 整卡图不在：${card.aiImage}（重新生成整卡成图，或把该卡切回排版模式渲染）`)
     base64 = readFileSync(aiAbs).toString('base64')
+  } else if (card.mode === 'design') {
+    // 设计卡（排版放开）：AI 自写 HTML 全量 CSS 直接成卡，页内溢出保护不适用（renderedZoom 不回写）
+    if (!card.designHtml) throw new Error(`第 ${index + 1} 张是设计卡但 designHtml 为空：write_cards 补 designHtml 后重渲染`)
+    const dir = join(projectDir(project), 'cards', deck.format)
+    const htmlAbs = join(dir, `card-${index + 1}.html`)
+    mkdirSync(dir, { recursive: true })
+    writeTracked(htmlAbs, designCardHtml(card.designHtml))
+    const rendered = await renderHtmlFixed(htmlAbs, CARD_W, CARD_H)
+    base64 = rendered.base64
   } else {
     const html = cardHtml(card, {
       format: deck.format,

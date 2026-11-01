@@ -26,10 +26,12 @@ export interface CardItem {
   dark?: boolean
   /** 文字缩放百分比 80-150（只缩放字号不动版式）；缺省 100 */
   fontScale?: number
-  /** 渲染模式：layout 排版+背图（默认）/ ai 整张卡 AI 直接成图 */
-  mode?: 'layout' | 'ai'
+  /** 渲染模式：layout 排版+背图（默认）/ ai 整张卡 AI 直接成图 / design 设计卡（AI 自写 HTML，排版放开） */
+  mode?: 'layout' | 'ai' | 'design'
   /** AI 整卡成图 assets/ 相对路径（mode=ai 时的成品来源） */
   aiImage?: string
+  /** 设计卡稿（mode=design）：body 内 HTML 片段，全量 CSS 生效；画布 1242×1656，配图 assets/ 相对路径 */
+  designHtml?: string
   /** 要点序号：内容卡每行前加 01/02 强调色编号（封面卡不生效） */
   numbered?: boolean
   /** 上次渲染的整块缩字系数（页内溢出保护实测，1 = 未缩字）：排版模式渲染后由主进程回写，编辑区据此提示 */
@@ -104,12 +106,37 @@ export function normalizeDeck(raw: Partial<CardDeck>): CardDeck | null {
       dark: c?.dark === true ? true : undefined,
       fontScale: typeof c?.fontScale === 'number' ? c.fontScale : undefined,
       numbered: c?.numbered === true ? true : undefined,
-      mode: c?.mode === 'ai' ? ('ai' as const) : undefined,
+      mode: c?.mode === 'ai' ? ('ai' as const) : c?.mode === 'design' ? ('design' as const) : undefined,
       aiImage: str(c?.aiImage),
+      designHtml: str(c?.designHtml),
       renderedZoom: typeof c?.renderedZoom === 'number' ? c.renderedZoom : undefined,
       png: str(c?.png)
     }))
   }
+}
+
+/** 设计卡页壳：AI 自写片段 → 固定 1242×1656 画布（与排版卡同规格）。
+ *  页落 cards/<format>/card-N.html，<base href="../../"> 把 assets/ 相对路径指回工程根；
+ *  全量 CSS 生效（无公众号净化约束），同步内联 script 可用（截图只等 500ms，勿用动画/异步等待）。 */
+export function designCardHtml(designHtml: string): string {
+  return `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<base href="../../">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: ${CARD_W}px; height: ${CARD_H}px; overflow: hidden; }
+  html { scrollbar-width: none; }
+  html::-webkit-scrollbar, body::-webkit-scrollbar { display: none; width: 0; height: 0; }
+  body {
+    font-family: "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+</style>
+</head>
+<body>${designHtml}</body>
+</html>`
 }
 
 // ---------- 对话换强调色指令（与 skill-install 同构：围栏指令块 → 确认卡片） ----------

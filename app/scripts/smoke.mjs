@@ -13,6 +13,7 @@
  *   export_pdf            → 隐藏窗 printToPDF（交稿链路）
  *   save_outline          → 反推大纲落 outline.md、正文逐字不动（新增读写面兜底）
  *   export_longimage      → 离屏量高 + 整文竖图 PNG 落交付/长图/（长图链路）
+ *   export_design_longimage / render_card(design) → AI 自写 HTML 出图（设计长图/设计卡链路）
  * 冒烟工程即建即删（create_project → … → delete_project confirm），不碰真实工程。
  */
 import { spawn, execSync } from 'node:child_process'
@@ -144,6 +145,48 @@ try {
   r.ok && f0 && pngDim
     ? ok('export_longimage 长图', `${r.result.count} 张 ${pngDim}`)
     : bad('export_longimage 长图', JSON.stringify(r).slice(0, 120))
+
+  // ⑥ 设计长图链路（AI 自写 HTML 全量 CSS → 750px 画布出图）
+  r = await call(cfg, 'export_design_longimage', {
+    project: SMOKE_PROJECT,
+    html:
+      '<div style="background:linear-gradient(135deg,#0d9488,#0f766e);color:#fff;padding:60px 40px;box-sizing:border-box;">' +
+      '<h1 style="font-size:56px;margin:0;">设计长图冒烟</h1>' +
+      '<p style="font-size:30px;line-height:1.8;">全量 CSS 图文混排渲染验证。</p></div>'
+  })
+  const d0 = r.ok && r.result?.files_abs?.[0]
+  let designDim = ''
+  if (d0 && existsSync(d0)) {
+    const b = readFileSync(d0)
+    b.readUInt32BE(12) === 0x49484452 && b.readUInt32BE(16) === 750
+      ? (designDim = `${b.readUInt32BE(16)}×${b.readUInt32BE(20)}`)
+      : (designDim = '尺寸异常')
+  }
+  r.ok && d0 && designDim && designDim !== '尺寸异常'
+    ? ok('export_design_longimage 设计长图', `${r.result.count} 张 ${designDim}`)
+    : bad('export_design_longimage 设计长图', JSON.stringify(r).slice(0, 120))
+
+  // ⑦ 设计卡链路（mode=design 自写 HTML → 固定画布出图 → png 回写）
+  r = await call(cfg, 'write_cards', {
+    project: SMOKE_PROJECT,
+    format: 'wechat',
+    cards: [
+      {
+        title: '设计卡冒烟',
+        body: '',
+        mode: 'design',
+        designHtml:
+          '<div style="width:1242px;height:1656px;background:#10233a;color:#fff;padding:120px;box-sizing:border-box;">' +
+          '<h1 style="font-size:88px;margin:0;">设计卡冒烟</h1>' +
+          '<p style="font-size:40px;line-height:1.8;">全量 CSS 卡面验证。</p></div>'
+      }
+    ]
+  })
+  const rc = r.ok ? await call(cfg, 'render_card', { project: SMOKE_PROJECT, index: 0 }) : { ok: false }
+  const cardPng = rc.ok && rc.result?.rendered?.[0]?.png
+  r.ok && rc.ok && cardPng && existsSync(rc.result.rendered[0].png_abs)
+    ? ok('render_card 设计卡', String(cardPng))
+    : bad('render_card 设计卡', JSON.stringify(r.ok ? rc : r).slice(0, 120))
 } catch (err) {
   bad('冒烟中断', err instanceof Error ? err.message : String(err))
 } finally {
@@ -170,5 +213,5 @@ for (const [mark, name, detail] of results) {
   if (mark === '✗') failed++
   console.log(`  ${mark} ${name} — ${detail}`)
 }
-console.log(failed === 0 ? '冒烟通过：启动 / 工具面 / 离屏 / 封面 / PDF / 大纲 / 长图全绿' : `冒烟失败：${failed} 项未过`)
+console.log(failed === 0 ? '冒烟通过：启动 / 工具面 / 离屏 / 封面 / PDF / 大纲 / 长图 / 设计长图 / 设计卡全绿' : `冒烟失败：${failed} 项未过`)
 process.exit(failed === 0 ? 0 : 1)

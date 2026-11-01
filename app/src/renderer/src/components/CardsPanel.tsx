@@ -408,7 +408,7 @@ const CardsPanel = forwardRef<CardsPanelHandle, CardsPanelProps>(function CardsP
       const cards = [...(deckRef.current?.cards ?? [])]
       const src = cards[i]
       if (!src) return
-      cards.splice(i + 1, 0, { ...src, mode: undefined, aiImage: '', renderedZoom: undefined, png: '' })
+      cards.splice(i + 1, 0, { ...src, mode: undefined, aiImage: '', designHtml: '', renderedZoom: undefined, png: '' })
       void restructure(cards)
     },
     [restructure]
@@ -932,11 +932,13 @@ const CardsPanel = forwardRef<CardsPanelHandle, CardsPanelProps>(function CardsP
                 </span>
                 {card.mode === 'ai' ? (
                   <span className="rounded bg-accent/20 px-1.5 py-0.5 text-[10px] text-accent">AI 成图</span>
+                ) : card.mode === 'design' ? (
+                  <span className="rounded bg-accent/20 px-1.5 py-0.5 text-[10px] text-accent">AI 设计卡</span>
                 ) : (
                   card.bgImage && <span className="text-[10px]">已有背图</span>
                 )}
-                {/* 溢出预警：页内溢出保护实测缩字系数 <1 时提示，数据由渲染回写（renderedZoom） */}
-                {card.mode !== 'ai' && card.renderedZoom !== undefined && card.renderedZoom < 0.98 && (
+                {/* 溢出预警：页内溢出保护实测缩字系数 <1 时提示，数据由渲染回写（renderedZoom）；设计卡/AI 成图无此保护 */}
+                {card.mode !== 'ai' && card.mode !== 'design' && card.renderedZoom !== undefined && card.renderedZoom < 0.98 && (
                   <span
                     className="rounded bg-st-draft/15 px-1.5 py-0.5 text-[10px] text-st-draft"
                     title={`内容超出画布，成片已整块缩小到 ${Math.round(card.renderedZoom * 100)}%；可精简要点或把「文字大小」调小`}
@@ -996,7 +998,7 @@ const CardsPanel = forwardRef<CardsPanelHandle, CardsPanelProps>(function CardsP
                 placeholder="背图画面描述（氛围底图，不含文字元素；留空则纯排版底色）"
                 className="w-full resize-y rounded bg-panel-3 p-2 leading-5 text-ink-dim outline-none placeholder:text-ink-dim disabled:opacity-50"
               />
-              {card.bgImage && card.mode !== 'ai' && (
+              {card.bgImage && card.mode !== 'ai' && card.mode !== 'design' && (
                 <div className="flex items-center gap-2 text-ink-dim">
                   <span className="shrink-0 text-[10px]">背图透出</span>
                   <input
@@ -1013,7 +1015,7 @@ const CardsPanel = forwardRef<CardsPanelHandle, CardsPanelProps>(function CardsP
                   <span className="w-8 shrink-0 text-right text-[10px]">{card.bgOpacity ?? 15}%</span>
                 </div>
               )}
-              {card.mode !== 'ai' && (
+              {card.mode !== 'ai' && card.mode !== 'design' && (
                 <div className="flex items-center gap-2 text-ink-dim">
                   <span className="shrink-0 text-[10px]">文字大小</span>
                   <input
@@ -1031,7 +1033,7 @@ const CardsPanel = forwardRef<CardsPanelHandle, CardsPanelProps>(function CardsP
                   <span className="w-8 shrink-0 text-right text-[10px]">{card.fontScale ?? 100}%</span>
                 </div>
               )}
-              {card.mode !== 'ai' && (
+              {card.mode !== 'ai' && card.mode !== 'design' && (
                 <div className="flex items-center gap-4">
                   <label className="flex w-fit cursor-pointer items-center gap-1.5 text-[10px] text-ink-dim" title="背图偏深时勾选：底色变深、文字切浅色，看得清">
                     <input
@@ -1060,24 +1062,24 @@ const CardsPanel = forwardRef<CardsPanelHandle, CardsPanelProps>(function CardsP
               <div className="flex gap-2">
                 <button
                   onClick={() => genBg(i)}
-                  disabled={globalBusy || bgBusy !== null || aiBusy !== null || card.mode === 'ai' || !card.bgPrompt.trim()}
+                  disabled={globalBusy || bgBusy !== null || aiBusy !== null || card.mode === 'ai' || card.mode === 'design' || !card.bgPrompt.trim()}
                   className="rounded bg-accent px-2.5 py-1 text-white hover:opacity-90 disabled:opacity-40"
                 >
                   {bgBusy === i ? '背图生成中…' : '生成背图'}
                 </button>
                 <button
                   onClick={() => genAiFull(i)}
-                  disabled={globalBusy || bgBusy !== null || aiBusy !== null}
+                  disabled={globalBusy || bgBusy !== null || aiBusy !== null || card.mode === 'design'}
                   title="AI 一次画出整张成品卡（文字直接画进图里），不走排版模板；风格取背图描述"
                   className="rounded bg-panel-3 px-2.5 py-1 text-ink hover:bg-panel disabled:opacity-40"
                 >
                   {aiBusy === i ? 'AI 成图中…' : 'AI 直接成图'}
                 </button>
-                {card.mode === 'ai' && (
+                {(card.mode === 'ai' || card.mode === 'design') && (
                   <button
                     onClick={() => void restoreLayout(i)}
                     disabled={globalBusy || bgBusy !== null || aiBusy !== null}
-                    title="切回排版+背图渲染；成图文件保留"
+                    title={card.mode === 'ai' ? '切回排版+背图渲染；成图文件保留' : '切回排版+背图渲染；设计稿保留在卡数据里'}
                     className="rounded bg-panel-3 px-2.5 py-1 text-ink hover:bg-panel disabled:opacity-40"
                   >
                     <Icon name="undo" size={12} className="mr-1.5" />恢复排版

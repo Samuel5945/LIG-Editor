@@ -41,6 +41,7 @@ export const TOOL_LABELS: Record<string, string> = {
   export_docx: '导出 Word',
   export_pdf: '导出 PDF',
   export_longimage: '导出长图',
+  export_design_longimage: '导出设计长图',
   push_draft: '推送公众号草稿',
   push_cards: '推送贴图草稿'
 }
