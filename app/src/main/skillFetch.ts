@@ -18,8 +18,8 @@ import { locateSkillSource, parseDescription, sanitizeSkillName } from './skillS
  * 只取不落盘——确认卡片点「安装」后走 skillStore.saveSkill
  */
 
-/** 下载单个 URL：10s 超时；返回 HTML 视为错误页（raw 直链只会是纯文本） */
-async function fetchText(url: string): Promise<string> {
+/** 下载单个 URL：10s 超时；返回 HTML 视为错误页（raw 直链只会是纯文本）。市场目录刷新也复用 */
+export async function fetchText(url: string): Promise<string> {
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), 10_000)
   try {

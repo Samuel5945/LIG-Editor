@@ -9,6 +9,7 @@ import { getLlmSettings, setLlmSettings } from './settingsStore'
 import { testProvider, chatStart, abortChat, refreshProviderModels } from './llm'
 import { listSkills, readSkill, importSkill, setSkillEnabled, saveSkill, removeSkill } from './skillStore'
 import { resolveSkillInstall } from './skillFetch'
+import { getMarketCatalog, getMarketConfig, refreshMarketCatalog, resolveOfficialSkill, setMarketConfig } from './skillMarket'
 import { webResearch, webSearch } from './webSearch'
 import { generateImage } from './imageGen'
 import { saveFigureHtml, readFigureHtml, renderFigure } from './figureRender'
@@ -223,6 +224,12 @@ export function registerIpc(): void {
   // 对话安装 Skill：先 resolve 预览，确认卡片点安装后才落盘
   handle('skill:resolve', (directive) => resolveSkillInstall(directive))
   handle('skill:installResolved', (name, content) => saveSkill(name, content))
+  // ---- Skill 市场：目录（内置+在线刷新）/ 源配置 / 官方条目解析 ----
+  handle('skill:market:get', () => getMarketCatalog())
+  handle('skill:market:refresh', () => refreshMarketCatalog())
+  handle('skill:market:getConfig', () => getMarketConfig())
+  handle('skill:market:setConfig', (catalogUrl) => setMarketConfig(catalogUrl))
+  handle('skill:market:resolveOfficial', (name) => resolveOfficialSkill(name))
   handle('mcp:accessCard', () => buildAccessCard())
   // ---- 对话副驾驶工具调用（chat-tools v1）：能力核工具暴露给内部对话 ----
   handle('agent:listTools', () => listExecTools())

@@ -10,6 +10,7 @@ import { MenuItem, Popover, StatusDot, StatusLegend } from '../ui/primitives'
 import { dotOfStatus } from '../ui/status'
 import { useTreeFlags } from '../ui/useTreeFlags'
 import IdeaLibrary from './IdeaLibrary'
+import { SkillMarketDialog } from './SkillMarketDialog'
 
 /** 状态圆点配色与语义见 `ui/status.ts`（全应用单源）；树上不放状态文字——省宽度给工程名，颜色即语义，图例常驻左栏底部 */
 interface SidebarProps {
@@ -137,6 +138,8 @@ export default function Sidebar(props: SidebarProps): ReactElement {
   const [expanded, setExpanded] = useState<string[]>([])
   const [openGroups, setOpenGroups] = useState<string[]>([])
   const [skillsOpen, setSkillsOpen] = useState(false)
+  // Skill 市场弹窗（目录/搜索/安装），入口钉在 Skill 库行上
+  const [marketOpen, setMarketOpen] = useState(false)
   // 置顶 / 归档名单走单源 hook（渲染层本地偏好，不入 project.json）：
   // 与工程封面墙共用同一份 localStorage，任一侧改动即时同步，不出现两套事实
   const { pinned, archived, setPinned, setArchived, pruneTo } = useTreeFlags()
@@ -734,6 +737,16 @@ export default function Sidebar(props: SidebarProps): ReactElement {
           <Chevron open={skillsOpen} />
           <span className="text-accent"><Icon name="zap" size={15} /></span>
           <span className="min-w-0 flex-1 truncate text-ink">Skill 库 ({skills.length})</span>
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              setMarketOpen(true)
+            }}
+            title="Skill 市场：浏览目录、搜索并安装"
+            className={`${rowBoxLayout} shrink-0 text-ink hover:bg-panel hover:text-accent`}
+          >
+            <Icon name="package" size={12} />市场
+          </button>
         </div>
         {skillsOpen && (
           <>
@@ -1042,6 +1055,14 @@ export default function Sidebar(props: SidebarProps): ReactElement {
       )}
       {/* 左栏底部常驻状态图例（§5.2）：工作区路径已上移到窗口底部状态栏，这里不再重复占行 */}
       <StatusLegend className="shrink-0 border-t border-panel-3 py-2" />
+      {marketOpen && (
+        <SkillMarketDialog
+          installedNames={skills.map((s) => s.name)}
+          onInstalled={onSkillsChanged}
+          onToast={onToast}
+          onClose={() => setMarketOpen(false)}
+        />
+      )}
     </aside>
   )
 }

@@ -24,14 +24,17 @@ export function parseDescription(md: string): string {
   return ''
 }
 
+/** 随包预装 Skill 的源目录（打包后 process.resourcesPath/skills，dev 为 app/resources/skills） */
+export function bundledSkillsDir(): string {
+  return app.isPackaged ? join(process.resourcesPath, 'skills') : join(app.getAppPath(), 'resources', 'skills')
+}
+
 /**
  * 首启种子复制：把随包预装的 Skill（extraResources → resources/skills）铺到 <root>/skills
  * 已存在同名目录时不覆盖（用户可能改过内容或停用过）
  */
 export function seedBundledSkills(): void {
-  const source = app.isPackaged
-    ? join(process.resourcesPath, 'skills')
-    : join(app.getAppPath(), 'resources', 'skills')
+  const source = bundledSkillsDir()
   if (!existsSync(source)) return
   const { skills } = getAppPaths()
   for (const entry of readdirSync(source, { withFileTypes: true })) {

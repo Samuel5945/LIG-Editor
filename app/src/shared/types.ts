@@ -563,6 +563,45 @@ export interface SkillResolveResult {
   candidates?: SkillInstallCandidate[]
 }
 
+// ---- Skill 市场（目录/搜索/安装）----
+
+/** 市场/目录 JSON 的单条收录记录 */
+export interface SkillMarketEntry {
+  /** Skill 名 = skills/ 目录名（安装落盘身份；同名条目在线刷新时以在线元数据为准） */
+  name: string
+  description: string
+  /** 展示分类（复用创作链路口径：选题/大纲/成文/配图/标题封面/审阅…），解析缺省归「其他」 */
+  category: string
+  /** 编辑推荐档：收录时人工标注，不是社区评分 */
+  recommended?: boolean
+  /** 安装引用：SKILL.md 直链 / GitHub blob 链接 / owner/repo（走既有解析链路）；官方条目省略 */
+  ref?: string
+  /** 官方预装（随包 resources/skills），安装走包内复制不经网络 */
+  official?: boolean
+}
+
+/** 目录文件形状（在线 catalog.json 与内置目录共用） */
+export interface SkillCatalog {
+  version?: number
+  updatedAt?: string
+  entries: SkillMarketEntry[]
+}
+
+/** 合并后的市场条目：builtin = 内置目录；online = 在线刷新（含缓存）合并进来 */
+export interface SkillMarketItem extends SkillMarketEntry {
+  origin: 'builtin' | 'online'
+}
+
+/** 市场目录状态：offline = 没有可用的在线目录内容；offlineReason 无论线上线下都可能带（如实提示不静默） */
+export interface MarketCatalogState {
+  items: SkillMarketItem[]
+  offline: boolean
+  /** 在线目录最后可用的时刻（ISO）；null = 从未拉取成功 */
+  onlineAt: string | null
+  /** 补充说明：未配置源 / 拉取失败原因 / 正在展示缓存等 */
+  offlineReason?: string
+}
+
 /** MCP 一键接入卡片（M8）：给外部 Agent 的注册配置片段 */
 export interface McpAccessCard {
   /** MCP server 启动命令（electron/应用 exe，以 RUN_AS_NODE 跑代理脚本） */
@@ -771,6 +810,15 @@ export interface IpcApi {
   'skill:resolve': (directive: SkillInstallDirective) => SkillResolveResult
   /** 对话安装 Skill：确认后写入 skills/<name>/SKILL.md，返回清洗后的最终名 */
   'skill:installResolved': (name: string, content: string) => string
+  // ---- Skill 市场（目录/搜索/安装）----
+  /** 打开市场：内置目录 + 在线缓存合并，不发网络请求（秒开；要新内容点刷新） */
+  'skill:market:get': () => MarketCatalogState
+  /** 手动刷新：配置了源则拉在线目录（成功即更新缓存）；未配置/失败回退缓存或内置，如实带原因 */
+  'skill:market:refresh': () => Promise<MarketCatalogState>
+  'skill:market:getConfig': () => { catalogUrl: string }
+  'skill:market:setConfig': (catalogUrl: string) => void
+  /** 官方预装条目解析：从随包 resources/skills 读 SKILL.md 出预览（确认后走 skill:installResolved 落盘） */
+  'skill:market:resolveOfficial': (name: string) => SkillResolveResult
   /** 生成外部 Agent 一键接入配置（Codex/Qoder 片段） */
   'mcp:accessCard': () => McpAccessCard
   // ---- 对话副驾驶工具调用（chat-tools v1）----
