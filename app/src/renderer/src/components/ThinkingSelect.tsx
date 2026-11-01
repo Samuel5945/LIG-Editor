@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactElement } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactElement } from 'react'
 import { modelCapability, THINKING_LEVEL_LABEL, type ModelCapability } from '@shared/modelCatalog'
 import type { ThinkingChoice } from '@shared/types'
 import { Icon } from '../ui/Icon'
@@ -52,6 +52,15 @@ export function ThinkingSelect({
   className?: string
 }): ReactElement {
   const [open, setOpen] = useState(false)
+  // 菜单展开时量一次触发钮位置：贴窗口右缘就改向左对齐——对话面板的思考钮在 x≈1131（1280 宽窗口），
+  // 固定 left-0 会把菜单右缘 27px 裁出窗外，「超深/最大」点不到（2026-11-01 实测复现）
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const [flip, setFlip] = useState(false)
+  useLayoutEffect(() => {
+    if (!open) return
+    const r = triggerRef.current?.getBoundingClientRect()
+    if (r) setFlip(r.left + 176 > window.innerWidth - 8) // w-44 = 176px
+  }, [open])
   const reasoning = cap.reasoning
   const levels = reasoning?.levels
   const on = value === 'none' || value === false ? false : value === null ? (reasoning?.defaultOn ?? false) : true
@@ -91,6 +100,7 @@ export function ThinkingSelect({
   return (
     <span className={`relative shrink-0 ${className}`}>
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen((v) => !v)}
         disabled={disabled || !reasoning}
@@ -109,7 +119,7 @@ export function ThinkingSelect({
       {open && (
         <Popover
           onClose={() => setOpen(false)}
-          className={`absolute ${direction === 'up' ? 'bottom-full mb-1.5' : 'top-full mt-1.5'} left-0 z-50 w-44 p-1`}
+          className={`absolute ${direction === 'up' ? 'bottom-full mb-1.5' : 'top-full mt-1.5'} ${flip ? 'right-0' : 'left-0'} z-50 w-44 max-h-[300px] overflow-y-auto p-1`}
         >
           <PopoverLabel>思考档位{levels ? '' : ' · 纯开关'}</PopoverLabel>
           <MenuItem active={value === null} onClick={() => pick(null)}>
