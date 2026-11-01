@@ -34,7 +34,9 @@ interface Section {
   lines: string[]
 }
 
-const QUOTE_RE = /^>\s*原文[:：]\s*(.+)$/
+// 引用行容错：模型常把「> 原文：」包进列表（实测 deepseek-v4 会输出 "- > 原文：…"/"1. > 原文：…"），
+// 正则锚死行首会让「定位到原文」整排静默消失（2026-11-01 回归走查抓到）——接受可选列表前缀
+const QUOTE_RE = /^(?:[-*+]|\d+[.)])?\s*>\s*原文[:：]\s*(.+)$/
 /** 有正文标准（与 wizardProgress 同口径）：非空行 ≥2。新建工程的骨架（一行 # 标题）不算——
  *  早先只判 trim 非空，骨架也放行，模型对着空壳审出「无正文可审」桩报告落盘，状态便成了「已有报告」 */
 const hasBody = (t: string): boolean => t.split(/\r?\n/).filter((l) => l.trim()).length > 1

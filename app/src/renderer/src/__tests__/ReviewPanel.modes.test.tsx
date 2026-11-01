@@ -133,3 +133,23 @@ describe('拆解报告可发现性（项4）', () => {
     expect(screen.getByText('拆解 · 不计流程状态')).toBeTruthy()
   })
 })
+
+describe('引用行定位容错', () => {
+  it('「> 原文：」被模型包进列表（- / 1.）时定位按钮不丢，点击回传摘录', async () => {
+    files['review.md'] = [
+      '# 审阅报告',
+      '## 总评',
+      '7 分。',
+      '> 原文：很多人吹嘘自己五点起床',
+      '- > 原文：我试过一个月，发现早起只是把困倦从早晨挪到了下午',
+      '1. > 原文：真正决定产出的不是几点睁眼'
+    ].join('\n')
+    const onLocate = vi.fn(() => true)
+    render(h(ReviewPanel, props({ onLocate })))
+    // 三种行式（裸引用 / 无序列表 / 有序列表）各出一个定位按钮
+    const btns = await screen.findAllByText(/→ 定位/)
+    expect(btns.length).toBe(3)
+    fireEvent.click(screen.getByText(/我试过一个月[^\n]*→ 定位/))
+    expect(onLocate).toHaveBeenCalledWith('我试过一个月，发现早起只是把困倦从早晨挪到了下午')
+  })
+})
