@@ -17,6 +17,7 @@ import { readCards, writeCards, renderCard, readArchivedCards, writeArchivedCard
 import { renderCoverHtml, renderCoverTemplate } from './coverStore'
 import { exportArticleHtml, copyArticleRich, exportPlatformHtml } from './exporter'
 import { exportDocx, exportPdf } from './docExport'
+import { exportLongImage } from './longImageExport'
 import type { PlatformId } from '@shared/types'
 import { getWechatConfig, saveWechatConfig, setWechatBinding } from './wechatStore'
 import { pushDraft, pushCards, invalidateToken, getPublicIp } from './wechatPublish'
@@ -318,6 +319,12 @@ export function registerIpc(): void {
   })
   handle('export:pdf', (project) => {
     const r = exportPdf(project)
+    store.stampExported(project)
+    return r
+  })
+  // ---- 整文长图（竖图 PNG，超长按段落边界分段），落 <工程>/交付/长图/ ----
+  handle('export:longimage', async (project) => {
+    const r = await exportLongImage(project)
     store.stampExported(project)
     return r
   })

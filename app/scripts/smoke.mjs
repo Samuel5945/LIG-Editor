@@ -12,6 +12,7 @@
  *   render_cover_template → renderHtmlFixed 固定画布 + sharp 超采样裁剪（封面链路）
  *   export_pdf            → 隐藏窗 printToPDF（交稿链路）
  *   save_outline          → 反推大纲落 outline.md、正文逐字不动（新增读写面兜底）
+ *   export_longimage      → 离屏量高 + 整文竖图 PNG 落交付/长图/（长图链路）
  * 冒烟工程即建即删（create_project → … → delete_project confirm），不碰真实工程。
  */
 import { spawn, execSync } from 'node:child_process'
@@ -129,6 +130,20 @@ try {
   r.ok && back.ok && articleKept
     ? ok('save_outline 反推大纲', 'outline.md 回读一致，正文未动')
     : bad('save_outline 反推大纲', '写入/回读/正文保全有一环失败')
+
+  // ⑤ 长图链路（离屏量高 → 整文竖图 PNG 落 交付/长图/）：校验产物存在且 PNG 头有效
+  r = await call(cfg, 'export_longimage', { project: SMOKE_PROJECT })
+  const f0 = r.ok && r.result?.files_abs?.[0]
+  let pngDim = ''
+  if (f0 && existsSync(f0)) {
+    const b = readFileSync(f0)
+    b.readUInt32BE(12) === 0x49484452
+      ? (pngDim = `${b.readUInt32BE(16)}×${b.readUInt32BE(20)}`)
+      : (pngDim = '')
+  }
+  r.ok && f0 && pngDim
+    ? ok('export_longimage 长图', `${r.result.count} 张 ${pngDim}`)
+    : bad('export_longimage 长图', JSON.stringify(r).slice(0, 120))
 } catch (err) {
   bad('冒烟中断', err instanceof Error ? err.message : String(err))
 } finally {
@@ -155,5 +170,5 @@ for (const [mark, name, detail] of results) {
   if (mark === '✗') failed++
   console.log(`  ${mark} ${name} — ${detail}`)
 }
-console.log(failed === 0 ? '冒烟通过：启动 / 工具面 / 离屏 / 封面 / PDF / 大纲全绿' : `冒烟失败：${failed} 项未过`)
+console.log(failed === 0 ? '冒烟通过：启动 / 工具面 / 离屏 / 封面 / PDF / 大纲 / 长图全绿' : `冒烟失败：${failed} 项未过`)
 process.exit(failed === 0 ? 0 : 1)

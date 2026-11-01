@@ -30,6 +30,7 @@ import { readArchivedCards, readCards, renderCard, writeArchivedCards, writeCard
 import { renderCoverHtml, renderCoverTemplate } from './coverStore'
 import { exportArticleHtml, exportPlatformHtml } from './exporter'
 import { exportDocx, exportPdf } from './docExport'
+import { exportLongImage } from './longImageExport'
 import { pushCards, pushDraft } from './wechatPublish'
 import { listSkills, parseDescription, readSkill, saveSkill } from './skillStore'
 import { deleteTheme, listLibrary, saveTheme, setActiveTheme } from './themeStore'
@@ -1023,6 +1024,22 @@ export const TOOLS: ToolDef[] = [
       const path = await exportPdf(project)
       store.stampExported(project)
       return { path }
+    }
+  },
+  {
+    name: 'export_longimage',
+    description:
+      '把整篇文章导出为整文竖图 PNG（与导出预览同源的日间排版，750px 宽、2 倍超采样，正文图片全部带上），落到工程「交付/长图/」目录，返回 files（工程相对路径）与 files_abs（绝对路径）。超长自动按段落边界分段成多张（单段≤12288px 高，文件名带序号），适合发朋友圈/小红书等只收图的渠道；要 A4 打印用 export_pdf，要可编辑用 export_docx',
+    inputSchema: {
+      type: 'object',
+      properties: { project: P.project },
+      required: ['project']
+    },
+    handler: async (a) => {
+      const project = projectArg(a)
+      const r = await exportLongImage(project)
+      store.stampExported(project)
+      return r
     }
   },
   {

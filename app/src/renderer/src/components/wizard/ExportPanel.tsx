@@ -183,6 +183,26 @@ export default function ExportPanel({ project, projectDir, markdown, theme, cate
     }
   }, [busy, project, onToast, onExported])
 
+  /** 导出整文长图（与预览同源排版，750px 宽 2 倍超采样，超长自动按段落边界分段） */
+  const exportLongImage = useCallback(async () => {
+    if (busy) return
+    setBusy(true)
+    try {
+      const r = await window.api.invoke('export:longimage', project)
+      setDocPath(r.files_abs[0] ?? null)
+      onExported?.()
+      onToast(
+        r.count > 1
+          ? `长图已导出（${r.width}px 宽 × ${r.count} 张，按段落分段）：${r.files_abs[0]}`
+          : `长图已导出（${r.width}px 宽）：${r.files_abs[0]}`
+      )
+    } catch (err) {
+      onToast(`长图导出失败：${err instanceof Error ? err.message : err}`)
+    } finally {
+      setBusy(false)
+    }
+  }, [busy, project, onToast, onExported])
+
   /** 用系统默认应用打开交稿产物（Word/PDF） */
   const openDocFile = useCallback(async () => {
     if (!docPath) return
@@ -363,6 +383,9 @@ export default function ExportPanel({ project, projectDir, markdown, theme, cate
             <Button variant="ghost" icon="printer" disabled={busy} onClick={exportPdf}>
               导出 PDF（A4 打印）
             </Button>
+            <Button variant="ghost" icon="image" disabled={busy} onClick={exportLongImage}>
+              导出长图（整文竖图）
+            </Button>
             {docPath && (
               <Button variant="ghost" icon="folderOpen" onClick={openDocFile}>
                 打开
@@ -387,6 +410,7 @@ export default function ExportPanel({ project, projectDir, markdown, theme, cate
             头条按计算后样式转 schema mark 并丢弃 CSS，知乎/百家号剥掉内联样式，所以预览比实际发布页更规整。
           </p>
           <p>交稿稿落在工程「交付」目录：Word 保留标题/正文/表格/图片结构，可在 Word/WPS 里继续改；PDF 为公众号日间排版按 A4 分页，适合发给甲方审阅。封面若已设置会放在文档首页。</p>
+          <p>长图落在工程「交付/长图」目录：整篇文章一张竖图 PNG（750px 宽、2 倍超采样，与预览竖屏同宽同折行），超长自动按段落边界分成多张（文件名带序号），适合发朋友圈/小红书这类只收图的渠道。</p>
         </CollapseBar>
       </Card>
     </div>

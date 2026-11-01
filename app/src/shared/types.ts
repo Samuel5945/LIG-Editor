@@ -725,6 +725,15 @@ export interface CategoryPurgeInfo {
   themes: string[]
 }
 
+/** 整文长图导出产物：files 为工程相对路径（正斜杠），files_abs 与之一一对应；heights 为每张输出像素高 */
+export interface LongImageResult {
+  files: string[]
+  files_abs: string[]
+  width: number
+  heights: number[]
+  count: number
+}
+
 export interface IpcApi {
   'app:getPaths': () => AppPaths
   'app:ping': () => string
@@ -899,6 +908,8 @@ export interface IpcApi {
   'export:docx': (project: string) => string
   /** 导出打印用 PDF（公众号日间排版，A4）到工程「交付/」目录，返回绝对路径 */
   'export:pdf': (project: string) => string
+  /** 导出整文竖图长图 PNG（750px 宽 2 倍超采样，超长按段落边界分段）到工程「交付/长图/」 */
+  'export:longimage': (project: string) => LongImageResult
   // ---- 贴图卡片 ----
   /** 读取工程 cards.json；不存在返回 null */
   'cards:read': (project: string) => CardDeck | null

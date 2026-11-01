@@ -74,7 +74,7 @@ const GUIDE_BODIES: Record<AgentGuideTopic, () => string> = {
 8 审阅与标题：review_prompt → 模型 → save_review；titles_prompt → 模型 → set_titles
 8.5 爆款拆解：teardown_prompt（传 article 拆外部文章，缺省拆当前正文）→ 模型 → save_teardown 写 teardown.md；用户要借骨架写新文时把「- 骨架：」行转成大纲调 save_outline
 9 封面：render_cover_template（模板直出，中文不会糊）。只渲一张 2.35:1 主图，1:1 是从它裁出来的一段——后台只采纳横图，另外排一版方图它不认，所以构图要让右半单独裁出来也成立（focal 调取哪一段，panel 保底可读性，decor 关装饰，prompt 一步生底图）。要完全自主排版就手写 covers/*.html 再 render_cover_html
-10 交付：export_html / export_docx / export_pdf / push_draft / push_cards（前置见 get_guide publish）
+10 交付：export_html / export_docx / export_pdf / export_longimage / push_draft / push_cards（前置见 get_guide publish）
 局部改动（改一句、某段压短、加序号、润色某节）用 patch_article 精准替换，别重写全文；只有整篇重写或大幅结构调整才 write_article。
 状态由落盘动作自动推进，不用手动设：落正文→撰写，存审阅报告→审阅，出交付物或推送成功→已成稿。
 风格方法论交给 Skill：list_skills 看有什么，save_skill 写一套，set_project_skill 挂到工程——挂载后 outline/article/review/titles 各提示词会自动带上它全文。`,
@@ -108,6 +108,7 @@ push_draft：正文本地图片自动上传微信 CDN、封面传永久素材、
 push_cards：贴图组的图片消息形态，需全部卡片已渲染、最多 20 张，配文取 deck.caption、标题取封面卡标题。
 export_html：落工程根 article.html（公众号排版）或 article-<platform>.html（platform=zhihu/toutiao/baijiahao，按各平台编辑器的净化规则简化排版，图片仍是相对路径，作为多平台分发前的稿源）。
 export_docx / export_pdf：落工程「交付/」目录，给甲方审稿用 docx（可继续编辑），存档打印用 pdf；两者成功即把工程推进「已成稿」。
+export_longimage：整文竖图 PNG 落「交付/长图/」（750px 宽 2 倍超采样，与导出预览同源同折行），超长按段落边界自动分段、files 数组逐张返回；发朋友圈/小红书这类只收图的渠道用它。
 任何写操作后 GUI 会热载；推送/导出失败要如实报错误文本，不要说成「已入草稿」。`
 }
 
