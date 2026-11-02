@@ -32,12 +32,13 @@ export function ReasoningBlock({
 
   if (!text.trim()) return null
   const levelName = level && level !== 'none' ? THINKING_LEVEL_LABEL[level] : ''
+  // 档位用「思考·高」缀在块名后：低/中/高 系文案直接前置会拼出「高思考」这类别扭词（2026-11-02 改）
   const label = streaming
     ? levelName
-      ? `${levelName}思考中`
+      ? `思考中·${levelName}`
       : '思考中'
     : levelName
-      ? `${levelName}思考`
+      ? `思考·${levelName}`
       : '思考过程'
   return (
     <div

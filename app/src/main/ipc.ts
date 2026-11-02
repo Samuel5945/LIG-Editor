@@ -5,7 +5,7 @@ import type { IpcApi, IpcEvents, IpcEventChannel, McpAccessCard } from '@shared/
 import { getAppPaths } from './paths'
 import * as store from './projectStore'
 import { watchProject, stopProjectWatch, setWatchedProjects, unwatchProjectAssets } from './watcher'
-import { getLlmSettings, setLlmSettings } from './settingsStore'
+import { getLlmSettings, setLlmSettings, saveProviderShownModels } from './settingsStore'
 import { testProvider, chatStart, abortChat, refreshProviderModels } from './llm'
 import { listSkills, readSkill, importSkill, setSkillEnabled, saveSkill, removeSkill } from './skillStore'
 import { resolveSkillInstall } from './skillFetch'
@@ -209,6 +209,12 @@ export function registerIpc(): void {
   handle('llm:abort', (requestId) => abortChat(requestId))
   // 拉取并按文本/生图分类落盘缓存；失败回退旧缓存
   handle('llm:fetchModels', (provider) => refreshProviderModels(provider))
+  // 对话面板模型菜单的显示过滤落盘；广播让各面板的模型菜单即时刷新
+  handle('llm:setShownModels', (providerId, shown) => {
+    const ok = saveProviderShownModels(providerId, shown)
+    if (ok) broadcast('settings:llmChanged', null)
+    return ok
+  })
 
   // ---- 副驾驶（M5）----
   handle('chat:list', (project) => store.listChatSessions(project))

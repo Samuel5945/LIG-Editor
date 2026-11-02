@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactElement } from 'react'
+import { createPortal } from 'react-dom'
 import { modelCapability, THINKING_LEVEL_LABEL, type ModelCapability } from '@shared/modelCatalog'
 import type { ThinkingChoice } from '@shared/types'
 import { Icon } from '../ui/Icon'
@@ -52,15 +53,29 @@ export function ThinkingSelect({
   className?: string
 }): ReactElement {
   const [open, setOpen] = useState(false)
-  // 菜单展开时量一次触发钮位置：贴窗口右缘就改向左对齐——对话面板的思考钮在 x≈1131（1280 宽窗口），
-  // 固定 left-0 会把菜单右缘 27px 裁出窗外，「超深/最大」点不到（2026-11-01 实测复现）
+  // 展开时量触发钮的视口坐标，浮层挂 body 走 fixed 定位——对话输入行是 chip-row 横滑容器
+  // （overflow-x:auto 连带 overflow-y:auto），absolute 浮层留在行内会被整块裁掉：菜单「开」
+  // 了却看不见、全屏遮罩还吃掉下一次点击（2026-11-02 CDP 实测复现「思考按钮点了没反应」）。
+  // 贴窗口右缘改右对齐（w-44=176px；2026-11-01 实测 1280 宽下固定 left-0 裁出 27px）。
   const triggerRef = useRef<HTMLButtonElement>(null)
-  const [flip, setFlip] = useState(false)
+  const [anchor, setAnchor] = useState<{ left: number; right: number; top: number; bottom: number } | null>(null)
+  const measure = (): void => {
+    const r = triggerRef.current?.getBoundingClientRect()
+    if (r) setAnchor({ left: r.left, right: r.right, top: r.top, bottom: r.bottom })
+  }
   useLayoutEffect(() => {
     if (!open) return
-    const r = triggerRef.current?.getBoundingClientRect()
-    if (r) setFlip(r.left + 176 > window.innerWidth - 8) // w-44 = 176px
+    measure()
+    // 浮层 fixed 定位后不再随行内布局走：窗口尺寸变化/任意容器滚动都跟着触发钮重定位
+    window.addEventListener('resize', measure)
+    window.addEventListener('scroll', measure, true)
+    return () => {
+      window.removeEventListener('resize', measure)
+      window.removeEventListener('scroll', measure, true)
+    }
   }, [open])
+  // flip 在 anchor 就绪后才参与定位；宽 176 + 右缘 8px 余量
+  const flip = !!anchor && anchor.left + 176 > window.innerWidth - 8
   const reasoning = cap.reasoning
   const levels = reasoning?.levels
   const on = value === 'none' || value === false ? false : value === null ? (reasoning?.defaultOn ?? false) : true
@@ -116,10 +131,19 @@ export function ThinkingSelect({
           </>
         )}
       </button>
-      {open && (
+      {open && anchor && createPortal(
         <Popover
           onClose={() => setOpen(false)}
-          className={`absolute ${direction === 'up' ? 'bottom-full mb-1.5' : 'top-full mt-1.5'} ${flip ? 'right-0' : 'left-0'} z-50 w-44 max-h-[300px] overflow-y-auto p-1`}
+          className="fixed z-50 w-44 max-h-[300px] overflow-y-auto p-1"
+          style={
+            direction === 'up'
+              ? flip
+                ? { right: window.innerWidth - anchor.right, bottom: window.innerHeight - anchor.top + 6 }
+                : { left: anchor.left, bottom: window.innerHeight - anchor.top + 6 }
+              : flip
+                ? { right: window.innerWidth - anchor.right, top: anchor.bottom + 6 }
+                : { left: anchor.left, top: anchor.bottom + 6 }
+          }
         >
           <PopoverLabel>思考档位{levels ? '' : ' · 纯开关'}</PopoverLabel>
           <MenuItem active={value === null} onClick={() => pick(null)}>
@@ -134,8 +158,9 @@ export function ThinkingSelect({
               <MenuItem key={l} active={value === l} onClick={() => pick(l)}>
                 {THINKING_LEVEL_LABEL[l]}
               </MenuItem>
-            ))}
-        </Popover>
+              ))}
+        </Popover>,
+        document.body
       )}
     </span>
   )

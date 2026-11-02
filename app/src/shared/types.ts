@@ -361,6 +361,8 @@ export interface ProviderConfig {
   api?: 'openai-chat-completions' | 'anthropic-messages'
   /** 已拉取的模型列表分类缓存（启动自动刷新与手动刷新共用，随 llm.json 落盘） */
   models?: ProviderModelCache
+  /** 对话面板模型菜单只显示这些文本模型 id（缺省/空 = 全部显示）；仅影响菜单展示，不影响请求与设置界面 */
+  shownModels?: string[]
 }
 
 /** 每供应商模型列表缓存：文本/生图模型分列 */
@@ -469,7 +471,7 @@ export interface ChatMessage {
   content: string | ContentPart[]
   /** assistant 消息的思考过程（reasoning/reasoning_content/thinking_delta 归一），随会话落盘 */
   reasoning?: string
-  /** 生成该条回复时用户显式选的思考档位（跟随/关闭不记）：历史里的思考块据此标「深度/快速思考」 */
+  /** 生成该条回复时用户显式选的思考档位（跟随/关闭不记）：历史里的思考块据此标「思考·高」这类档位缀 */
   thinkingLevel?: ThinkingLevel
   /** assistant 消息携带的工具调用；对应结果以 role:'tool' 消息回填（chat-tools v1） */
   tool_calls?: { id: string; type: 'function'; function: { name: string; arguments: string } }[]
@@ -808,6 +810,8 @@ export interface IpcApi {
   'llm:abort': (requestId: string) => void
   /** 拉取供应商模型列表（GET /v1/models）→ 按文本/生图分类 → 落盘缓存；失败时返回旧缓存 */
   'llm:fetchModels': (provider: ProviderConfig) => ProviderModelsResult
+  /** 保存对话面板模型菜单的显示过滤（providers[].shownModels）：null/空 = 清字段恢复全部显示；成功后广播 settings:llmChanged */
+  'llm:setShownModels': (providerId: string, shown: string[] | null) => boolean
   // ---- 副驾驶（M5）----
   'chat:list': (project: string) => ChatSessionMeta[]
   'chat:read': (project: string, id: string) => ChatSession

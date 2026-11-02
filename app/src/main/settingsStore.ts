@@ -165,7 +165,8 @@ export function getLlmSettings(): LlmSettings & { keyStorage: KeyStorage } {
         imageModel: p.imageModel,
         imageApi: migrateImageApi(p.imageApi, p.baseUrl),
         api: p.api,
-        models: p.models
+        models: p.models,
+        shownModels: p.shownModels
       })),
       textProviderId: disk.textProviderId,
       imageProviderId: disk.imageProviderId,
@@ -187,6 +188,7 @@ export function setLlmSettings(settings: LlmSettings): void {
   let rhythmSeeded = false
   let presetsSeeded = false
   let diskModels: Record<string, ProviderModelCache> = {}
+  let diskShown: Record<string, string[]> = {}
   try {
     const disk = JSON.parse(readFileSync(settingsFile(), 'utf-8')) as DiskSettings
     rhythmSeeded = disk.rhythmSeeded ?? false
@@ -194,6 +196,8 @@ export function setLlmSettings(settings: LlmSettings): void {
     // 模型列表缓存合并保护：设置弹窗的旧快照不含（或晚于）磁盘上的新缓存时，保留磁盘版本
     for (const p of disk.providers) {
       if (p.models) diskModels[p.id] = p.models
+      // 对话面板的菜单显示过滤同上：设置弹窗快照不带这字段，丢了等于悄悄恢复全显
+      if (p.shownModels) diskShown[p.id] = p.shownModels
     }
   } catch {
     rhythmSeeded = false
@@ -213,6 +217,7 @@ export function setLlmSettings(settings: LlmSettings): void {
         imageApi: p.imageApi,
         api: p.api,
         models,
+        shownModels: p.shownModels ?? diskShown[p.id],
         ...encryptKey(p.apiKey)
       }
     }),
@@ -237,6 +242,23 @@ export function saveProviderModels(providerId: string, models: ProviderModelCach
     const p = disk.providers?.find((x) => x.id === providerId)
     if (!p) return false
     p.models = models
+    writeFileSync(file, JSON.stringify(disk, null, 2))
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** 保存对话面板模型菜单的显示过滤（providers[].shownModels）：shown 为空/null = 清字段恢复全部显示 */
+export function saveProviderShownModels(providerId: string, shown: string[] | null): boolean {
+  try {
+    const file = settingsFile()
+    if (!existsSync(file)) return false
+    const disk = JSON.parse(readFileSync(file, 'utf-8')) as DiskSettings
+    const p = disk.providers?.find((x) => x.id === providerId)
+    if (!p) return false
+    if (shown && shown.length > 0) p.shownModels = shown
+    else delete p.shownModels
     writeFileSync(file, JSON.stringify(disk, null, 2))
     return true
   } catch {

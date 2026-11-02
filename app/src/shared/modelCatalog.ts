@@ -36,14 +36,14 @@ export interface ModelCapability {
   outputImage?: boolean
 }
 
-/** 档位中文标签（选择菜单与思考块标识共用；low/high 沿用既有叫法「快速/深度」） */
+/** 档位中文标签（选择菜单与思考块标识共用）：对齐主流 Agent 的 reasoning effort 叫法（低/中/高），2026-11-02 起 */
 export const THINKING_LEVEL_LABEL: Record<ThinkingLevel, string> = {
   none: '关闭',
-  minimal: '极简',
-  low: '快速',
-  medium: '标准',
-  high: '深度',
-  xhigh: '超深',
+  minimal: '最低',
+  low: '低',
+  medium: '中',
+  high: '高',
+  xhigh: '极高',
   max: '最大'
 }
 

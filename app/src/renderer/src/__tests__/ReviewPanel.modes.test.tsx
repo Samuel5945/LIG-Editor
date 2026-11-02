@@ -88,13 +88,13 @@ describe('分析面板双模式', () => {
 })
 
 describe('拆解档位与外部文章', () => {
-  it('档位展开菜单：单选「深度」后发起，请求带 thinking: high', async () => {
+  it('档位展开菜单：单选「高」后发起，请求带 thinking: high', async () => {
     render(h(ReviewPanel, props()))
     fireEvent.click(await screen.findByText('爆款拆解'))
     fireEvent.click(await screen.findByText(/档位·跟随/))
-    // 展开选择菜单（替代旧的循环点击）：选预置档位「深度」
-    fireEvent.click(await screen.findByText('深度'))
-    expect(screen.getByText(/档位·深度/)).toBeTruthy()
+    // 展开选择菜单（替代旧的循环点击）：选预置档位「高」（低/中/高 系文案）
+    fireEvent.click(await screen.findByText('高'))
+    expect(screen.getByText(/档位·高/)).toBeTruthy()
     fireEvent.click(screen.getByText('拆解当前正文'))
     await waitFor(() => expect(chatStarts.length).toBe(1))
     const opts = api.callsOf('llm:chatStart')[0][2] as { thinking?: string }
