@@ -424,6 +424,21 @@ textarea:focus-visible,
   }
 }
 
+/* 思考强度滑杆档位文案切换：新档位从下方浮入 + 淡入（key 重挂载触发） */
+@keyframes think-label-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.think-label-in {
+  animation: think-label-in 0.18s ease-out;
+}
+
 /* 编辑器工具条：按钮不内折竖排（nowrap + 不收缩），放不下就整组换行。
    别改回 overflow-x: auto——那会让工具条成为滚动容器，overflow-y 连带变成 auto，
    把条内向下展开的面板（强调色 / 背景卡 / 正文排版 / 标题排版）裁成 28px 高，

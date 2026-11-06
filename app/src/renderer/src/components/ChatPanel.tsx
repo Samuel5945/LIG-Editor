@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState, type ReactElement, type React
 import { confirmAction } from '../confirm'
 import { ToolLogCard, type ToolCardState } from './ToolLogCard'
 import { ReasoningBlock } from './ReasoningBlock'
-import { ThinkingSelect } from './ThinkingSelect'
 import { TOOL_LABELS } from '../copilot/toolLabels'
 import { Icon, type IconName } from '../ui/Icon'
 import { Button, Chip, FIELD_SHELL_CLS, IconButton, useFittingRow } from '../ui/primitives'
@@ -26,7 +25,8 @@ import { cardsPlainText, parseAccentDirective } from '@shared/cards'
 import { parseArticleUpdate } from '@shared/articleUpdate'
 import type { ProviderConfig } from '@shared/types'
 import { chatOnceWithTools, type ChatRoundResult } from '../copilot/llm'
-import { ModelSelect, type ModelSel } from './ModelSelect'
+import { ModelThinkingPill } from './ModelThinkingPill'
+import type { ModelSel } from './ModelSelect'
 import { chatContext, freeChatSystemPrompt, webContext } from '../copilot/prompts'
 import { extractFileText } from '../copilot/material'
 import { parseAccentIntent } from '@shared/accentIntent'
@@ -342,6 +342,25 @@ export default function ChatPanel({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- cap 随 effProvider 重建，按模型身份触发即可
   }, [effProvider?.baseUrl, effProvider?.textModel, thinkLevel])
+
+  // Ctrl+T 循环思考档位（ZCode 同款快捷键，滑杆旁的徽章即提示）：跟随 → 关 → 各档 → 跟随。
+  // 经 ref 取最新 cap/thinkLevel，监听只挂一次；模型不支持思考时不响应
+  const thinkCycleRef = useRef({ cap, thinkLevel })
+  thinkCycleRef.current = { cap, thinkLevel }
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (!(e.ctrlKey && !e.metaKey && !e.altKey && (e.key === 't' || e.key === 'T'))) return
+      const { cap: c, thinkLevel: cur } = thinkCycleRef.current
+      const r = c.reasoning
+      if (!r) return
+      e.preventDefault()
+      const stops: ThinkingChoice[] = r.levels ? [null, false, ...r.levels.filter((l) => l !== 'none')] : [null, false, true]
+      const i = stops.findIndex((s) => s === cur || (s === false && cur === 'none'))
+      setThinkLevel(stops[(i + 1) % stops.length])
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   // 拉取供应商模型列表（ModelSelect「拉取模型列表」项）：llm:fetchModels 刷缓存后回读全量
   const fetchModels = useCallback(async (p: ProviderConfig): Promise<void> => {
@@ -1339,29 +1358,24 @@ export default function ChatPanel({
             >
               上下文
             </ToolPill>
-            {/* 会话级模型选择（ZCode 风格分组菜单）：始终可点，跟不跟随/换模型都不影响其他面板 */}
-            <ModelSelect
+            {/* 模型 × 思考统一浮层（ZCode 形态）：供应商行→子菜单、模型列表（视觉徽章+✓）、
+                底部思考强度渐变滑杆；Ctrl+T 循环档位。始终可点，不影响其他面板 */}
+            <ModelThinkingPill
               providers={llmAll?.providers ?? []}
+              defaultProviderId={llmAll?.textProviderId ?? null}
               defaultModelLabel={textProvider ? `${textProvider.name}/${textProvider.textModel}` : ''}
-              value={modelSel}
-              onChange={(v) => {
+              modelSel={modelSel}
+              onModelChange={(v) => {
                 setModelSel(v)
                 void persist(messages)
               }}
               onFetchModels={fetchModels}
+              cap={cap}
+              thinkLevel={thinkLevel}
+              onThinkChange={setThinkLevel}
               compact={pillsRow.narrow}
               direction="up"
             />
-            {cap.reasoning && (
-              <ThinkingSelect
-                tone="pill"
-                compact={pillsRow.narrow}
-                direction="up"
-                cap={cap}
-                value={thinkLevel}
-                onChange={setThinkLevel}
-              />
-            )}
           </div>
           {streaming ? (
             <button
