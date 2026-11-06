@@ -59,12 +59,20 @@ interface CatalogEntry {
 }
 
 const SENSENOVA_MODELS: CatalogEntry[] = [
-  // deepseek 系一律按 v4 家族声明（实测列表含 deepseek-flash / deepseek-v4-flash / deepseek-v4-pro / deepseek-v4.1-flash）。
-  // 商汤 token 网关收 reasoning_effort 全档（probe 实测），glm-5.2 基线思考开着 → defaultOn 修正为 true
+  // deepseek 系按 v4 家族声明上下文/思考（实测列表含 deepseek-flash / deepseek-v4-flash / deepseek-v4-pro / deepseek-v4.1-flash）。
+  // 商汤 token 网关收 reasoning_effort 全档（probe 实测），glm-5.2 基线思考开着 → defaultOn 修正为 true。
+  // 视觉能力双源（2026-11-05 商汤网关红块图探针实测 + 2026-11-06 TokenRhythm 官方 /api/models
+  // capabilities.vision 互验，两源全部吻合）：deepseek-flash 真读图答「红色」；deepseek-v4-* 收图
+  // 不报错但推理自述「没有图 attached」（网关静默丢图）且 TR 官方也标 vision=false → 纯文本；
+  // glm-5.2 带图 400、glm-5.3 自述无图像处理能力、TR 均标 vision=false → 纯文本；
+  // kimi-k3 探针被限流未测成，TR 官方标 vision=true → 维持有视觉。
+  { match: /^deepseek-flash/, cap: { contextWindow: 1_048_576, maxOutput: 65_536, inputModalities: ['text', 'image'], reasoning: { defaultOn: true, openaiParam: 'reasoning_effort', levels: EFFORT_LEVELS_FULL }, supportsTools: true } },
+  // v4.1 系：TR 官方标 vision=true（modal 含 image）；商汤网关暂未上架该模型，上架后值得再探一轮
+  { match: /^deepseek-v4\.1/, cap: { contextWindow: 1_000_000, maxOutput: 65_536, inputModalities: ['text', 'image'], reasoning: { defaultOn: true, openaiParam: 'reasoning_effort', levels: EFFORT_LEVELS_FULL }, supportsTools: true } },
   { match: /^deepseek/, cap: { contextWindow: 1_048_576, maxOutput: 65_536, inputModalities: ['text'], reasoning: { defaultOn: true, openaiParam: 'reasoning_effort', levels: EFFORT_LEVELS_FULL }, supportsTools: true } },
   { match: /^kimi-k3/, cap: { contextWindow: 1_000_000, maxOutput: 131_072, inputModalities: ['text', 'image'], reasoning: { defaultOn: true, openaiParam: 'reasoning_effort', levels: EFFORT_LEVELS_FULL }, supportsTools: true } },
   { match: /^glm-5/, cap: { contextWindow: 1_000_000, maxOutput: 65_536, inputModalities: ['text'], reasoning: { defaultOn: true, openaiParam: 'reasoning_effort', levels: EFFORT_LEVELS_FULL }, supportsTools: true } },
-  { match: /^sensenova-6\.8-flash-lite/, cap: { contextWindow: 262_144, maxOutput: 65_536, inputModalities: ['text', 'image'], supportsTools: true } },
+  { match: /^sensenova-6\.8-flash(?:-lite)?$/, cap: { contextWindow: 262_144, maxOutput: 65_536, inputModalities: ['text', 'image'], supportsTools: true } },
   { match: /^sensenova-u1(?:\.5-lite|-fast)$/, cap: { outputImage: true } }
 ]
 
