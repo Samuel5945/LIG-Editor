@@ -250,10 +250,11 @@
 - 图像接口有两种形态可切换：OpenAI 兼容 `images/generations` 与 Agnes 多模态 chat 模式（旧配置自动迁移）
 - Key 用 Electron `safeStorage`（Windows DPAPI）加密落盘，仅本机可解
 - **双协议分发（v0.9.0）**：文本对话按供应商走 OpenAI 兼容 `/chat/completions` 或 Anthropic 兼容 `/v1/messages`（`llmAnthropic.ts` 把 Anthropic SSE 归一回同一组 `llm:stream` / `llm:done` 事件，渲染层不感知协议差异；商汤双协议同域同 Key，默认走 Anthropic——思考参数标准化）。网络统一 `net.fetch`（走系统代理）
-- **模型能力目录（`shared/modelCatalog.ts`）**：静态声明已知模型能力（上下文窗口 / 最大输出 / 输入模态 / 思考 / 工具调用 / 生图），先按供应商 baseUrl 选表再按模型 id 匹配，未知供应商按模型名前缀跨表兜底；未知模型返回空声明，行为与无目录时一致
+- **模型能力目录（`shared/modelCatalog.ts`）**：静态声明已知模型能力（上下文窗口 / 最大输出 / 输入模态 / 思考 / 工具调用 / 生图），先按供应商 baseUrl 选表再按模型 id 匹配，未知供应商按模型名前缀跨表兜底；未知模型返回空声明，行为与无目录时一致。**视觉声明双源修订（2026-11-06）**：视觉支持不靠猜——商汤 token 网关逐模型发红块图探针（答「红色」= 真读图）+ TokenRhythm 官方 `/api/models` 的 `capabilities.vision` 标注互验，两源逐模型吻合后落声明：deepseek-flash / kimi-k3 / sensenova-6.8-flash（含无 -lite 变体）真读图、附件放行并挂「视觉」徽章；deepseek-v4 系收图不报错但网关静默丢图（探针自述「没有图 attached」）、TR 官方同标 false → 维持纯文本拦截（声明有视觉反而骗人）；deepseek-v4.1 系 TR 标 true 已补条目、商汤网关上架后再探复核。`modelCatalogVision.test.ts` 盯死声明防回退
 - **思考开关三档**：按目录声明决定 OpenAI 兼容路径的思考参数——`enable_thinking`（双向开关，qwen3.5/3.6/3.7 系）或 `reasoning_effort`（开=发档位，关=不发，qwen3.8 系恒思考）；无声明的走服务端默认不发参；Anthropic 路径统一 thinking 块（预算 1024，网关实测上限）
 - **上下文自动管理**：token 粗估（中文 ≈1.6 字符/token）超模型窗口 70% 时把最近段之外的旧消息交给当前模型摘要（摘要并入系统提示，只影响请求，不动可见历史与会话落盘；失败回退截断并告知模型）；发请求前按窗口 50% 裁剪历史，只在 user 消息边界落刀（工具调用与其结果成组保留，从中间截断会被 API 拒收）
 - **模型列表拉取与缓存**：从 `/v1/models` 拉取 → 按文本/生图分列（目录 outputImage 命中或生图关键词）→ 缓存落盘；启动自动刷新所有已配 Key 的供应商 + 设置界面手动刷新，失败回退旧缓存并提示；已知供应商不在列表返回里的生图模型（均已实测可用）并入列表保证可选；模型下拉带能力徽章（1M 上下文 / 读图 / 思考）与「上次拉取」时间
+- **对话面板会话级模型选择 + 统一浮层（2026-11-06，滚动补记）**：对话不再永远吃全局默认——`ChatStartOptions` 增 `providerId/modelId`，覆盖只在请求内生效不动全局，主进程解析（无此供应商/没 Key 静默回退全局），思考参数按覆盖模型的目录下发（Anthropic 路径同吃）；`ChatSession` 持久化选择，换模型后显式档位不在新模型 levels 时自动回跟随。UI 定稿为**单触发统一浮层**（`ModelThinkingPill`）：触发钮 [📦 模型名 ∨] 一只浮层装三段——① 供应商行点开左侧子菜单（各家单选 / 跟随全局默认 / 管理模型，放不下自动翻右侧）；② 模型列表（视觉徽章 + 选中 ✓，吃 `shownModels` 显示过滤）；③ 思考强度渐变滑杆（`ThinkingSlider`，绿→青→蓝，拖拽连续跟手 + 实时预览最近档、松手才提交并弹性吸附）。`Ctrl+T` 循环思考档位（跟随→关→各档→跟随）。浮层/子菜单经 `usePopoverAnchor` 挂 body + fixed 视口坐标防祖先裁剪（P5 教训单源化）；「管理显示模型」弹窗（`ShownModelsDialog`）勾选进菜单的文本模型，真子集才落 `llm.json` 的 `shownModels`，全选清字段回全部显示。429 文案补「对话胶囊里直接换供应商/模型」缓解路径。CDP 真机走查：子菜单翻转 / 换供应商列表切换 / 滑杆拖拽吸附 / Ctrl+T 全过
 - **供应商精选（`shared/providerSites.ts`）**：内置商汤日日新（Anthropic 兼容默认 + `deepseek-v4-flash`）/ 阿里云百炼（OpenAI 兼容 + `qwen3.8-flash`）/ 基元律动（生图 `wan2.7-image`）种子，填 Key 即用；已知供应商附官网/控制台/接口文档跳转
 - **请求卫生**：API 请求统一纯 ASCII UA（`apiUa.ts`——Electron 默认 UA 带中文应用名「立格编辑器」，部分 gRPC-gateway 网关把 UA 转发为 grpcgateway-user-agent，非 ASCII 值直接 500，实测命中）；Key 为空不带 Authorization（本地网关可能免鉴权）；429 限流返回用户可读提示（TPM/RPM 说明 + 关思考/换轻量模型建议），不再抛生硬 JSON
 
@@ -746,7 +747,7 @@ Agent 直接编辑 article.md / figures/*.html / project.json → watcher 热载
 5. 导出的富文本粘贴进公众号后台：排版不丢、图注完好、图片正常转存 CDN
 6. 同一篇内容可转出贴图卡片并按四平台画像复制，排版不串（S9）
 7. 工程可在日历上拖拽排期，选题可拖到日期格直接立项（S10）
-8. `npm run typecheck` 与 `npm run test` 全绿（当前 50 文件 / 691 例，2026-11-01 回归复核）
+8. `npm run typecheck` 与 `npm run test` 全绿（当前 59 文件 / 744 例，2026-11-07 回归复核）
 
 ## 14. 风险与开放问题
 
