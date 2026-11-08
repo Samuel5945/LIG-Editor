@@ -9,25 +9,27 @@
 ## 界面一览
 
 <p align="center">
-  <img src="docs/images/lig-editor-0.9.0-tour.gif" width="820" alt="立格编辑器 0.9.0 界面轮播：三栏工作台与创作向导 / 工程封面墙 / 主题库与日报排版预览 / 深色外观 / 全量排版 40 项 / 标题封面 / 模型接入" />
+  <img src="docs/images/lig-editor-1.0-workbench.jpg" width="820" alt="立格编辑器 1.0 三栏工作台：工程工作树 / 公众号正文编辑 / AI 副驾驶" />
 </p>
-<p align="center"><sub>三栏工作台 · 工程封面墙 · 主题库 15 套 · 日报排版预览 · 深色外观 · 全量排版 40 项 · 标题封面 · 模型接入</sub></p>
+<p align="center"><sub>1.0 · 三栏工作台 · 模型与思考统一浮层 · 技能市场 · 爆款拆解 · 大纲双向贯通 · 长图导出</sub></p>
 
 <details>
 <summary>📸 查看全部高清截图</summary>
 <br>
 
-| 三栏工作台 · 创作向导七步 | 工程封面墙（状态 · 字数 · 分类筛选） |
+| **爆款拆解：对标文案出六分区报告** | **大纲条目化 · 悬停拖拽重排** |
 | :---: | :---: |
-| ![三栏工作台与创作向导七步](docs/images/workbench-wizard.png) | ![工程封面墙](docs/images/project-wall.png) |
-| **主题库（内置 7 类调性 + 预装日报八套）** | **全量排版面板（40 项逐项可调）** |
-| ![主题库](docs/images/theme-library.png) | ![全量排版面板](docs/images/typography-panel.png) |
-| **排版预览 · 日报01 米白杂志** | **排版预览 · 日报04 赛博霓虹夜** |
-| ![排版预览 日报01 米白杂志](docs/images/preview-daily-01.png) | ![排版预览 日报04 赛博霓虹夜](docs/images/preview-daily-04.png) |
+| ![爆款拆解报告](docs/images/lig-editor-1.0-teardown.jpg) | ![大纲条目拖拽](docs/images/lig-editor-1.0-outline.jpg) |
+| **对话模型 × 思考强度统一浮层（Ctrl+T）** | **技能市场：目录 / 搜索 / 一键安装** |
+| ![模型与思考浮层](docs/images/lig-editor-1.0-model.jpg) | ![技能市场](docs/images/lig-editor-1.0-skill-market.jpg) |
+| **导出面板：整文长图 / Word / PDF / 草稿直推** | **管理显示模型：全选 / 全不选** |
+| ![导出与长图](docs/images/lig-editor-1.0-export.jpg) | ![管理显示模型](docs/images/lig-editor-1.0-manage-models.jpg) |
+| **三栏工作台 · 创作向导七步** | **工程封面墙（状态 · 字数 · 分类筛选）** |
+| ![三栏工作台与创作向导七步](docs/images/workbench-wizard.png) | ![工程封面墙](docs/images/lig-editor-1.0-wall.jpg) |
+| **主题库（内置 6 套 + 自定义 9 套 + 日报八套）** | **全量排版面板（40 项逐项可调）** |
+| ![主题库](docs/images/lig-editor-1.0-theme-library.jpg) | ![全量排版面板](docs/images/lig-editor-1.0-typography.jpg) |
 | **深色外观** | **标题 ＆ 封面工作区** |
-| ![深色外观](docs/images/appearance-dark.png) | ![标题与封面工作区](docs/images/title-cover.png) |
-| **模型接入（OpenAI / Anthropic 双协议）** | **供应商模板一键套用** |
-| ![模型供应商](docs/images/model-providers.png) | ![供应商模板](docs/images/provider-templates.png) |
+| ![深色外观](docs/images/lig-editor-1.0-appearance-dark.jpg) | ![标题与封面工作区](docs/images/lig-editor-1.0-title-cover.jpg) |
 
 </details>
 
@@ -36,7 +38,11 @@
 - **本地优先**：工程、素材、密钥全在本机，不上传任何内容到自有服务器
 - **创作向导**：选题→大纲→成文→配图→标题封面→审阅→导出，七步步进工作台，进度自动跟踪
 - **md 直开**：双击 .md 文件 / 把它拖到应用图标直接打开（已在 workspace 内则定位到对应工程，外部 md 自动导入为新工程；portable 版首次使用需「打开方式」指定一次 exe）
-- **AI 副驾驶**：右侧对话面板驱动全流程，接入任意 OpenAI / Anthropic 兼容 API（四家供应商模板整套带入参数），Skill 体系挂载写作风格（预装 6 个）；工具调用落地——对话里直接建工程、改正文、配图、排期、导出、推送公众号（推送需确认）
+- **AI 副驾驶**：右侧对话面板驱动全流程，接入任意 OpenAI / Anthropic 兼容 API（四家供应商模板整套带入参数）；会话级模型选择，Ctrl+T 呼出供应商 / 模型 / 思考强度统一浮层，思考四档 + 渐变滑杆，思考过程在对话、向导、审阅、排版优化、改稿五处可见；Skill 体系挂载写作风格；工具调用落地——对话里直接建工程、改正文、配图、排期、导出、推送公众号（推送需确认）
+- **技能市场**：官方精选目录随包，按选题 / 大纲 / 成文 / 配图 / 标题封面 / 审阅分类，搜索 / 预览 / 一键安装，断网自动降级本地目录
+- **爆款拆解**：贴对标文案出六分区拆解报告（标题钩子 / 开头三行 / 结构骨架 / 情绪节奏 / 选题受众 / 可复用套路），落 `teardown.md`，骨架可一键转新文大纲
+- **大纲双向贯通**：从成文反推大纲，`outline.md` 持久化并由对话与向导自动带出；大纲条目化编辑、悬停出把手、整节拖拽重排
+- **长图导出**：整文长图（离屏量高、分段竖图 PNG，界面 + Agent 双入口）；设计长图与设计贴图卡（AI 自写 HTML 排版直接出图）
 - **Agent 可操控**：MCP + 本地 HTTP 桥，外部编程 Agent（Codex / Qoder 等）可直接操控编辑器
 - **三栏工作台**：左栏工程工作树（工程归档、分类内批量管理）· 中栏所见即所得编辑器（TipTap）· 右栏 AI 副驾驶；分栏宽度拖拽可调、双击折叠，偏好记忆
 - **界面外观**：深浅色跟随系统 + 界面字号小/中/大，顶栏「外观」统一入口
