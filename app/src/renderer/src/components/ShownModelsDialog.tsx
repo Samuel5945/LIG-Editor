@@ -20,6 +20,9 @@ export function ShownModelsDialog({ provider, onClose }: { provider: ProviderCon
       else next.add(id)
       return next
     })
+  // 全选/全不选：全勾时按钮变「全不选」，其余状态一律「全选」（含空选 = 恢复全部显示）
+  const toggleAll = (): void =>
+    setPicked((prev) => (prev.size === all.length ? new Set<string>() : new Set(all.map((m) => m.id))))
   const save = (): void => {
     // 真子集才落 shownModels；全选/全不选清字段回「全部显示」
     const ids = all.filter((m) => picked.has(m.id)).map((m) => m.id)
@@ -35,9 +38,16 @@ export function ShownModelsDialog({ provider, onClose }: { provider: ProviderCon
       onClose={onClose}
       footer={
         <>
-          <span className="mr-auto text-[11px] text-ink-dim">
+          <span className="text-[11px] text-ink-dim">
             显示 {picked.size} / 共 {all.length}；不勾任何 = 恢复全部显示
           </span>
+          <button
+            type="button"
+            onClick={toggleAll}
+            className="mr-auto ml-3 rounded px-1 text-[11px] text-ink-dim transition-colors hover:text-accent"
+          >
+            {picked.size === all.length ? '全不选' : '全选'}
+          </button>
           <Button variant="ghost" onClick={onClose}>
             取消
           </Button>
