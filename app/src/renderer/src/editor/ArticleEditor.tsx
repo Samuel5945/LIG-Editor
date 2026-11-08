@@ -20,12 +20,13 @@ import { Decoration, DecorationSet } from 'prosemirror-view'
 import { mdToDoc, docToMd, docToTiptap, type ArticleDoc } from '@shared/markdown'
 import { isHexColor } from '@shared/cards'
 import { DEFAULT_THEME, contrastText, isDarkColor, resolveEditorTheme, resolvePageBg, type ArticleTheme } from '@shared/categoryThemes'
-import { SEQ_PREFIX } from '@shared/exportHtml'
+import { SEQ_PREFIX, motionPaletteFor } from '@shared/exportHtml'
 import type { H1Style, H2Style, H2Num, H3Mark } from '@shared/types'
 import type { ThemeOverrides } from '@shared/themeFields'
 import { FigureImage, type FigureImageStorage } from './FigureImage'
 import { FigSuggest, type FigSuggestStorage } from './FigSuggest'
 import { FigureGallery } from './FigureGallery'
+import { MotionBlock, type MotionStorage } from './MotionBlock'
 import ArticleTable from './ArticleTable'
 import { TextStyleMark } from './TextStyleMark'
 
@@ -331,6 +332,7 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
       FigureImage,
       FigSuggest,
       FigureGallery,
+      MotionBlock,
       ArticleTable,
       TextStyleMark,
       H2NumMask
@@ -454,6 +456,13 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
     const storage = editor.storage.figSuggest as FigSuggestStorage
     storage.onAction = (pipeline, ctx) => onFigAction?.(pipeline, ctx)
   }, [editor, onFigAction])
+
+  // 动效块预览调色板与导出同源（buildStyles 解析结果）；主题/昼夜变化即推送，NodeView 订阅重渲染
+  useEffect(() => {
+    if (!editor) return
+    const storage = editor.storage.motion as MotionStorage
+    storage.setPalette(motionPaletteFor(theme, uiDark))
+  }, [editor, theme, uiDark])
 
   // 外部 md 变化（热载/接受外部/切换工程）→ 重置编辑器内容
   useEffect(() => {

@@ -12,6 +12,7 @@
  *   <!-- /gallery -->
  * 目标：子集内的文档「md → doc → md」往返无损
  */
+import { parseMotionAttrs } from './motionSvg'
 
 // ---------- TipTap JSON 结构 ----------
 
@@ -159,6 +160,18 @@ export interface TableNode {
   attrs: { rows: string[][] }
 }
 
+/** 公众号动效块：<!-- motion: {单行 JSON} -->（SVG/SMIL 无脚本片段，格式核心见 motionSvg.ts） */
+export interface MotionNode {
+  type: 'motion'
+  attrs: {
+    body: string
+    viewBox: string
+    still: string
+    caption: string
+    height?: number
+  }
+}
+
 export type BlockNode =
   | ParagraphNode
   | HeadingNode
@@ -168,6 +181,7 @@ export type BlockNode =
   | FigSuggestNode
   | FigureGalleryNode
   | TableNode
+  | MotionNode
 
 export interface ArticleDoc {
   type: 'doc'
@@ -301,6 +315,7 @@ const IMG_RE = /^!\[([^\]]*)\]\(([^)]+)\)\s*$/
 const CAPTION_RE = /^<!--\s*caption:\s*(.*?)\s*-->\s*$/
 const FIG_SOURCE_RE = /^<!--\s*figure-source:\s*(.*?)\s*-->\s*$/
 export const FIG_SUGGEST_RE = /^<!--\s*fig-suggest:\s*(.*?)\s*-->\s*$/
+const MOTION_RE = /^<!--\s*motion:\s*(\{.*\})\s*-->\s*$/
 const GALLERY_START_RE = /^<!--\s*gallery:\s*([\w-]+)(?:\s+(\d+:\d+))?\s*-->\s*$/
 const GALLERY_END_RE = /^<!--\s*\/gallery\s*-->\s*$/
 const HEADING_RE = /^(#{1,6})\s+(.*)$/
@@ -423,6 +438,22 @@ export function mdToDoc(md: string): ArticleDoc {
       continue
     }
 
+    // 公众号动效块：单行注释 JSON；JSON/结构非法时不认块，按段落保留原文（不丢数据）
+    const mot = MOTION_RE.exec(line)
+    if (mot) {
+      let attrs: ReturnType<typeof parseMotionAttrs> = null
+      try {
+        attrs = parseMotionAttrs(JSON.parse(mot[1]))
+      } catch {
+        attrs = null
+      }
+      if (attrs) {
+        blocks.push({ type: 'motion', attrs })
+        i++
+        continue
+      }
+    }
+
     // 图集轮播块：起止注释之间收集图片行与图注
     const gal = GALLERY_START_RE.exec(line)
     if (gal) {
@@ -485,6 +516,7 @@ export function mdToDoc(md: string): ArticleDoc {
       !lines[i].startsWith('>') &&
       !IMG_RE.test(lines[i]) &&
       !FIG_SUGGEST_RE.test(lines[i]) &&
+      !MOTION_RE.test(lines[i]) &&
       !GALLERY_START_RE.test(lines[i])
     ) {
       buf.push(lines[i])
@@ -536,6 +568,9 @@ export function docToMd(doc: ArticleDoc): string {
       }
       case 'figSuggest':
         parts.push(`<!-- fig-suggest: ${block.attrs.desc} -->`)
+        break
+      case 'motion':
+        parts.push(`<!-- motion: ${JSON.stringify(block.attrs)} -->`)
         break
       case 'figureGallery': {
         const { images, layout, frame, caption } = block.attrs

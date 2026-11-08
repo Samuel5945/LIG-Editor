@@ -1,5 +1,6 @@
 import type { ArticleDoc, BlockNode, FigureGalleryAttrs, InlineNode, ParagraphNode } from './markdown'
 import { isHexColor } from './cards'
+import { motionToSvg, type MotionPalette } from './motionSvg'
 import { DEFAULT_NIGHT_BG, DEFAULT_THEME, contrastText, isDarkColor, readableOn, resolveEditorTheme, resolvePageBg, type ArticleTheme } from './categoryThemes'
 
 /**
@@ -59,6 +60,8 @@ type Styles = { -readonly [K in keyof typeof S]: string } & {
   card: string
   /** 页面纸底层（日报纸感外壳）：挂在卡片的上一层；无纸底主题为空串（保持原双层结构） */
   page: string
+  /** 动效块调色板：{{accent}}/{{ink}}/{{bg}}/{{muted}} 令牌按当前主题（含昼夜解析）取值 */
+  palette: MotionPalette
 }
 
 /** 强调色转淡色底（公众号客户端不认 color-mix，预计算 rgba；非法输入回默认蓝） */
@@ -89,7 +92,8 @@ function buildStyles(theme?: ArticleTheme, uiDark?: boolean): Styles {
     tdStripe: '',
     tdFirst: '',
     card: '',
-    page: ''
+    page: '',
+    palette: { accent: DEFAULT_ACCENT, ink: '#333', bg: '#ffffff', muted: '#555', fontFamily: '' }
   }
   const c = t.accent && isHexColor(t.accent) ? t.accent.trim() : DEFAULT_ACCENT
   const lh = t.lineHeight || 2.13
@@ -273,7 +277,15 @@ function buildStyles(theme?: ArticleTheme, uiDark?: boolean): Styles {
     s.hr = `margin:40px auto;border:0 none;border-top:2px solid ${t.hrColor && isHexColor(t.hrColor) ? t.hrColor.trim() : dark ? 'rgba(255,255,255,0.2)' : '#e8e8e8'};width:64px;`
   }
 
+  // 动效调色板：底色跟卡片（无卡片白底），文字/图注色与正文同系，字体栈同 root
+  s.palette = { accent: c, ink: textColor, bg: t.bodyBg || '#ffffff', muted: captionColor, fontFamily: fam }
+
   return s
+}
+
+/** 动效块预览调色板（编辑器 NodeView 与导出同源）：直接取 buildStyles 的解析结果，预览/导出不同源问题在此杜绝 */
+export function motionPaletteFor(theme?: ArticleTheme, uiDark?: boolean): MotionPalette {
+  return buildStyles(theme, uiDark).palette
 }
 
 /** 加粗强调：color 着色 / highlight 底色高亮 / plain 纯黑加粗；强调色可用专属 strongColor（缺省 accent） */
@@ -386,7 +398,7 @@ function h2NumText(kind: NonNullable<ArticleTheme['h2Num']>, n: number): string 
   }
 }
 
-function blockToHtml(block: BlockNode, resolveImg: (src: string) => string, s: Styles, h2Prefix?: string): string {
+function blockToHtml(block: BlockNode, resolveImg: (src: string) => string, s: Styles, h2Prefix?: string, idPrefix = 'm0k'): string {
   switch (block.type) {
     case 'heading': {
       const level = Math.min(Math.max(block.attrs.level, 1), 3)
@@ -451,6 +463,16 @@ function blockToHtml(block: BlockNode, resolveImg: (src: string) => string, s: S
     }
     case 'figSuggest':
       return '' // 占位卡是工作过程产物，不导出
+    case 'motion': {
+      // 公众号动效：SVG/SMIL 片段 + 图注 + still 静态文字版（始终小字随行，客户端剥 SVG 也有内容）。
+      // body 非法时 motionToSvg 返回 null → 静态降级，不可信片段绝不进导出物
+      const { caption, still } = block.attrs
+      const cap = caption ? `<p style="${s.caption}">${escapeHtml(caption)}</p>` : ''
+      const stillP = still.trim() ? `<p style="${s.caption}">${escapeHtml(still)}</p>` : ''
+      const svg = motionToSvg(block.attrs, { idPrefix, palette: s.palette })
+      if (!svg && !cap && !stillP) return ''
+      return `<section style="${s.figure}">${svg ?? ''}${cap}${stillP}</section>`
+    }
   }
 }
 
@@ -482,14 +504,15 @@ export function docToExportHtml(
       }
       return b
     })
-    .map((b) =>
+    .map((b, i) =>
       blockToHtml(
         b,
         resolveImg,
         s,
         b.type === 'heading' && b.attrs.level === 2 && theme?.h2Num
           ? h2NumText(theme.h2Num as NonNullable<ArticleTheme['h2Num']>, ++h2Seq)
-          : undefined
+          : undefined,
+        `m${i}k`
       )
     )
     .filter(Boolean)

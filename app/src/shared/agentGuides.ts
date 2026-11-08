@@ -87,6 +87,8 @@ const GUIDE_BODIES: Record<AgentGuideTopic, () => string> = {
 手动样式（与编辑器选中片段设置同源，编辑器和公众号导出都渲染）：
 <span style="color:#e63946;background-color:#fef3c7;font-size:18px">文本</span>
 color=字色，background-color=背景高亮，font-size=字号（12-24px），可叠加 **加粗**。整体配色优先用 set_theme，别逐段手写 span。
+公众号动效（SVG/SMIL 无脚本，点击揭晓/对照切换/展开/自动动画才用，别为装饰硬加）：单独一行 <!-- motion: {"body":"…","still":"静态结论文字","caption":"图注","viewBox":"0 0 480 190"} -->，JSON 必须单行。
+body 是 SVG 内片段（不含根 svg 标签）：可用 g/rect/circle/ellipse/line/path/text/tspan/defs/渐变/clipPath/use/animate/set/animateTransform；点击触发 begin="热区id.click"（热区=透明矩形 <rect x="0" y="0" width="480" height="190" fill="#000" fill-opacity="0" pointer-events="visiblePainted" id="go"/>），显隐用 <g visibility="hidden"><set attributeName="visibility" to="visible" begin="go.click" fill="freeze"/>…</g>，自动循环用 begin="0s" repeatCount="indefinite"，互斥切换=各组 visibility 初始一显多隐 + set 切。颜色一律写令牌 {{accent}}/{{ink}}/{{bg}}/{{muted}}（导出按当前主题解析，别写死色值）；文字用 <text> 并继承根画布字体。禁止 script/foreignObject/image/style 属性/on* 事件/外链 href/注释，文本里的 & 写成 &amp;。still 必填：动效内容的普通文字版，导出时始终小字随行（客户端剥 SVG 读者也有得读）；关键信息不能只藏在点击后。多块/多次复制的 id 冲突不用管，导出自动加前缀。真正增高展开：加 "height":58（根画布固定高、无 viewBox，坐标按手机宽容器设计），body 里放 <animate attributeName="height" from="58" to="187" begin="go.click" dur=".38s" fill="freeze"/> 直接推低后文。滚动吸附/长按/连续拖动是网页手势，公众号正文不成立，别做。写完用 render_preview 自查。
 路径一律写工程内相对路径（assets/…），绝对路径不会被打包进导出物。`,
 
   theme: () => themeFieldGuide(),

@@ -634,6 +634,18 @@ article.md → 套排版主题的内联样式页（与 §9.1 复制/导出预览
 - **设计贴图卡**（`mode:'design'` + `designHtml`）：贴图卡组新增设计态——AI 自写卡面 HTML（固定 1242×1656 画布，与排版卡同规格），`<base href>` 把 `assets/` 相对路径从 `cards/<格式>/` 指回工程根；**push_cards 推送 / cards.json 存档 / 微信·小红书互切全部原样兼容**，设计卡与排版卡可同组混排；`render_preview target:card` 直接回截设计卡给 AI 自查
 - **定位**：文章长图（§9.4）服务「读完整篇」（同源排版），设计长图/设计卡服务「精美传播物料」（无净化约束的版面设计）——两者互补，共用管线
 
+### 9.6 公众号动效（SVG/SMIL 格式支持，✅ 2026-11-08 交付）
+
+公众号正文只认**无脚本 SVG + SMIL**（点击触发、显隐切换、属性动画、自动循环）；滚动吸附/长按拖动属网页手势，正文不成立，不在支持范围。本能力只提供**格式通道**，视觉一律走自家主题（不引入任何第三方版式/蜡笔风素材）：
+
+- **数据模型**：`<!-- motion: {单行 JSON} -->` 的 `motion` 块（`motionSvg.ts` 单点定义 `body/viewBox/still/caption/height`）。`body` 为 SVG 内片段；`still`（静态文字版）必填，导出始终小字随行——关键信息不能只藏在点击后
+- **校验（fail-closed）**：白名单扫描标签/属性/实体/引用，禁 script/foreignObject/style 属性/on* 事件/外链 href/注释；解析不了的片段整体判非法 → **静态降级**为 still 文字，绝不把不可信片段送进导出物
+- **ID 命名空间**：导出按块序号加前缀（`m{i}k`），`id`/`begin`/`end` 事件、`url(#…)`/`href="#…"` 同步改写——同文多块、多次复制粘贴不串事件；编辑器 NodeView 按实例 `useId` 分配
+- **主题化**：`body` 里写 `{{accent}}/{{ink}}/{{bg}}/{{muted}}` 令牌，导出/预览按当前主题（含昼夜解析）取值；调色板与编辑器预览同源（`motionPaletteFor` → buildStyles）
+- **真正增高**：`height` 字段（根画布固定高、无 viewBox），`body` 里 `attributeName="height"` 的 animate 直达根画布、真实推低后文（对应公众号「展开」范式）
+- **三路同源**：复制富文本/推送草稿走 `docToExportHtml` 同一渲染；知乎/头条/百家语义化输出只留 still；编辑器 NodeView 实时渲染（SMIL 可点），非法片段显示具体校验错误供 AI 按报错修复
+- **创作路径**：Agent 手册 `get_guide markdown` 内载格式规范与边界（禁止清单/令牌/热区范式），`write_article` 落盘后编辑器热载即见
+
 ---
 
 ## 10. Agent 操控：无头能力核
@@ -747,7 +759,7 @@ Agent 直接编辑 article.md / figures/*.html / project.json → watcher 热载
 5. 导出的富文本粘贴进公众号后台：排版不丢、图注完好、图片正常转存 CDN
 6. 同一篇内容可转出贴图卡片并按四平台画像复制，排版不串（S9）
 7. 工程可在日历上拖拽排期，选题可拖到日期格直接立项（S10）
-8. `npm run typecheck` 与 `npm run test` 全绿（当前 59 文件 / 744 例，2026-11-07 回归复核）
+8. `npm run typecheck` 与 `npm run test` 全绿（当前 60 文件 / 780 例，2026-11-08 回归复核）
 
 ## 14. 风险与开放问题
 

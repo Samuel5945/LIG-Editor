@@ -205,6 +205,13 @@ function semanticBlock(
     }
     case 'figSuggest':
       return ''
+    case 'motion': {
+      // 语义化平台不吃 SVG 动画：只留 still 静态文字版（图注随其后），动效本体不输出
+      const parts: string[] = []
+      if (b.attrs.still.trim()) parts.push(`<p>${escapeHtml(b.attrs.still)}</p>`)
+      if (b.attrs.caption) parts.push(semanticCaption(b.attrs.caption, opts))
+      return parts.join('\n')
+    }
   }
 }
 
