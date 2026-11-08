@@ -41,15 +41,32 @@ const results = []
 const ok = (name, detail) => results.push(['✓', name, detail])
 const bad = (name, detail) => results.push(['✗', name, detail])
 
+/**
+ * 「文档」真实已知文件夹路径：Windows 上可被重定向（换盘 D:\wdfiles / OneDrive 接管），
+ * 硬编码 homedir()/Documents 在这类机器上探不到 bridge.json（1.0.0 冒烟实测踩过）。
+ * 取系统已知文件夹（execSync 一次 ~1s，冒烟全程可忽略），失败回退旧路径。
+ */
+const realDocumentsDir = () => {
+  const fallback = join(homedir(), 'Documents')
+  if (process.platform !== 'win32') return fallback
+  try {
+    return (
+      execSync('powershell -NoProfile -Command "[Environment]::GetFolderPath(\'MyDocuments\')"', {
+        encoding: 'utf8'
+      }).trim() || fallback
+    )
+  } catch {
+    return fallback
+  }
+}
+
 /** bridge.json 位置：安装态在 文档\立格编辑器\settings\，开发态在仓库 settings\（两处都探，先就绪者胜） */
 const bridgeCandidates = () => [
-  join(homedir(), 'Documents', '立格编辑器', 'settings', 'bridge.json'),
+  join(realDocumentsDir(), '立格编辑器', 'settings', 'bridge.json'),
   join(REPO, 'settings', 'bridge.json')
 ]
 
 async function waitBridge(timeoutMs) {
-  // 起冒烟实例前先清残留（指向已退出进程的旧文件会探到错端口）
-  for (const f of bridgeCandidates()) if (existsSync(f)) rmSync(f)
   const t0 = Date.now()
   while (Date.now() - t0 < timeoutMs) {
     for (const f of bridgeCandidates()) {
@@ -78,12 +95,16 @@ async function call(cfg, name, args) {
   return await r.json()
 }
 
+// 残留清理必须在 spawn 前：spawn 后再删会和应用首写竞争（候选路径解析含 powershell
+// 调用、耗时可达秒级，删得比应用写得还晚），1.0.0 冒烟实测把新写的 bridge.json 当残留
+// 删掉导致 60s 探不到。残留文件指向已退出进程的旧端口，先删再起才安全。
+for (const f of bridgeCandidates()) if (existsSync(f)) rmSync(f)
 const child = spawn(EXE, DEV ? [APP, '--mcp'] : ['--mcp'], { stdio: 'ignore' })
 let cfg = null
 
 try {
-  cfg = await waitBridge(20000)
-  if (!cfg) throw new Error('20 秒内 bridge 未就绪（应用没起来，或 --mcp 分支挂了）')
+  cfg = await waitBridge(60000)
+  if (!cfg) throw new Error('60 秒内 bridge 未就绪（应用没起来，或 --mcp 分支挂了）')
   ok('无头启动 + /health', `pid ${cfg.pid}，版本 ${cfg.version}`)
 
   // 工具面：GET /tools 报数量；塌方（<45）说明注册表加载出了问题
