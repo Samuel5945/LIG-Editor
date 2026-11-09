@@ -222,12 +222,13 @@ export function motionToSvg(attrs: MotionShape, opts: MotionSvgOptions): string 
   // viewBox/height 直接拼进根 svg 属性，含引号/标签即判非法降级
   const viewBox = attrs.viewBox ?? '0 0 480 190'
   if (typeof viewBox !== 'string' || !VIEWBOX_RE.test(viewBox)) return null
-  if (attrs.height !== undefined && (typeof attrs.height !== 'number' || !isFinite(attrs.height) || attrs.height <= 0 || attrs.height > 4000)) return null
+  // height 容忍 null：tiptap 节点未设的可选 attr 输出为 null（编辑器直传 attrs，不经 parseMotionAttrs）
+  if (attrs.height != null && (typeof attrs.height !== 'number' || !isFinite(attrs.height) || attrs.height <= 0 || attrs.height > 4000)) return null
   const inner = namespaceMotionIds(body, opts.idPrefix, ids)
   const fam = p.fontFamily.replace(/"/g, "'")
   const style = `display:block;width:100%;height:auto;overflow:hidden;background:${p.bg};font-family:${fam};`
   const geometry =
-    attrs.height !== undefined
+    attrs.height != null
       ? `width="100%" height="${attrs.height}"`
       : `width="100%" viewBox="${viewBox}"`
   return `<svg xmlns="http://www.w3.org/2000/svg" ${geometry} style="${style}">${inner}</svg>`

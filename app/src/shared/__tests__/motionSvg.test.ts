@@ -132,6 +132,12 @@ describe('根画布组装', () => {
     expect(motionToSvg({ body: REVEAL, still: 's', height: -5 }, OPTS)).toBeNull()
     expect(motionToSvg({ body: REVEAL, still: 's', viewBox: '0 0 480 190' }, OPTS)).not.toBeNull()
   })
+
+  it('tiptap 直传 null 可选字段仍渲染（编辑器预览路径，曾误判片段为空）', () => {
+    const svg = motionToSvg({ body: REVEAL, still: 's', height: null as unknown as number, viewBox: null as unknown as string }, OPTS)
+    expect(svg).not.toBeNull()
+    expect(svg).toContain('width="100%" viewBox="0 0 480 190"')
+  })
 })
 
 describe('motion 块 markdown 往返', () => {
@@ -214,11 +220,14 @@ describe('AI 手册范式与起手模板可过校验', () => {
     expect(motionToSvg(MOTION_STARTER, OPTS)).toContain('<svg')
   })
 
-  it('A/B 互斥切换范式合法', () => {
+  it('A/B 互斥切换范式合法（选择热区在两组之外，始终可点）', () => {
     const body =
-      '<g visibility="visible"><set attributeName="visibility" to="hidden" begin="b.click" fill="freeze"/><set attributeName="visibility" to="visible" begin="a.click" fill="freeze"/><text x="40" y="90" font-size="22" fill="{{ink}}">甲版</text>' + TAP('a', 0, 240) + '</g>' +
-      '<g visibility="hidden"><set attributeName="visibility" to="visible" begin="b.click" fill="freeze"/><set attributeName="visibility" to="hidden" begin="a.click" fill="freeze"/><text x="280" y="90" font-size="22" fill="{{accent}}">乙版</text>' + TAP('b', 240, 240) + '</g>'
-    expect(scanMotion(substituteMotionTokens(body, PALETTE)).error).toBeNull()
+      '<g visibility="visible"><set attributeName="visibility" to="hidden" begin="selB.click" fill="freeze"/><set attributeName="visibility" to="visible" begin="selA.click" fill="freeze"/><text x="40" y="90" font-size="22" fill="{{ink}}">甲版</text></g>' +
+      '<g visibility="hidden"><set attributeName="visibility" to="visible" begin="selB.click" fill="freeze"/><set attributeName="visibility" to="hidden" begin="selA.click" fill="freeze"/><text x="280" y="90" font-size="22" fill="{{accent}}">乙版</text></g>' +
+      TAP('selA', 0, 240) + TAP('selB', 240, 240)
+    const r = scanMotion(substituteMotionTokens(body, PALETTE))
+    expect(r.error).toBeNull()
+    expect(r.ids).toEqual(['selA', 'selB'])
   })
 
   it('自动轮播范式合法', () => {
