@@ -7,6 +7,7 @@ import { CARD_FORMAT_LABEL, parseCardItems, type CardFormat } from '@shared/card
 import { chatOnce } from './copilot/llm'
 import { cardsMessages, categoryMessages } from './copilot/prompts'
 import { replaceFigSuggestion, type FigureOccurrence, type WizardStepId } from '@shared/wizardProgress'
+import { countWords } from '@shared/wordCount'
 import ConflictDialog from './components/ConflictDialog'
 import SettingsDialog from './components/SettingsDialog'
 import IntegrationDialog from './components/IntegrationDialog'
@@ -260,17 +261,7 @@ export default function App(): JSX.Element {
   const currentDir = useMemo(() => projects.find((p) => p.name === current)?.dir ?? '', [projects, current])
 
   /** 正文字数：去掉 Markdown/HTML 标记后，CJK 每字记 1、连续西文数字记 1 词 */
-  const wordCount = useMemo(() => {
-    const text = article
-      .replace(/```[\s\S]*?```/g, ' ')
-      .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
-      .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/[#>*`~|_-]+/g, ' ')
-    const cjk = (text.match(/[\u4e00-\u9fff\u3400-\u4dbf]/g) || []).length
-    const words = (text.match(/[A-Za-z0-9]+/g) || []).length
-    return cjk + words
-  }, [article])
+  const wordCount = useMemo(() => countWords(article), [article])
 
   const refreshProjects = useCallback(() => {
     window.api.invoke('project:list').then(setProjects)

@@ -124,6 +124,13 @@ describe('根画布组装', () => {
   it('非法 body 返回 null（调用方静态降级）', () => {
     expect(motionToSvg({ body: '<script>x</script>', still: 's' }, OPTS)).toBeNull()
   })
+
+  it('几何字段注入被拦（编辑器粘贴路径绕过 parseMotionAttrs 也安全）', () => {
+    expect(motionToSvg({ body: REVEAL, still: 's', viewBox: '0 0 480 190" onload="alert(1)' }, OPTS)).toBeNull()
+    expect(motionToSvg({ body: REVEAL, still: 's', height: '58" onclick="x' as unknown as number }, OPTS)).toBeNull()
+    expect(motionToSvg({ body: REVEAL, still: 's', height: -5 }, OPTS)).toBeNull()
+    expect(motionToSvg({ body: REVEAL, still: 's', viewBox: '0 0 480 190' }, OPTS)).not.toBeNull()
+  })
 })
 
 describe('motion 块 markdown 往返', () => {

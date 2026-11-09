@@ -52,6 +52,7 @@ const ATTRS = new Set([
 const TAG_RE = /<(\/?)([a-zA-Z][\w:-]*)((?:\s+[\w:-]+\s*=\s*(?:"[^"]*"|'[^']*'))*)\s*(\/?)>/g
 const ATTR_RE = /([\w:-]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g
 const ID_RE = /^[A-Za-z][\w-]*$/
+const VIEWBOX_RE = /^\s*-?[\d.]+\s+-?[\d.]+\s+[\d.]+\s+[\d.]+\s*$/
 const ENTITY_RE = /&(?!amp;|lt;|gt;|quot;|apos;|#\d+;|#x[0-9a-fA-F]+;)/
 const TOKEN_RE = /\{\{(accent|ink|bg|muted)\}\}/g
 
@@ -179,7 +180,7 @@ export function parseMotionAttrs(raw: unknown): { body: string; viewBox: string;
   const o = raw as Record<string, unknown>
   if (typeof o.body !== 'string' || typeof o.still !== 'string') return null
   if (o.caption != null && typeof o.caption !== 'string') return null
-  if (o.viewBox != null && (typeof o.viewBox !== 'string' || !/^\s*-?[\d.]+\s+-?[\d.]+\s+[\d.]+\s+[\d.]+\s*$/.test(o.viewBox))) return null
+  if (o.viewBox != null && (typeof o.viewBox !== 'string' || !VIEWBOX_RE.test(o.viewBox))) return null
   if (o.height != null && (typeof o.height !== 'number' || !isFinite(o.height) || o.height <= 0 || o.height > 4000)) return null
   return {
     body: o.body,
@@ -205,12 +206,17 @@ export function motionToSvg(attrs: MotionShape, opts: MotionSvgOptions): string 
   const { ids, error } = scanMotion(body)
   if (error) return null
   if (!/^[A-Za-z0-9]+$/.test(opts.idPrefix)) return null
+  // 几何字段二次校验（防注入）：编辑器粘贴/手改 attrs 可能绕过 parseMotionAttrs，
+  // viewBox/height 直接拼进根 svg 属性，含引号/标签即判非法降级
+  const viewBox = attrs.viewBox ?? '0 0 480 190'
+  if (typeof viewBox !== 'string' || !VIEWBOX_RE.test(viewBox)) return null
+  if (attrs.height !== undefined && (typeof attrs.height !== 'number' || !isFinite(attrs.height) || attrs.height <= 0 || attrs.height > 4000)) return null
   const inner = namespaceMotionIds(body, opts.idPrefix, ids)
   const fam = p.fontFamily.replace(/"/g, "'")
   const style = `display:block;width:100%;height:auto;overflow:hidden;background:${p.bg};font-family:${fam};`
   const geometry =
     attrs.height !== undefined
       ? `width="100%" height="${attrs.height}"`
-      : `width="100%" viewBox="${attrs.viewBox ?? '0 0 480 190'}"`
+      : `width="100%" viewBox="${viewBox}"`
   return `<svg xmlns="http://www.w3.org/2000/svg" ${geometry} style="${style}">${inner}</svg>`
 }

@@ -1,8 +1,8 @@
 import { Node } from '@tiptap/core'
 import { NodeViewWrapper, ReactNodeViewRenderer, type NodeViewProps } from '@tiptap/react'
-import { useId, useMemo, useSyncExternalStore, type ReactElement } from 'react'
+import { useId, useMemo, useState, useSyncExternalStore, type ReactElement } from 'react'
 import type { MotionNode } from '@shared/markdown'
-import { motionToSvg, scanMotion, substituteMotionTokens, type MotionPalette } from '@shared/motionSvg'
+import { motionToSvg, parseMotionAttrs, scanMotion, substituteMotionTokens, type MotionPalette } from '@shared/motionSvg'
 import { motionPaletteFor } from '@shared/exportHtml'
 import { Icon } from '../ui/Icon'
 
@@ -19,7 +19,7 @@ export interface MotionStorage {
   subscribe: (cb: () => void) => () => void
 }
 
-function MotionView({ node, editor, deleteNode }: NodeViewProps): ReactElement {
+function MotionView({ node, editor, deleteNode, updateAttributes }: NodeViewProps): ReactElement {
   const storage = editor.storage.motion as MotionStorage
   const palette = useSyncExternalStore(storage.subscribe, () => storage.palette)
   const attrs = node.attrs as MotionNode['attrs']
@@ -34,6 +34,34 @@ function MotionView({ node, editor, deleteNode }: NodeViewProps): ReactElement {
     [svg, attrs.body, palette]
   )
 
+  // 内联编辑（同 FigSuggest 的 input 模式，atom 节点内无焦点抢占）：展开 JSON 源码 + 实时校验
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+  const parsed = useMemo(() => {
+    if (!editing) return null
+    let raw: unknown
+    try {
+      raw = JSON.parse(draft)
+    } catch {
+      return { attrs: null, error: 'JSON 格式错误' }
+    }
+    const a = parseMotionAttrs(raw)
+    if (!a) return { attrs: null, error: '缺 body/still 或字段类型非法' }
+    const err = scanMotion(substituteMotionTokens(a.body, palette)).error
+    return { attrs: a, error: err }
+  }, [editing, draft, palette])
+
+  const openEdit = (): void => {
+    setDraft(JSON.stringify(attrs, null, 2))
+    setEditing(true)
+  }
+  const save = (): void => {
+    if (parsed?.attrs) {
+      updateAttributes(parsed.attrs)
+      setEditing(false)
+    }
+  }
+
   return (
     <NodeViewWrapper className="my-3" data-drag-handle>
       <div className="overflow-hidden rounded-xl border border-panel-3 bg-panel-2">
@@ -42,14 +70,51 @@ function MotionView({ node, editor, deleteNode }: NodeViewProps): ReactElement {
           <span className="text-[10.5px] text-ink-dim">公众号动效 · 点击画面可试</span>
           <button
             type="button"
+            onClick={() => (editing ? setEditing(false) : openEdit())}
+            className="ml-auto rounded-md px-1.5 py-0.5 text-[11px] text-ink-dim hover:bg-panel-3 hover:text-ink"
+            title="编辑动效源码（JSON）"
+          >
+            <Icon name="pencil" size={12} />
+          </button>
+          <button
+            type="button"
             onClick={() => deleteNode()}
-            className="ml-auto rounded-md px-1.5 py-0.5 text-[11px] text-ink-dim hover:bg-panel-3 hover:text-st-bad"
+            className="rounded-md px-1.5 py-0.5 text-[11px] text-ink-dim hover:bg-panel-3 hover:text-st-bad"
             title="删除此动效块"
           >
             <Icon name="trash" size={12} />
           </button>
         </div>
-        {svg ? (
+        {editing ? (
+          <div contentEditable={false} className="px-3 py-2.5">
+            <textarea
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              spellCheck={false}
+              className="h-56 w-full resize-y rounded-md border border-panel-3 bg-panel p-2 font-mono text-[11px] leading-relaxed text-ink outline-none focus:border-accent"
+            />
+            <div className="mt-1.5 flex items-center gap-2">
+              <p className={`flex-1 text-[11px] ${parsed?.error ? 'text-st-bad' : 'text-st-done'}`}>
+                {parsed?.error ?? '校验通过'}
+              </p>
+              <button
+                type="button"
+                onClick={() => setEditing(false)}
+                className="rounded-md px-2 py-1 text-[11px] text-ink-dim hover:bg-panel-3"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={save}
+                disabled={!parsed?.attrs}
+                className="rounded-md bg-accent px-2.5 py-1 text-[11px] font-semibold text-white hover:brightness-110 disabled:opacity-40"
+              >
+                保存
+              </button>
+            </div>
+          </div>
+        ) : svg ? (
           <div contentEditable={false} dangerouslySetInnerHTML={{ __html: svg }} />
         ) : (
           <div contentEditable={false} className="px-3 py-2.5">
@@ -60,7 +125,7 @@ function MotionView({ node, editor, deleteNode }: NodeViewProps): ReactElement {
             <p className="text-[11px] text-ink-dim">{error}</p>
           </div>
         )}
-        {(attrs.caption || attrs.still) && (
+        {!editing && (attrs.caption || attrs.still) && (
           <div contentEditable={false} className="border-t border-panel-3 px-3 py-1.5">
             {attrs.caption && <p className="text-[11px] text-ink-dim">{attrs.caption}</p>}
             {attrs.still && <p className="text-[11px] text-ink-dim">{attrs.still}</p>}
