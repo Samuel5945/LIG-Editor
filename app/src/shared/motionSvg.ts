@@ -173,6 +173,18 @@ export interface MotionShape {
   height?: number
 }
 
+/** 工具栏「插入动效」起手模板：点击揭晓（主题令牌着色），作者改文字即可用 */
+export const MOTION_STARTER: { body: string; viewBox: string; still: string; caption: string } = {
+  body:
+    '<text x="40" y="80" font-size="22" fill="{{ink}}">点击画面揭晓答案</text>' +
+    '<g visibility="hidden"><set attributeName="visibility" to="visible" begin="go.click" fill="freeze"/>' +
+    '<text x="40" y="125" font-size="20" fill="{{accent}}">在这里写揭晓的内容</text></g>' +
+    '<rect x="0" y="0" width="480" height="190" fill="#000" fill-opacity="0" pointer-events="visiblePainted" id="go"/>',
+  viewBox: '0 0 480 190',
+  still: '静态文字版：写一句即使没有动效也能读到的结论。',
+  caption: '点击画面揭晓'
+}
+
 /** 校验 markdown 解析出的原始 JSON 是否构成合法动效块；非法返回 null（调用方按段落保留原文）。
  *  可选字段容忍 null：tiptap getJSON 会把未设的可选 attr 输出为 null */
 export function parseMotionAttrs(raw: unknown): { body: string; viewBox: string; still: string; caption: string; height?: number } | null {

@@ -5,6 +5,7 @@ import {
   parseMotionAttrs,
   scanMotion,
   substituteMotionTokens,
+  MOTION_STARTER,
   type MotionPalette
 } from '../motionSvg'
 import { mdToDoc, docToMd } from '../markdown'
@@ -201,5 +202,34 @@ describe('动效导出', () => {
   it('motion 行不计入正文字数', () => {
     expect(countWords(motionMd(REVEAL))).toBe(0)
     expect(countWords('正文一段。')).toBeGreaterThan(0)
+  })
+})
+
+describe('AI 手册范式与起手模板可过校验', () => {
+  const TAP = (id: string, x = 0, w = 480): string =>
+    `<rect x="${x}" y="0" width="${w}" height="190" fill="#000" fill-opacity="0" pointer-events="visiblePainted" id="${id}"/>`
+
+  it('起手模板合法且可组装', () => {
+    expect(scanMotion(substituteMotionTokens(MOTION_STARTER.body, PALETTE)).error).toBeNull()
+    expect(motionToSvg(MOTION_STARTER, OPTS)).toContain('<svg')
+  })
+
+  it('A/B 互斥切换范式合法', () => {
+    const body =
+      '<g visibility="visible"><set attributeName="visibility" to="hidden" begin="b.click" fill="freeze"/><set attributeName="visibility" to="visible" begin="a.click" fill="freeze"/><text x="40" y="90" font-size="22" fill="{{ink}}">甲版</text>' + TAP('a', 0, 240) + '</g>' +
+      '<g visibility="hidden"><set attributeName="visibility" to="visible" begin="b.click" fill="freeze"/><set attributeName="visibility" to="hidden" begin="a.click" fill="freeze"/><text x="280" y="90" font-size="22" fill="{{accent}}">乙版</text>' + TAP('b', 240, 240) + '</g>'
+    expect(scanMotion(substituteMotionTokens(body, PALETTE)).error).toBeNull()
+  })
+
+  it('自动轮播范式合法', () => {
+    const body =
+      '<g opacity="1"><animate attributeName="opacity" values="1;0;0;1" keyTimes="0;0.33;0.66;1" calcMode="discrete" dur="6s" repeatCount="indefinite"/><text x="40" y="90" font-size="22" fill="{{ink}}">第一张</text></g>'
+    expect(scanMotion(substituteMotionTokens(body, PALETTE)).error).toBeNull()
+  })
+
+  it('点击描线范式合法', () => {
+    const body =
+      '<path d="M40 120 Q240 40 440 120" fill="none" stroke="{{accent}}" stroke-width="5" pathLength="100" stroke-dasharray="100 100" stroke-dashoffset="100"><animate attributeName="stroke-dashoffset" from="100" to="0" begin="go.click" dur="1.2s" fill="freeze"/></path>' + TAP('go')
+    expect(scanMotion(substituteMotionTokens(body, PALETTE)).error).toBeNull()
   })
 })

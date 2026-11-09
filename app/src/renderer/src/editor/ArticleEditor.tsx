@@ -21,6 +21,7 @@ import { mdToDoc, docToMd, docToTiptap, type ArticleDoc } from '@shared/markdown
 import { isHexColor } from '@shared/cards'
 import { DEFAULT_THEME, contrastText, isDarkColor, resolveEditorTheme, resolvePageBg, type ArticleTheme } from '@shared/categoryThemes'
 import { SEQ_PREFIX, motionPaletteFor } from '@shared/exportHtml'
+import { MOTION_STARTER } from '@shared/motionSvg'
 import type { H1Style, H2Style, H2Num, H3Mark } from '@shared/types'
 import type { ThemeOverrides } from '@shared/themeFields'
 import { FigureImage, type FigureImageStorage } from './FigureImage'
@@ -547,6 +548,14 @@ const ArticleEditor = forwardRef<ArticleEditorHandle, ArticleEditorProps>(functi
             e.target.value = ''
           }}
         />
+        <button
+          type="button"
+          onClick={() => editor.chain().focus().insertContent({ type: 'motion', attrs: { ...MOTION_STARTER } }).run()}
+          title="在光标处插入公众号动效块（点击揭晓起手模板，可编辑源码）"
+          className="rounded px-2 py-0.5 text-ink-dim hover:bg-panel-3 hover:text-ink"
+        >
+          <Icon name="zap" size={12} className="mr-1.5" />插入动效
+        </button>
         {/* 强调色快速换色 */}
         <div className="relative">
           <button

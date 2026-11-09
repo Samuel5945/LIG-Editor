@@ -644,7 +644,8 @@ article.md → 套排版主题的内联样式页（与 §9.1 复制/导出预览
 - **主题化**：`body` 里写 `{{accent}}/{{ink}}/{{bg}}/{{muted}}` 令牌，导出/预览按当前主题（含昼夜解析）取值；调色板与编辑器预览同源（`motionPaletteFor` → buildStyles）
 - **真正增高**：`height` 字段（根画布固定高、无 viewBox），`body` 里 `attributeName="height"` 的 animate 直达根画布、真实推低后文（对应公众号「展开」范式）
 - **三路同源**：复制富文本/推送草稿走 `docToExportHtml` 同一渲染；知乎/头条/百家语义化输出只留 still；编辑器 NodeView 实时渲染（SMIL 可点），非法片段显示具体校验错误供 AI 按报错修复
-- **创作路径**：Agent 手册 `get_guide markdown` 内载格式规范与边界（禁止清单/令牌/热区范式），`write_article` 落盘后编辑器热载即见
+- **创作入口**：编辑工具栏「插入动效」一键插入揭晓起手模板（`MOTION_STARTER`，主题令牌着色）；NodeView「编辑」展开 JSON 源码区实时校验、保存写回 attrs——人不依赖 AI 也能建/改动效块
+- **创作路径**：Agent 手册 `get_guide markdown` 内载格式规范、禁止清单与范式速查（A/B 互斥切换/自动轮播/点击描线，均经扫描器断言可过校验），`write_article` 落盘后编辑器热载即见
 
 ---
 
@@ -759,7 +760,7 @@ Agent 直接编辑 article.md / figures/*.html / project.json → watcher 热载
 5. 导出的富文本粘贴进公众号后台：排版不丢、图注完好、图片正常转存 CDN
 6. 同一篇内容可转出贴图卡片并按四平台画像复制，排版不串（S9）
 7. 工程可在日历上拖拽排期，选题可拖到日期格直接立项（S10）
-8. `npm run typecheck` 与 `npm run test` 全绿（当前 60 文件 / 780 例，2026-11-08 回归复核）
+8. `npm run typecheck` 与 `npm run test` 全绿（当前 60 文件 / 785 例，2026-11-08 回归复核）
 
 ## 14. 风险与开放问题
 
